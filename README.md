@@ -42,3 +42,7 @@ go test ./...
 - Replace checkout placeholder with Stripe Checkout session creation and webhook handling.
 - Add staff auth and CMS inventory screens.
 - Move production persistence to PostgreSQL and database-backed sessions.
+
+## Infrastructure Plan
+
+See [docs/INFRASTRUCTURE_SPEC.md](docs/INFRASTRUCTURE_SPEC.md) for the Railway + Neon deployment plan, account ownership model, secrets recovery policy, bootstrap workflow, and production migration roadmap.
