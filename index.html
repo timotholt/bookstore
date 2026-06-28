@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Davis's Books | Used Books Online</title>
+    <meta
+      name="description"
+      content="Browse affordable used books by title, author, genre, condition, and price at Davis's Books."
+    >
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="header-top-bar">
+        <a class="brand site-logo" href="#top" aria-label="Davis's Books home">
+          <span class="brand-mark" aria-hidden="true">DB</span>
+          <span>Davis's Books</span>
+        </a>
+
+        <div class="header-delivery-widget">
+          <span class="delivery-to">Store pickup</span>
+          <span class="delivery-location">La Habra, CA <span class="location-time">· 10am-7pm</span></span>
+        </div>
+
+        <form class="header-search-form" id="headerSearchForm" action="#">
+          <div class="search-select-wrapper">
+            <select id="headerGenreSelect" aria-label="Select Genre category">
+              <option value="All">All Genres</option>
+            </select>
+          </div>
+          <div class="search-input-wrapper">
+            <input id="headerSearchInput" type="search" placeholder="Search Davis's Books..." autocomplete="off">
+            <div class="search-suggestions" id="searchSuggestions" hidden></div>
+          </div>
+          <button class="header-search-submit" type="submit" aria-label="Submit search">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M10.8 18.1a7.3 7.3 0 1 1 0-14.6 7.3 7.3 0 0 1 0 14.6Zm5.2-2.1 4.5 4.5" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+          </button>
+        </form>
+
+        <div class="header-widget language-selector-widget">
+          <span class="language-flag">🇺🇸</span>
+          <span class="language-code">EN <span class="arrow-down">▼</span></span>
+        </div>
+
+        <div class="header-widget">
+          <span class="widget-top">Hello, Sign in</span>
+          <span class="widget-bottom">Account & Lists <span class="arrow-down">▼</span></span>
+        </div>
+
+        <div class="header-widget">
+          <span class="widget-top">Trade-in</span>
+          <span class="widget-bottom">Credit & Sell</span>
+        </div>
+
+        <button class="cart-toggle-widget cart-toggle" type="button" aria-controls="cartDrawer" aria-expanded="false" aria-label="View shopping cart">
+          <div class="cart-icon-wrapper">
+            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+              <path d="M7 4h-2l-1 2m0 0 2.2 8.6a2 2 0 0 0 2 1.4h7.6a2 2 0 0 0 1.9-1.4l1.4-5.6h-14.1m3 11a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm9 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+            <span class="cart-count" data-cart-count>0</span>
+          </div>
+          <span class="cart-label">Cart</span>
+        </button>
+      </div>
+
+      <nav class="site-header-subnav" aria-label="Sub navigation">
+        <div class="subnav-left">
+          <button class="all-menu-button" type="button" data-action="back-to-storefront">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z" fill="currentColor"></path>
+            </svg>
+            All
+          </button>
+        </div>
+        <div class="subnav-links">
+          <a href="#best-sellers">Best Sellers</a>
+          <a href="#new-arrivals">New Arrivals</a>
+          <a href="#deals">Used Deals</a>
+          <a href="#staff-picks">Staff Picks</a>
+          <a href="#sell">Sell & Trade</a>
+        </div>
+      </nav>
+    </header>
+
+    <main id="top">
+      <div id="storefrontView">
+        <section class="hero-amazon-carousel" aria-label="Store highlights carousel">
+          <div class="carousel-track-wrapper">
+            <div class="hero-carousel-track" id="heroCarouselTrack">
+              <div class="hero-slide active" style="--bg-grad: linear-gradient(135deg, #1B352B 0%, #11221B 100%)">
+                <div class="slide-content">
+                  <span class="slide-eyebrow">Summer Reads Bargains</span>
+                  <h2>Thousands of used books starting at $3.95</h2>
+                  <p>Stock up on fiction, thrillers, and biographies for your next vacation.</p>
+                  <a href="#catalog" class="slide-cta">Shop Bargains</a>
+                </div>
+              </div>
+              <div class="hero-slide" style="--bg-grad: linear-gradient(135deg, #4A2B11 0%, #2A1808 100%)">
+                <div class="slide-content">
+                  <span class="slide-eyebrow">Clear Your Shelves</span>
+                  <h2>Get up to 50% store credit for your trade-ins</h2>
+                  <p>Declutter and trade clean copies for your next favorite book stack.</p>
+                  <a href="#sell" class="slide-cta">Start a Trade-In</a>
+                </div>
+              </div>
+              <div class="hero-slide" style="--bg-grad: linear-gradient(135deg, #182035 0%, #0E1220 100%)">
+                <div class="slide-content">
+                  <span class="slide-eyebrow">Rare & Collectible Editions</span>
+                  <h2>Discover first editions, signed copies, and vintage releases</h2>
+                  <p>Find extraordinary shelf presence for collectors and booklovers alike.</p>
+                  <a href="#catalog" class="slide-cta">Explore Collectibles</a>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <button class="carousel-control-btn prev" id="heroPrevBtn" type="button" aria-label="Previous slide">◀</button>
+          <button class="carousel-control-btn next" id="heroNextBtn" type="button" aria-label="Next slide">▶</button>
+          
+          <div class="carousel-dots" id="heroCarouselDots">
+            <span class="dot active" data-slide-to="0"></span>
+            <span class="dot" data-slide-to="1"></span>
+            <span class="dot" data-slide-to="2"></span>
+          </div>
+        </section>
+
+        <!-- Overlay Grid Cards -->
+        <section class="hero-overlay-grid" aria-label="Quick browse options">
+          <!-- Card 1: Shop by Genre (4-grid) -->
+          <div class="overlay-card">
+            <h3>Shop by Category</h3>
+            <div class="card-grid-4">
+              <button class="grid-item-link" type="button" data-category="Fiction">
+                <div class="grid-img-placeholder fiction">📚</div>
+                <span>Fiction</span>
+              </button>
+              <button class="grid-item-link" type="button" data-category="Mystery">
+                <div class="grid-img-placeholder mystery">🕵️</div>
+                <span>Mystery</span>
+              </button>
+              <button class="grid-item-link" type="button" data-category="History">
+                <div class="grid-img-placeholder history">⏳</div>
+                <span>History</span>
+              </button>
+              <button class="grid-item-link" type="button" data-category="Cookbooks">
+                <div class="grid-img-placeholder cookbooks">🍳</div>
+                <span>Cookbooks</span>
+              </button>
+            </div>
+            <a href="#catalog" class="card-bottom-link">See all categories</a>
+          </div>
+
+          <!-- Card 2: Bargains by Price (4-grid) -->
+          <div class="overlay-card">
+            <h3>Bargains by Price</h3>
+            <div class="card-grid-4">
+              <button class="grid-item-link" type="button" data-price-filter="5">
+                <div class="grid-img-placeholder price-5">$5</div>
+                <span>Under $5</span>
+              </button>
+              <button class="grid-item-link" type="button" data-price-filter="10">
+                <div class="grid-img-placeholder price-10">$10</div>
+                <span>Under $10</span>
+              </button>
+              <button class="grid-item-link" type="button" data-price-filter="15">
+                <div class="grid-img-placeholder price-15">$15</div>
+                <span>Under $15</span>
+              </button>
+              <button class="grid-item-link" type="button" data-price-filter="22">
+                <div class="grid-img-placeholder price-22">$$</div>
+                <span>Under $22</span>
+              </button>
+            </div>
+            <a href="#catalog" class="card-bottom-link">Browse deals</a>
+          </div>
+
+          <!-- Card 3: Featured Deal (Single large block) -->
+          <div class="overlay-card single-feature-card">
+            <h3>Featured Deal</h3>
+            <div class="single-feature-content" id="heroSingleFeature">
+              <!-- Dynamically populated from JS with a high-discount book -->
+            </div>
+            <a href="#catalog" class="card-bottom-link">See today's deals</a>
+          </div>
+
+          <!-- Card 4: Stack Builder -->
+          <div class="overlay-card stack-builder-card">
+            <h3>Stack Builder</h3>
+            <div class="shipping-progress-content">
+              <p class="progress-status-text" id="overlayProgressText">Add books to start your stack!</p>
+              <div class="progress-bar-wrapper">
+                <div class="progress-bar-fill" id="overlayProgressBar" style="width: 0%"></div>
+              </div>
+              <p class="progress-subtext">Free shipping on all orders over $35</p>
+              
+              <div class="quick-filler-section">
+                <span class="quick-add-title">Quick stack fillers:</span>
+                <div class="quick-filler-row" id="overlayQuickFillers">
+                  <!-- Populated from JS with 2 cheap books -->
+                </div>
+              </div>
+            </div>
+            <a href="#catalog" class="card-bottom-link">See all bargains</a>
+          </div>
+        </section>
+
+        <section class="storefront" aria-label="Featured book shelves">
+          <div class="promo-grid">
+            <a class="promo-tile promo-large" href="#best-sellers">
+              <span class="eyebrow">This week</span>
+              <strong>Best sellers from the used shelf</strong>
+              <span>Popular copies with honest condition notes and prices that leave room for one more book.</span>
+            </a>
+            <a class="promo-tile" href="#new-arrivals">
+              <span class="eyebrow">Fresh trade-ins</span>
+              <strong>New arrivals</strong>
+              <span>Recently inspected books added to the catalog.</span>
+            </a>
+            <a class="promo-tile warm" href="#deals">
+              <span class="eyebrow">Under $8</span>
+              <strong>Small prices, good pages</strong>
+              <span>Budget-friendly paperbacks and reading copies.</span>
+            </a>
+          </div>
+
+          <section class="product-shelf" id="best-sellers" aria-labelledby="bestSellersTitle">
+            <div class="shelf-heading">
+              <div>
+                <p class="eyebrow">Best sellers</p>
+                <h2 id="bestSellersTitle">Readers keep grabbing these</h2>
+              </div>
+              <div class="shelf-actions">
+                <button class="carousel-control prev" type="button" data-direction="prev" aria-label="Previous best sellers">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M15 19l-7-7 7-7"/></svg>
+                </button>
+                <button class="carousel-control next" type="button" data-direction="next" aria-label="Next best sellers">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 5l7 7-7 7"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="product-row" id="bestSellerShelf"></div>
+          </section>
+
+          <section class="product-shelf" id="new-arrivals" aria-labelledby="newArrivalsTitle">
+            <div class="shelf-heading">
+              <div>
+                <p class="eyebrow">New arrivals</p>
+                <h2 id="newArrivalsTitle">Just checked in</h2>
+              </div>
+              <div class="shelf-actions">
+                <button class="carousel-control prev" type="button" data-direction="prev" aria-label="Previous new arrivals">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M15 19l-7-7 7-7"/></svg>
+                </button>
+                <button class="carousel-control next" type="button" data-direction="next" aria-label="Next new arrivals">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 5l7 7-7 7"/></svg>
+                </button>
+                <a class="secondary-button" href="#catalog">Browse new arrivals</a>
+              </div>
+            </div>
+            <div class="product-row" id="newArrivalShelf"></div>
+          </section>
+
+          <section class="product-shelf" id="deals" aria-labelledby="dealsTitle">
+            <div class="shelf-heading">
+              <div>
+                <p class="eyebrow">Deals</p>
+                <h2 id="dealsTitle">Used books under $8</h2>
+              </div>
+              <div class="shelf-actions">
+                <button class="carousel-control prev" type="button" data-direction="prev" aria-label="Previous deals">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M15 19l-7-7 7-7"/></svg>
+                </button>
+                <button class="carousel-control next" type="button" data-direction="next" aria-label="Next deals">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 5l7 7-7 7"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="product-row" id="dealShelf"></div>
+          </section>
+        </section>
+
+        <section class="catalog-shell" id="catalog" aria-labelledby="catalogTitle">
+          <div class="catalog-header">
+            <div>
+              <p class="eyebrow">Used book collection</p>
+              <h2 id="catalogTitle">Used books in stock</h2>
+            </div>
+          </div>
+
+          <div class="catalog-layout">
+            <aside class="filters" aria-label="Catalog filters">
+              <div class="filter-block">
+                <label for="sidebarSearchInput">Keyword Search</label>
+                <input id="sidebarSearchInput" type="search" placeholder="Title, author, or ISBN..." autocomplete="off">
+              </div>
+
+              <div class="filter-block">
+                <label for="genreFilter">Genre</label>
+                <select id="genreFilter">
+                  <option value="All">All genres</option>
+                </select>
+              </div>
+
+              <div class="filter-block">
+                <label for="conditionFilter">Condition</label>
+                <select id="conditionFilter">
+                  <option value="All">Any condition</option>
+                </select>
+              </div>
+
+              <div class="filter-block">
+                <div class="price-header">
+                  <label for="priceFilter">Max Price</label>
+                  <span id="priceValue">$22</span>
+                </div>
+                <div class="slider-container">
+                  <input id="priceFilter" type="range" min="4" max="22" value="22">
+                </div>
+              </div>
+
+              <div class="filter-block">
+                <span class="filter-group-label">Format</span>
+                <div class="checkbox-group" style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+                  <label class="check-row">
+                    <input type="checkbox" name="format" value="Hardcover" checked>
+                    <span>Hardcover</span>
+                  </label>
+                  <label class="check-row">
+                    <input type="checkbox" name="format" value="Paperback" checked>
+                    <span>Paperback</span>
+                  </label>
+                  <label class="check-row">
+                    <input type="checkbox" name="format" value="Trade Paperback" checked>
+                    <span>Trade Paperback</span>
+                  </label>
+                </div>
+              </div>
+
+              <button class="secondary-button" type="button" id="resetFilters">Reset filters</button>
+            </aside>
+
+            <main class="catalog-main">
+              <div class="catalog-toolbar toolbar">
+                <div class="toolbar-left-group">
+                  <span class="all-items-badge">All items</span>
+                  <span class="result-count-label" id="resultSummary"></span>
+                </div>
+                <div class="sort-wrapper">
+                  <label class="sort-label" for="sortSelect">
+                    <span>Sort by</span>
+                    <select id="sortSelect">
+                      <option value="popular">Popularity</option>
+                      <option value="price-asc">Price: Low to High</option>
+                      <option value="price-desc">Price: High to Low</option>
+                      <option value="year-desc">Year: New to Old</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              <div class="book-grid" id="bookGrid" aria-live="polite"></div>
+              <div class="empty-state" id="emptyState" hidden>
+                <p class="eyebrow">No matching copies found</p>
+                <h3>Try widening your search filters</h3>
+                <button class="primary-button" type="button" id="emptyReset">Show all books</button>
+              </div>
+            </main>
+          </div>
+        </section>
+
+        <section class="feature-band" id="staff-picks" aria-labelledby="staffTitle">
+          <div class="feature-band-content">
+            <p class="eyebrow">Staff picks</p>
+            <h2 id="staffTitle">Books with a little extra shelf presence</h2>
+            <p>
+              Each highlighted copy has crisp notes, fair pricing, and enough character to make used feel better than new.
+            </p>
+          </div>
+          <div class="mini-shelf" id="miniShelf"></div>
+        </section>
+
+        <section class="sell-band" id="sell" aria-labelledby="sellTitle">
+          <div>
+            <p class="eyebrow">Clear a shelf</p>
+            <h2 id="sellTitle">Trade good books for store credit</h2>
+            <p>
+              Davis's Books buys clean fiction, nonfiction, cookbooks, art books, and children's favorites. We price by condition, demand, and edition.
+            </p>
+          </div>
+          <a class="primary-button" href="mailto:hello@davisbooks.example">Start a trade-in</a>
+        </section>
+      </div>
+
+      <div id="bookDetailsView" class="book-details-view" hidden></div>
+    </main>
+
+    <footer class="site-footer">
+      <a href="#top" class="back-to-top-btn">Back to top</a>
+      
+      <div class="footer-links-grid">
+        <div class="footer-column">
+          <h3>Get to Know Us</h3>
+          <ul>
+            <li><a href="#top">About Davis's Books</a></li>
+            <li><a href="#top">Store Locations</a></li>
+            <li><a href="#top">Operating Hours</a></li>
+            <li><a href="#top">Re-loved Book Mission</a></li>
+            <li><a href="#top">Careers</a></li>
+          </ul>
+        </div>
+        
+        <div class="footer-column">
+          <h3>Trade & Sell With Us</h3>
+          <ul>
+            <li><a href="#sell">Start a Trade-In</a></li>
+            <li><a href="#sell">Bookstore Credit Policy</a></li>
+            <li><a href="#sell">Bulk Purchase Inquiries</a></li>
+            <li><a href="#sell">Community Donations</a></li>
+          </ul>
+        </div>
+        
+        <div class="footer-column">
+          <h3>Shopper Support</h3>
+          <ul>
+            <li><a href="#top">Your Account</a></li>
+            <li><a href="#top">Your Stack (Cart)</a></li>
+            <li><a href="#top">Store Pickup Policy</a></li>
+            <li><a href="#top">Help Center</a></li>
+          </ul>
+        </div>
+        
+        <div class="footer-column">
+          <h3>Davis's Fine Print</h3>
+          <ul>
+            <li><a href="#top">Terms of Use</a></li>
+            <li><a href="#top">Privacy Policy</a></li>
+            <li><a href="#top">Grading Standards</a></li>
+            <li><a href="#top">Accessibility Commitment</a></li>
+          </ul>
+        </div>
+      </div>
+      
+      <div class="footer-middle-bar">
+        <a class="brand site-logo footer-logo" href="#top">
+          <span class="brand-mark">DB</span>
+          <span>Davis's Books</span>
+        </a>
+        <div class="footer-selectors">
+          <div class="footer-selector">
+            🌐 English
+          </div>
+          <div class="footer-selector">
+            🇺🇸 United States
+          </div>
+        </div>
+      </div>
+      
+      <div class="footer-copyright-bar">
+        <div class="footer-legal-links">
+          <a href="#top">Conditions of Use</a>
+          <a href="#top">Privacy Notice</a>
+          <a href="#top">Consumer Health Data Privacy Disclosure</a>
+          <a href="#top">Your Ads Privacy Choices</a>
+        </div>
+        <p class="copyright-text">
+          © 1996-2026, DavisBooks.example.com, Inc. or its affiliates. All rights reserved.
+        </p>
+      </div>
+    </footer>
+
+    <aside class="cart-drawer" id="cartDrawer" aria-label="Shopping cart" aria-hidden="true">
+      <div class="cart-panel" role="dialog" aria-modal="true" aria-labelledby="cartTitle">
+        <div class="cart-header">
+          <div>
+            <p class="eyebrow">Your stack</p>
+            <h2 id="cartTitle">Cart</h2>
+          </div>
+          <button class="icon-only close-cart" type="button" aria-label="Close cart">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M6 6l12 12M18 6 6 18"></path>
+            </svg>
+          </button>
+        </div>
+        <div class="shipping-progress-container">
+          <span class="shipping-progress-text" id="shippingProgressText">Spend $35.00 more for Free Shipping!</span>
+          <div class="shipping-progress-bar">
+            <div class="shipping-progress-fill" id="shippingProgressFill" style="width: 0%"></div>
+          </div>
+        </div>
+        <div class="cart-items" id="cartItems"></div>
+        <div class="cart-footer">
+          <div class="cart-row">
+            <span>Subtotal</span>
+            <strong id="cartSubtotal">$0.00</strong>
+          </div>
+          <div class="cart-row">
+            <span>Shipping</span>
+            <strong id="cartShipping">$0.00</strong>
+          </div>
+          <div class="cart-row total">
+            <span>Total</span>
+            <strong id="cartTotal">$0.00</strong>
+          </div>
+          <button class="primary-button checkout-button" type="button" id="checkoutButton">Checkout</button>
+          <div class="cart-trust-badges">
+            <span>🛡️ Hand-inspected copies</span>
+            <span>🚚 Ships in 1-2 days</span>
+            <span>🔒 Secure checkout</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <dialog class="book-modal" id="bookModal">
+      <div class="modal-content" id="modalContent"></div>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
