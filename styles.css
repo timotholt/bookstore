@@ -354,6 +354,7 @@ svg {
   background: transparent;
   border: 0;
   color: #FFFFFF;
+  text-decoration: none;
   font-family: var(--font-sans);
   font-size: 0.88rem;
   font-weight: 700;

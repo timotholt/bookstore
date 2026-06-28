@@ -1,7 +1,7 @@
 {{define "site-header"}}
 <header class="site-header">
   <div class="header-top-bar">
-    <a class="brand site-logo" href="#top" aria-label="Davis's Books home">
+    <a class="brand site-logo" href="/#top" aria-label="Davis's Books home">
       <span class="brand-mark" aria-hidden="true">DB</span>
       <span>Davis's Books</span>
     </a>
@@ -11,9 +11,9 @@
       <span class="delivery-location">La Habra, CA <span class="location-time">· 10am-7pm</span></span>
     </div>
 
-    <form class="header-search-form" id="headerSearchForm" action="/catalog" hx-get="/catalog" hx-target="#catalogResults" hx-swap="innerHTML">
+    <form class="header-search-form" id="headerSearchForm" action="/#catalog" method="get">
       <div class="search-select-wrapper">
-        <select id="headerGenreSelect" aria-label="Select Genre category">
+        <select id="headerGenreSelect" name="genre" aria-label="Select Genre category">
           <option value="All">All Genres</option>
           {{range .Genres}}<option value="{{.}}">{{.}}</option>{{end}}
         </select>
@@ -57,14 +57,14 @@
 
   <nav class="site-header-subnav" aria-label="Sub navigation">
     <div class="subnav-left">
-      <button class="all-menu-button" type="button" data-action="back-to-storefront">All</button>
+      <a class="all-menu-button" href="/#top">All</a>
     </div>
     <div class="subnav-links">
-      <a href="#best-sellers">Best Sellers</a>
-      <a href="#new-arrivals">New Arrivals</a>
-      <a href="#deals">Used Deals</a>
-      <a href="#staff-picks">Staff Picks</a>
-      <a href="#sell">Sell & Trade</a>
+      <a href="/#best-sellers">Best Sellers</a>
+      <a href="/#new-arrivals">New Arrivals</a>
+      <a href="/#deals">Used Deals</a>
+      <a href="/#staff-picks">Staff Picks</a>
+      <a href="/#sell">Sell & Trade</a>
     </div>
   </nav>
 </header>

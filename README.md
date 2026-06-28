@@ -2,6 +2,8 @@
 
 Server-rendered Go + HTMX storefront for Davis's Books, backed locally by SQLite.
 
+The live application entrypoint is `main.go`. The original static HTML/JS prototype is archived in `legacy-demo/` for visual reference only and is not served by the Go app.
+
 ## Run Locally
 
 ```bash
@@ -33,6 +35,7 @@ go test ./...
 - HTMX catalog search/filter fragments.
 - Session-backed cart drawer with quantity updates, stock caps, shipping math, and checkout placeholder.
 - Local vendored HTMX runtime at `/assets/htmx.min.js`.
+- Archived pre-migration demo under `legacy-demo/` for reference while backend migration continues.
 
 ## Next Production Integrations
 

@@ -128,6 +128,20 @@
     if (priceValue) priceValue.textContent = "$" + event.target.value;
   });
 
+  document.addEventListener("submit", function (event) {
+    if (!event.target.matches("#headerSearchForm") || document.getElementById("catalogResults")) {
+      return;
+    }
+    event.preventDefault();
+    const params = new URLSearchParams();
+    const query = document.getElementById("headerSearchInput");
+    const genre = document.getElementById("headerGenreSelect");
+    if (query && query.value.trim()) params.set("q", query.value.trim());
+    if (genre && genre.value && genre.value !== "All") params.set("genre", genre.value);
+    const search = params.toString();
+    window.location.href = "/" + (search ? "?" + search : "") + "#catalog";
+  }, true);
+
   document.body.addEventListener("htmx:afterSwap", function (event) {
     syncCartCount();
     if (event.detail && event.detail.target && event.detail.target.id === "cartDrawer") {

@@ -34,7 +34,9 @@ type bookCard struct {
 	ID           string
 	Title        string
 	Author       string
+	AuthorSlug   string
 	Genre        string
+	GenreSlug    string
 	Year         int
 	ISBN         string
 	CoverColor   string
@@ -79,6 +81,7 @@ type bookDetailPageData struct {
 
 type catalogFilters struct {
 	Query      string
+	Author     string
 	Genre      string
 	Condition  string
 	MaxPrice   string
@@ -193,6 +196,21 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "catalog unavailable", http.StatusInternalServerError)
 		return
 	}
+	bestSellers, err := app.collectionBooks("best-sellers", 6)
+	if err != nil {
+		http.Error(w, "best sellers unavailable", http.StatusInternalServerError)
+		return
+	}
+	deals, err := app.collectionBooks("used-deals", 6)
+	if err != nil {
+		http.Error(w, "deals unavailable", http.StatusInternalServerError)
+		return
+	}
+	staffPicks, err := app.collectionBooks("staff-picks", 3)
+	if err != nil {
+		http.Error(w, "staff picks unavailable", http.StatusInternalServerError)
+		return
+	}
 	cart, err := app.cartView(r)
 	if err != nil {
 		http.Error(w, "cart unavailable", http.StatusInternalServerError)
@@ -206,11 +224,11 @@ func (app *application) home(w http.ResponseWriter, r *http.Request) {
 		Formats:      uniqueFormats(allBooks),
 		Featured:     mustBookByID(allBooks, "b005"),
 		QuickFillers: firstWhere(allBooks, 2, func(b bookCard) bool { return b.Price < 8 }),
-		BestSellers:  byIDs(allBooks, []string{"b005", "b003", "b024", "b004", "b009", "b019"}),
+		BestSellers:  bestSellers,
 		NewArrivals:  firstWhere(allBooks, 6, func(b bookCard) bool { return b.IsNewArrival }),
-		Deals:        firstWhere(allBooks, 6, func(b bookCard) bool { return b.Price < 8 }),
+		Deals:        deals,
 		Catalog:      books,
-		StaffPicks:   firstWhere(allBooks, 3, func(b bookCard) bool { return b.IsStaffPick }),
+		StaffPicks:   staffPicks,
 		Cart:         cart,
 		Filters:      resultFilters(filters, len(books), len(allBooks)),
 	}
@@ -373,11 +391,13 @@ func (app *application) renderCart(w http.ResponseWriter, r *http.Request) {
 func (app *application) listBooks(filters catalogFilters) ([]bookCard, error) {
 	const base = `
 		SELECT
-			b.id, b.title, b.author, b.genre, b.year, b.isbn, b.cover_color,
+			b.id, b.title, a.name, a.slug, g.name, g.slug, b.year, b.isbn, b.cover_color,
 			b.aspect_ratio, b.tags, b.is_new_arrival,
 			c.id, c.condition, c.price, c.notes, c.format, c.stock,
 			c.is_staff_pick, COALESCE(c.staff_quote, ''), c.seal_style, c.seal_text
 		FROM books b
+		JOIN authors a ON a.id = b.primary_author_id
+		JOIN genres g ON g.id = b.primary_genre_id
 		JOIN book_copies c ON c.book_id = b.id
 		WHERE c.is_sold = 0`
 
@@ -385,18 +405,22 @@ func (app *application) listBooks(filters catalogFilters) ([]bookCard, error) {
 	where := ""
 	if strings.TrimSpace(filters.Query) != "" {
 		where = ` AND (
-			lower(b.title) LIKE lower(?)
-			OR lower(b.author) LIKE lower(?)
-			OR lower(b.genre) LIKE lower(?)
+			lower(b.search_text) LIKE lower(?)
+			OR lower(a.name) LIKE lower(?)
+			OR lower(g.name) LIKE lower(?)
 			OR b.isbn LIKE ?
 			OR lower(b.tags) LIKE lower(?)
 		)`
 		like := "%" + strings.TrimSpace(filters.Query) + "%"
 		args = append(args, like, like, like, like, like)
 	}
+	if filters.Author != "" {
+		where += " AND (a.slug = ? OR a.name = ?)"
+		args = append(args, filters.Author, filters.Author)
+	}
 	if filters.Genre != "" && filters.Genre != "All" {
-		where += " AND b.genre = ?"
-		args = append(args, filters.Genre)
+		where += " AND (g.slug = ? OR g.name = ?)"
+		args = append(args, filters.Genre, filters.Genre)
 	}
 	if filters.Condition != "" && filters.Condition != "All" {
 		where += " AND c.condition = ?"
@@ -436,7 +460,44 @@ func (app *application) listBooks(filters catalogFilters) ([]bookCard, error) {
 	for rows.Next() {
 		var b bookCard
 		if err := rows.Scan(
-			&b.ID, &b.Title, &b.Author, &b.Genre, &b.Year, &b.ISBN, &b.CoverColor,
+			&b.ID, &b.Title, &b.Author, &b.AuthorSlug, &b.Genre, &b.GenreSlug, &b.Year, &b.ISBN, &b.CoverColor,
+			&b.AspectRatio, &b.Tags, &b.IsNewArrival,
+			&b.CopyID, &b.Condition, &b.Price, &b.Notes, &b.Format, &b.Stock,
+			&b.IsStaffPick, &b.StaffQuote, &b.SealStyle, &b.SealText,
+		); err != nil {
+			return nil, err
+		}
+		books = append(books, b)
+	}
+	return books, rows.Err()
+}
+
+func (app *application) collectionBooks(slug string, limit int) ([]bookCard, error) {
+	const query = `
+		SELECT
+			b.id, b.title, a.name, a.slug, g.name, g.slug, b.year, b.isbn, b.cover_color,
+			b.aspect_ratio, b.tags, b.is_new_arrival,
+			c.id, c.condition, c.price, c.notes, c.format, c.stock,
+			c.is_staff_pick, COALESCE(c.staff_quote, ''), c.seal_style, c.seal_text
+		FROM book_collection_items i
+		JOIN books b ON b.id = i.book_id
+		JOIN authors a ON a.id = b.primary_author_id
+		JOIN genres g ON g.id = b.primary_genre_id
+		JOIN book_copies c ON c.book_id = b.id
+		WHERE i.collection_slug = ? AND i.is_active = 1 AND c.is_sold = 0
+		ORDER BY i.position ASC, c.is_staff_pick DESC, c.price ASC
+		LIMIT ?`
+	rows, err := app.db.Query(query, slug, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var books []bookCard
+	for rows.Next() {
+		var b bookCard
+		if err := rows.Scan(
+			&b.ID, &b.Title, &b.Author, &b.AuthorSlug, &b.Genre, &b.GenreSlug, &b.Year, &b.ISBN, &b.CoverColor,
 			&b.AspectRatio, &b.Tags, &b.IsNewArrival,
 			&b.CopyID, &b.Condition, &b.Price, &b.Notes, &b.Format, &b.Stock,
 			&b.IsStaffPick, &b.StaffQuote, &b.SealStyle, &b.SealText,
@@ -508,16 +569,18 @@ func (app *application) cartView(r *http.Request) (cartView, error) {
 func (app *application) bookByCopyID(copyID int64) (bookCard, error) {
 	row := app.db.QueryRow(`
 		SELECT
-			b.id, b.title, b.author, b.genre, b.year, b.isbn, b.cover_color,
+			b.id, b.title, a.name, a.slug, g.name, g.slug, b.year, b.isbn, b.cover_color,
 			b.aspect_ratio, b.tags, b.is_new_arrival,
 			c.id, c.condition, c.price, c.notes, c.format, c.stock,
 			c.is_staff_pick, COALESCE(c.staff_quote, ''), c.seal_style, c.seal_text
 		FROM books b
+		JOIN authors a ON a.id = b.primary_author_id
+		JOIN genres g ON g.id = b.primary_genre_id
 		JOIN book_copies c ON c.book_id = b.id
 		WHERE c.id = ? AND c.is_sold = 0`, copyID)
 	var b bookCard
 	err := row.Scan(
-		&b.ID, &b.Title, &b.Author, &b.Genre, &b.Year, &b.ISBN, &b.CoverColor,
+		&b.ID, &b.Title, &b.Author, &b.AuthorSlug, &b.Genre, &b.GenreSlug, &b.Year, &b.ISBN, &b.CoverColor,
 		&b.AspectRatio, &b.Tags, &b.IsNewArrival,
 		&b.CopyID, &b.Condition, &b.Price, &b.Notes, &b.Format, &b.Stock,
 		&b.IsStaffPick, &b.StaffQuote, &b.SealStyle, &b.SealText,
@@ -528,18 +591,20 @@ func (app *application) bookByCopyID(copyID int64) (bookCard, error) {
 func (app *application) bookByID(bookID string) (bookCard, error) {
 	row := app.db.QueryRow(`
 		SELECT
-			b.id, b.title, b.author, b.genre, b.year, b.isbn, b.cover_color,
+			b.id, b.title, a.name, a.slug, g.name, g.slug, b.year, b.isbn, b.cover_color,
 			b.aspect_ratio, b.tags, b.is_new_arrival,
 			c.id, c.condition, c.price, c.notes, c.format, c.stock,
 			c.is_staff_pick, COALESCE(c.staff_quote, ''), c.seal_style, c.seal_text
 		FROM books b
+		JOIN authors a ON a.id = b.primary_author_id
+		JOIN genres g ON g.id = b.primary_genre_id
 		JOIN book_copies c ON c.book_id = b.id
 		WHERE b.id = ? AND c.is_sold = 0
 		ORDER BY c.is_staff_pick DESC, c.price ASC
 		LIMIT 1`, bookID)
 	var b bookCard
 	err := row.Scan(
-		&b.ID, &b.Title, &b.Author, &b.Genre, &b.Year, &b.ISBN, &b.CoverColor,
+		&b.ID, &b.Title, &b.Author, &b.AuthorSlug, &b.Genre, &b.GenreSlug, &b.Year, &b.ISBN, &b.CoverColor,
 		&b.AspectRatio, &b.Tags, &b.IsNewArrival,
 		&b.CopyID, &b.Condition, &b.Price, &b.Notes, &b.Format, &b.Stock,
 		&b.IsStaffPick, &b.StaffQuote, &b.SealStyle, &b.SealText,
@@ -570,11 +635,63 @@ func openDB() (*sql.DB, error) {
 }
 
 func migrate(db *sql.DB) error {
+	if err := resetLegacySchema(db); err != nil {
+		return err
+	}
 	schema, err := schemaFS.ReadFile("db/schema.sql")
 	if err != nil {
 		return err
 	}
 	_, err = db.Exec(string(schema))
+	return err
+}
+
+func resetLegacySchema(db *sql.DB) error {
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'books'`).Scan(&count); err != nil {
+		return err
+	}
+	if count == 0 {
+		return nil
+	}
+	rows, err := db.Query(`PRAGMA table_info(books)`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	hasPrimaryAuthorID := false
+	for rows.Next() {
+		var cid int
+		var name, columnType string
+		var notNull int
+		var defaultValue any
+		var pk int
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &pk); err != nil {
+			return err
+		}
+		if name == "primary_author_id" {
+			hasPrimaryAuthorID = true
+			break
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if hasPrimaryAuthorID {
+		return nil
+	}
+	_, err = db.Exec(`
+		DROP TABLE IF EXISTS book_cache_tags;
+		DROP TABLE IF EXISTS cache_tags;
+		DROP TABLE IF EXISTS book_collection_items;
+		DROP TABLE IF EXISTS book_collections;
+		DROP TABLE IF EXISTS book_copies;
+		DROP TABLE IF EXISTS book_genres;
+		DROP TABLE IF EXISTS book_authors;
+		DROP TABLE IF EXISTS books;
+		DROP TABLE IF EXISTS genres;
+		DROP TABLE IF EXISTS authors;`)
 	return err
 }
 
@@ -610,6 +727,7 @@ func filtersFromRequest(r *http.Request) catalogFilters {
 	q := r.URL.Query()
 	return catalogFilters{
 		Query:     strings.TrimSpace(q.Get("q")),
+		Author:    strings.TrimSpace(q.Get("author")),
 		Genre:     firstNonEmpty(q.Get("genre"), "All"),
 		Condition: firstNonEmpty(q.Get("condition"), "All"),
 		MaxPrice:  q.Get("max_price"),
