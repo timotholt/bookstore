@@ -1,0 +1,189 @@
+{{define "book-detail-base"}}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{.Title}}</title>
+    <meta name="description" content="View condition notes, price, and pickup details for {{.Book.Title}} at Davis's Books.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/assets/htmx.min.js" defer></script>
+  </head>
+  <body>
+    {{template "site-header" .}}
+    {{template "book-detail" .}}
+    {{template "site-footer" .}}
+    {{template "cart-drawer" .Cart}}
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="/app.js"></script>
+  </body>
+</html>
+{{end}}
+
+{{define "book-detail"}}
+<main id="top" class="book-details-view">
+  <div class="details-nav">
+    <a class="back-link" href="/#catalog">
+      <svg class="back-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M19 12H5M12 19l-7-7 7-7"></path>
+      </svg>
+      Back to browse
+    </a>
+  </div>
+
+  <div class="details-grid-3col product-detail-shell">
+    <div class="details-left-media">
+      <div class="thumbnail-strip">
+        <button class="thumb-btn is-active" type="button" aria-label="Cover front">
+          <span class="thumb-color-block front" style="background-color: {{.Book.CoverColor}}"></span>
+        </button>
+        <button class="thumb-btn" type="button" aria-label="Cover spine">
+          <span class="thumb-color-block spine" style="background-color: {{.Book.CoverColor}}"></span>
+        </button>
+        <button class="thumb-btn" type="button" aria-label="Cover back">
+          <span class="thumb-color-block back" style="background-color: {{.Book.CoverColor}}"></span>
+        </button>
+      </div>
+      <div class="main-cover-wrapper">
+        {{template "book-cover" .Book}}
+      </div>
+    </div>
+
+    <div class="details-middle-specs">
+      <section class="detail-info-card detail-summary-card" aria-labelledby="bookDetailTitle">
+        <p class="details-brand-link">Visit the <a href="/?q={{.Book.Author}}#catalog">{{.Book.Author}} shelf</a></p>
+        <h1 class="details-title" id="bookDetailTitle">{{.Book.Title}}</h1>
+        <p class="details-author">by <span class="author-name">{{.Book.Author}}</span></p>
+
+        <div class="details-rating">
+          <div class="stars">★★★★★</div>
+          <span class="rating-text">4.8 (124 Davis's reader notes)</span>
+        </div>
+
+        <div class="details-price-row">
+          <span class="discount-badge">-33%</span>
+          <span class="price-symbol">$</span>
+          <span class="price-val-large">{{priceDollars .Book.Price}}</span>
+          <span class="price-cents-large">{{priceCents .Book.Price}}</span>
+        </div>
+        <div class="list-price-row">
+          List Price: <span class="list-price-strike">{{money (listPrice .Book.Price)}}</span>
+        </div>
+
+        <div class="details-quick-specs">
+          <span><strong>Published:</strong> {{.Book.Year}}</span>
+          <span><strong>Format:</strong> {{.Book.Format}}</span>
+          <span><strong>ISBN:</strong> {{.Book.ISBN}}</span>
+          <span><strong>Genre:</strong> {{.Book.Genre}}</span>
+        </div>
+      </section>
+
+      <section class="detail-info-card details-description" aria-labelledby="copyNotesTitle">
+        <h2 id="copyNotesTitle">About this copy</h2>
+        <p>{{.Book.Notes}}</p>
+      </section>
+
+      <section class="detail-info-card details-copies-section" aria-labelledby="availableCopyTitle">
+        <h2 id="availableCopyTitle">Available copy</h2>
+        <p class="section-sub">Each used copy is hand-inspected and priced by condition.</p>
+        <table class="copies-table">
+          <thead>
+            <tr>
+              <th>Stock</th>
+              <th>Condition</th>
+              <th>Price</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>{{.Book.Stock}}</td>
+              <td>{{.Book.Condition}}</td>
+              <td class="price">{{money .Book.Price}}</td>
+              <td>
+                <button class="small-action add" type="button" hx-post="/cart/items" hx-vals='{"copy_id":"{{.Book.CopyID}}"}' hx-target="#cartDrawer" hx-swap="outerHTML">Add</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="detail-info-card details-tabs-section" aria-label="Book details and condition guide">
+        <div class="modal-tabs">
+          <button class="modal-tab-button is-active" type="button" data-tab-target="details-tab-specs">Specifications</button>
+          <button class="modal-tab-button" type="button" data-tab-target="details-tab-guide">Condition Guide</button>
+        </div>
+        <div class="modal-tab-content is-active" id="details-tab-specs">
+          <table class="specs-table">
+            <tbody>
+              <tr><td>ISBN-13</td><td>{{.Book.ISBN}}</td></tr>
+              <tr><td>Language</td><td>English</td></tr>
+              <tr><td>Condition</td><td>{{.Book.Condition}}</td></tr>
+              <tr><td>Store</td><td>Davis's Books, La Habra</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="modal-tab-content" id="details-tab-guide">
+          <p><strong>Like New:</strong> Crisp copy with minimal handling.</p>
+          <p><strong>Very Good:</strong> Light shelf wear, tight binding, clean readable pages.</p>
+          <p><strong>Good:</strong> Standard readable copy with minor markings or creasing.</p>
+          <p><strong>Fair:</strong> Heavy wear, complete text, ideal reading copy.</p>
+        </div>
+      </section>
+    </div>
+
+    <div class="details-right-buybox">
+      <div class="buybox-card">
+        <div class="buybox-price-line">
+          <span class="buybox-price">{{money .Book.Price}}</span>
+          <span class="prime-badge-icon">pickup</span>
+        </div>
+        <div class="buybox-delivery">
+          <span class="delivery-highlight">FREE store pickup</span> on orders over $35.
+          <span class="delivery-time">Ready from Davis's Books in La Habra.</span>
+        </div>
+        <div class="buybox-stock-status">
+          <span class="in-stock">In Stock.</span>
+        </div>
+        <div class="buybox-condition-wrapper">
+          <label>Selected copy condition</label>
+          <select class="buybox-select" disabled>
+            <option>{{.Book.Condition}} - {{money .Book.Price}}</option>
+          </select>
+        </div>
+        <div class="buybox-actions">
+          <button class="buybox-btn add-to-stack" type="button" hx-post="/cart/items" hx-vals='{"copy_id":"{{.Book.CopyID}}"}' hx-target="#cartDrawer" hx-swap="outerHTML">Add to Stack</button>
+          <button class="buybox-btn buy-now" type="button" data-action="buy-now-card" hx-post="/cart/items" hx-vals='{"copy_id":"{{.Book.CopyID}}"}' hx-target="#cartDrawer" hx-swap="outerHTML">Buy Now</button>
+        </div>
+        <div class="buybox-merchant-details">
+          <div class="merchant-row">
+            <span class="merchant-label">Ships from</span>
+            <span class="merchant-value">Davis's Books</span>
+          </div>
+          <div class="merchant-row">
+            <span class="merchant-label">Sold by</span>
+            <span class="merchant-value">Davis's Books</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {{if .Related}}
+  <section class="product-shelf" aria-labelledby="relatedBooksTitle">
+    <div class="shelf-heading">
+      <div>
+        <p class="eyebrow">More in {{.Book.Genre}}</p>
+        <h2 id="relatedBooksTitle">Keep browsing this shelf</h2>
+      </div>
+    </div>
+    <div class="product-row">
+      {{range .Related}}{{template "product-tile" .}}{{end}}
+    </div>
+  </section>
+  {{end}}
+</main>
+{{end}}

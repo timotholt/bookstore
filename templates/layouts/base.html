@@ -1,0 +1,27 @@
+{{define "base"}}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{.Title}}</title>
+    <meta name="description" content="Browse affordable used books by title, author, genre, condition, and price at Davis's Books.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/assets/htmx.min.js" defer></script>
+  </head>
+  <body>
+    {{template "site-header" .}}
+    {{template "home" .}}
+    {{template "site-footer" .}}
+    {{template "cart-drawer" .Cart}}
+    <dialog class="book-modal" id="bookModal">
+      <div class="modal-content" id="modalContent"></div>
+    </dialog>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="/app.js"></script>
+  </body>
+</html>
+{{end}}

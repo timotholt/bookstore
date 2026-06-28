@@ -1,0 +1,296 @@
+{{define "home"}}
+<main id="top">
+  <div id="storefrontView">
+    <section class="hero-amazon-carousel" aria-label="Store highlights carousel">
+      <div class="carousel-track-wrapper">
+        <div class="hero-carousel-track" id="heroCarouselTrack">
+          <div class="hero-slide active" style="--bg-grad: linear-gradient(135deg, #1B352B 0%, #11221B 100%)">
+            <div class="slide-content">
+              <span class="slide-eyebrow">Summer Reads Bargains</span>
+              <h2>Thousands of used books starting at $3.95</h2>
+              <p>Stock up on fiction, thrillers, and biographies for your next vacation.</p>
+              <a href="#catalog" class="slide-cta">Shop Bargains</a>
+            </div>
+          </div>
+          <div class="hero-slide" style="--bg-grad: linear-gradient(135deg, #4A2B11 0%, #2A1808 100%)">
+            <div class="slide-content">
+              <span class="slide-eyebrow">Clear Your Shelves</span>
+              <h2>Get up to 50% store credit for your trade-ins</h2>
+              <p>Declutter and trade clean copies for your next favorite book stack.</p>
+              <a href="#sell" class="slide-cta">Start a Trade-In</a>
+            </div>
+          </div>
+          <div class="hero-slide" style="--bg-grad: linear-gradient(135deg, #182035 0%, #0E1220 100%)">
+            <div class="slide-content">
+              <span class="slide-eyebrow">Rare & Collectible Editions</span>
+              <h2>Discover first editions, signed copies, and vintage releases</h2>
+              <p>Find extraordinary shelf presence for collectors and booklovers alike.</p>
+              <a href="#catalog" class="slide-cta">Explore Collectibles</a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <button class="carousel-control-btn prev" id="heroPrevBtn" type="button" aria-label="Previous slide">◀</button>
+      <button class="carousel-control-btn next" id="heroNextBtn" type="button" aria-label="Next slide">▶</button>
+      <div class="carousel-dots" id="heroCarouselDots">
+        <span class="dot active" data-slide-to="0"></span>
+        <span class="dot" data-slide-to="1"></span>
+        <span class="dot" data-slide-to="2"></span>
+      </div>
+    </section>
+
+    <section class="hero-overlay-grid" aria-label="Quick browse options">
+      <div class="overlay-card">
+        <h3>Shop by Category</h3>
+        <div class="card-grid-4">
+          <a class="grid-item-link" href="/?genre=Fiction#catalog">
+            <div class="grid-img-placeholder fiction">Fiction</div>
+            <span>Fiction</span>
+          </a>
+          <a class="grid-item-link" href="/?genre=Mystery#catalog">
+            <div class="grid-img-placeholder mystery">Mystery</div>
+            <span>Mystery</span>
+          </a>
+          <a class="grid-item-link" href="/?genre=History#catalog">
+            <div class="grid-img-placeholder history">History</div>
+            <span>History</span>
+          </a>
+          <a class="grid-item-link" href="/?genre=Cookbooks#catalog">
+            <div class="grid-img-placeholder cookbooks">Cookbooks</div>
+            <span>Cookbooks</span>
+          </a>
+        </div>
+        <a href="#catalog" class="card-bottom-link">See all categories</a>
+      </div>
+
+      <div class="overlay-card">
+        <h3>Bargains by Price</h3>
+        <div class="card-grid-4">
+          <a class="grid-item-link" href="/?max_price=5#catalog">
+            <div class="grid-img-placeholder price-5">$5</div>
+            <span>Under $5</span>
+          </a>
+          <a class="grid-item-link" href="/?max_price=10#catalog">
+            <div class="grid-img-placeholder price-10">$10</div>
+            <span>Under $10</span>
+          </a>
+          <a class="grid-item-link" href="/?max_price=15#catalog">
+            <div class="grid-img-placeholder price-15">$15</div>
+            <span>Under $15</span>
+          </a>
+          <a class="grid-item-link" href="/?max_price=22#catalog">
+            <div class="grid-img-placeholder price-22">$$</div>
+            <span>Under $22</span>
+          </a>
+        </div>
+        <a href="#catalog" class="card-bottom-link">Browse deals</a>
+      </div>
+
+      <div class="overlay-card single-feature-card">
+        <h3>Featured Deal</h3>
+        <div class="single-feature-content">
+          <div class="feature-tile" data-action="details" data-book-id="{{.Featured.ID}}" data-book-url="/books/{{.Featured.ID}}">
+            <div class="feature-tile-cover">
+              {{template "book-cover" .Featured}}
+            </div>
+            <div class="feature-tile-info">
+              <h4>{{.Featured.Title}}</h4>
+              <p class="author">by {{.Featured.Author}}</p>
+              <div class="stars-rating">
+                <span class="stars-val">★★★★★</span>
+                <span class="rating-count">85</span>
+              </div>
+              <div class="price-row">
+                <span class="discount-badge">-33%</span>
+                <span class="price"><span class="price-prefix">from </span><strong class="price-val">{{money .Featured.Price}}</strong></span>
+              </div>
+              <div class="condition-row">
+                <span class="pill condition">{{.Featured.Condition}}</span>
+              </div>
+              <div class="shipping-tag">FREE store pickup tomorrow</div>
+              <div class="card-double-buttons">
+                <button class="card-btn add-btn" type="button" data-action="add" data-book-id="{{.Featured.ID}}" hx-post="/cart/items" hx-vals='{"copy_id":"{{.Featured.CopyID}}"}' hx-target="#cartDrawer" hx-swap="outerHTML">Add to Cart</button>
+                <button class="card-btn buy-now-btn" type="button" data-action="buy-now-card" data-book-id="{{.Featured.ID}}" hx-post="/cart/items" hx-vals='{"copy_id":"{{.Featured.CopyID}}"}' hx-target="#cartDrawer" hx-swap="outerHTML">Buy Now</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <a href="/books/{{.Featured.ID}}" class="card-bottom-link">See today's deal</a>
+      </div>
+
+      <div class="overlay-card stack-builder-card">
+        <h3>Stack Builder</h3>
+        <div class="shipping-progress-content">
+          <p class="progress-status-text" id="overlayProgressText">{{.Cart.ProgressText}}</p>
+          <div class="progress-bar-wrapper">
+            <div class="progress-bar-fill" id="overlayProgressBar" style="width: {{printf "%.0f" .Cart.ProgressRatio}}%"></div>
+          </div>
+          <p class="progress-subtext">Free shipping on all orders over $35</p>
+          <div class="quick-filler-section">
+            <span class="quick-add-title">Quick stack fillers:</span>
+            <div class="quick-filler-row" id="overlayQuickFillers">
+              {{range .QuickFillers}}
+              <a class="filler-book-row" href="/books/{{.ID}}" style="--cover-color: {{.CoverColor}}">
+                <span class="filler-cover-mini"></span>
+                <span class="filler-details">
+                  <span class="filler-title">{{.Title}}</span>
+                  <span class="filler-price">{{money .Price}}</span>
+                </span>
+              </a>
+              {{end}}
+            </div>
+          </div>
+        </div>
+        <a href="/?max_price=8#catalog" class="card-bottom-link">See all bargains</a>
+      </div>
+    </section>
+
+    <section class="storefront" aria-label="Featured book shelves">
+      <div class="promo-grid">
+        <a class="promo-tile promo-large" href="#best-sellers">
+          <span class="eyebrow">This week</span>
+          <strong>Best sellers from the used shelf</strong>
+          <span>Popular copies with honest condition notes and prices that leave room for one more book.</span>
+        </a>
+        <a class="promo-tile" href="#new-arrivals">
+          <span class="eyebrow">Fresh trade-ins</span>
+          <strong>New arrivals</strong>
+          <span>Recently inspected books added to the catalog.</span>
+        </a>
+        <a class="promo-tile warm" href="#deals">
+          <span class="eyebrow">Under $8</span>
+          <strong>Small prices, good pages</strong>
+          <span>Budget-friendly paperbacks and reading copies.</span>
+        </a>
+      </div>
+
+      <section class="product-shelf" id="best-sellers" aria-labelledby="bestSellersTitle">
+        <div class="shelf-heading">
+          <div>
+            <p class="eyebrow">Best sellers</p>
+            <h2 id="bestSellersTitle">Readers keep grabbing these</h2>
+          </div>
+        </div>
+        <div class="product-row" id="bestSellerShelf">
+          {{range .BestSellers}}{{template "product-tile" .}}{{end}}
+        </div>
+      </section>
+
+      <section class="product-shelf" id="new-arrivals" aria-labelledby="newArrivalsTitle">
+        <div class="shelf-heading">
+          <div>
+            <p class="eyebrow">New arrivals</p>
+            <h2 id="newArrivalsTitle">Just checked in</h2>
+          </div>
+          <div class="shelf-actions">
+            <a class="secondary-button" href="#catalog">Browse new arrivals</a>
+          </div>
+        </div>
+        <div class="product-row" id="newArrivalShelf">
+          {{range .NewArrivals}}{{template "product-tile" .}}{{end}}
+        </div>
+      </section>
+
+      <section class="product-shelf" id="deals" aria-labelledby="dealsTitle">
+        <div class="shelf-heading">
+          <div>
+            <p class="eyebrow">Deals</p>
+            <h2 id="dealsTitle">Used books under $8</h2>
+          </div>
+        </div>
+        <div class="product-row" id="dealShelf">
+          {{range .Deals}}{{template "product-tile" .}}{{end}}
+        </div>
+      </section>
+    </section>
+
+    <section class="catalog-shell" id="catalog" aria-labelledby="catalogTitle">
+      <div class="catalog-header">
+        <div>
+          <p class="eyebrow">Used book collection</p>
+          <h2 id="catalogTitle">Used books in stock</h2>
+        </div>
+      </div>
+
+      <div class="catalog-layout">
+        <form class="filters" id="catalogFilters" aria-label="Catalog filters" hx-get="/catalog" hx-target="#catalogResults" hx-swap="innerHTML">
+          <div class="filter-block">
+            <label for="sidebarSearchInput">Keyword Search</label>
+            <input id="sidebarSearchInput" name="q" type="search" value="{{.Filters.Query}}" placeholder="Title, author, or ISBN..." autocomplete="off" hx-trigger="keyup changed delay:250ms">
+          </div>
+          <div class="filter-block">
+            <label for="genreFilter">Genre</label>
+            <select id="genreFilter" name="genre" hx-trigger="change">
+              <option value="All">All genres</option>
+              {{range .Genres}}<option value="{{.}}" {{if selected $.Filters.Genre .}}selected{{end}}>{{.}}</option>{{end}}
+            </select>
+          </div>
+          <div class="filter-block">
+            <label for="conditionFilter">Condition</label>
+            <select id="conditionFilter" name="condition" hx-trigger="change">
+              <option value="All">Any condition</option>
+              {{range .Conditions}}<option value="{{.}}" {{if selected $.Filters.Condition .}}selected{{end}}>{{.}}</option>{{end}}
+            </select>
+          </div>
+          <div class="filter-block">
+            <div class="price-header">
+              <label for="priceFilter">Max Price</label>
+              <span id="priceValue">{{if .Filters.MaxPrice}}${{.Filters.MaxPrice}}{{else}}$22{{end}}</span>
+            </div>
+            <div class="slider-container">
+              <input id="priceFilter" name="max_price" type="range" min="4" max="22" value="{{if .Filters.MaxPrice}}{{.Filters.MaxPrice}}{{else}}22{{end}}" hx-trigger="input changed delay:150ms">
+            </div>
+          </div>
+          <div class="filter-block">
+            <label for="formatFilter">Format</label>
+            <select id="formatFilter" name="format" hx-trigger="change">
+              <option value="All">All formats</option>
+              {{range .Formats}}<option value="{{.}}" {{if selected $.Filters.Format .}}selected{{end}}>{{.}}</option>{{end}}
+            </select>
+          </div>
+          <a class="secondary-button" id="resetFilters" href="/#catalog">Reset filters</a>
+        </form>
+
+        <main class="catalog-main">
+          {{template "catalog-results" .}}
+        </main>
+      </div>
+    </section>
+
+    <section class="feature-band" id="staff-picks" aria-labelledby="staffTitle">
+      <div class="feature-band-content">
+        <p class="eyebrow">Staff picks</p>
+        <h2 id="staffTitle">Books with a little extra shelf presence</h2>
+        <p>Each highlighted copy has crisp notes, fair pricing, and enough character to make used feel better than new.</p>
+      </div>
+      <div class="mini-shelf" id="miniShelf">
+        {{range .StaffPicks}}
+        <article class="staff-pick-card" data-action="details" data-book-id="{{.ID}}" data-book-url="/books/{{.ID}}">
+          <div class="staff-pick-cover">{{template "book-cover" .}}</div>
+          <div class="staff-pick-info">
+            <span class="staff-badge">Staff Pick</span>
+            <h4>{{.Title}}</h4>
+            <span class="author">by {{.Author}}</span>
+            <p class="staff-quote">{{.StaffQuote}}</p>
+            <div class="staff-footer">
+              <span class="price">from <strong>{{money .Price}}</strong></span>
+              <button class="staff-btn" type="button">Details</button>
+            </div>
+          </div>
+        </article>
+        {{end}}
+      </div>
+    </section>
+
+    <section class="sell-band" id="sell" aria-labelledby="sellTitle">
+      <div>
+        <p class="eyebrow">Clear a shelf</p>
+        <h2 id="sellTitle">Trade good books for store credit</h2>
+        <p>Davis's Books buys clean fiction, nonfiction, cookbooks, art books, and children's favorites. We price by condition, demand, and edition.</p>
+      </div>
+      <a class="primary-button" href="mailto:hello@davisbooks.example">Start a trade-in</a>
+    </section>
+  </div>
+  <div id="bookDetailsView" class="book-details-view" hidden></div>
+</main>
+{{end}}

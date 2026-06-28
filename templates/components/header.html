@@ -1,0 +1,71 @@
+{{define "site-header"}}
+<header class="site-header">
+  <div class="header-top-bar">
+    <a class="brand site-logo" href="#top" aria-label="Davis's Books home">
+      <span class="brand-mark" aria-hidden="true">DB</span>
+      <span>Davis's Books</span>
+    </a>
+
+    <div class="header-delivery-widget">
+      <span class="delivery-to">Store pickup</span>
+      <span class="delivery-location">La Habra, CA <span class="location-time">· 10am-7pm</span></span>
+    </div>
+
+    <form class="header-search-form" id="headerSearchForm" action="/catalog" hx-get="/catalog" hx-target="#catalogResults" hx-swap="innerHTML">
+      <div class="search-select-wrapper">
+        <select id="headerGenreSelect" aria-label="Select Genre category">
+          <option value="All">All Genres</option>
+          {{range .Genres}}<option value="{{.}}">{{.}}</option>{{end}}
+        </select>
+      </div>
+      <div class="search-input-wrapper">
+        <input id="headerSearchInput" name="q" type="search" placeholder="Search Davis's Books..." autocomplete="off">
+        <div class="search-suggestions" id="searchSuggestions" hidden></div>
+      </div>
+      <button class="header-search-submit" type="submit" aria-label="Submit search">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M10.8 18.1a7.3 7.3 0 1 1 0-14.6 7.3 7.3 0 0 1 0 14.6Zm5.2-2.1 4.5 4.5" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+      </button>
+    </form>
+
+    <div class="header-widget language-selector-widget">
+      <span class="language-flag">US</span>
+      <span class="language-code">EN <span class="arrow-down">▼</span></span>
+    </div>
+
+    <div class="header-widget">
+      <span class="widget-top">Hello, Sign in</span>
+      <span class="widget-bottom">Account & Lists <span class="arrow-down">▼</span></span>
+    </div>
+
+    <div class="header-widget">
+      <span class="widget-top">Trade-in</span>
+      <span class="widget-bottom">Credit & Sell</span>
+    </div>
+
+    <button class="cart-toggle-widget cart-toggle" type="button" aria-controls="cartDrawer" aria-expanded="false" aria-label="View shopping cart">
+      <div class="cart-icon-wrapper">
+        <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+          <path d="M7 4h-2l-1 2m0 0 2.2 8.6a2 2 0 0 0 2 1.4h7.6a2 2 0 0 0 1.9-1.4l1.4-5.6h-14.1m3 11a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm9 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+        <span class="cart-count" data-cart-count>{{.Cart.ItemCount}}</span>
+      </div>
+      <span class="cart-label">Cart</span>
+    </button>
+  </div>
+
+  <nav class="site-header-subnav" aria-label="Sub navigation">
+    <div class="subnav-left">
+      <button class="all-menu-button" type="button" data-action="back-to-storefront">All</button>
+    </div>
+    <div class="subnav-links">
+      <a href="#best-sellers">Best Sellers</a>
+      <a href="#new-arrivals">New Arrivals</a>
+      <a href="#deals">Used Deals</a>
+      <a href="#staff-picks">Staff Picks</a>
+      <a href="#sell">Sell & Trade</a>
+    </div>
+  </nav>
+</header>
+{{end}}
