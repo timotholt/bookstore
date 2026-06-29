@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"math"
@@ -19,6 +20,13 @@ func parseTemplates() (*template.Template, error) {
 			return fmt.Sprintf("%02d", centsTotal(v)%100)
 		},
 		"selected": func(current, option string) bool { return current == option },
+		"json": func(v any) string {
+			b, err := json.Marshal(v)
+			if err != nil {
+				return "[]"
+			}
+			return string(b)
+		},
 	}
 	tmpl := template.New("").Funcs(funcs)
 	var files []string

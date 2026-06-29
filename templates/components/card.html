@@ -2,7 +2,7 @@
 <div class="book-cover-container" style="--book-aspect-ratio: {{.AspectRatio}}; --cover-color: {{.CoverColor}}">
   <div class="book-cover" aria-hidden="true">
     <img class="cover-image" src="/assets/covers/{{.ID}}.jpg" alt="{{.Title}} cover" onerror="this.src='/assets/covers/placeholder.jpg';">
-    <div class="cover-overlay"></div>
+    {{if .Author}}<div class="cover-overlay"></div>{{end}}
   </div>
 </div>
 {{end}}
@@ -12,7 +12,7 @@
   {{template "book-cover" .}}
   <div class="product-copy">
     <a class="card-title-link" href="/books/{{.ID}}"><strong>{{.Title}}</strong></a>
-    <span class="author">by {{.Author}}</span>
+    {{if .Author}}<span class="author">by {{.Author}}</span>{{end}}
     <div class="stars-rating">
       <span class="stars-val">★★★★★</span>
       <span class="rating-count">124</span>
@@ -20,9 +20,11 @@
     <div class="price-row">
       <span class="price"><span class="price-prefix">from </span><strong class="price-val">{{money .Price}}</strong></span>
     </div>
+    {{if .Condition}}
     <div class="condition-row">
       <span class="pill condition">{{.Condition}}</span>
     </div>
+    {{end}}
   </div>
   <div class="product-actions-wrapper">
     {{if freePickup .Price}}<div class="shipping-tag">FREE store pickup tomorrow</div>{{end}}
@@ -39,7 +41,7 @@
   {{template "book-cover" .}}
   <div class="product-copy">
     <a class="card-title-link" href="/books/{{.ID}}"><strong>{{.Title}}</strong></a>
-    <span class="author">by {{.Author}}</span>
+    {{if .Author}}<span class="author">by {{.Author}}</span>{{end}}
     <div class="stars-rating">
       <span class="stars-val">★★★★★</span>
       <span class="rating-count">48</span>
@@ -47,9 +49,11 @@
     <div class="price-row">
       <span class="price"><span class="price-prefix">from </span><strong class="price-val">{{money .Price}}</strong></span>
     </div>
+    {{if .Condition}}
     <div class="condition-row">
       <span class="pill condition">{{.Condition}}</span>
     </div>
+    {{end}}
   </div>
   <div class="product-actions-wrapper">
     {{if freePickup .Price}}<div class="shipping-tag">FREE store pickup tomorrow</div>{{end}}
@@ -91,7 +95,7 @@
       </label>
     </div>
   </div>
-  <div class="book-grid" id="bookGrid" aria-live="polite">
+  <div class="product-grid" id="bookGrid" aria-live="polite">
     {{template "catalog-grid" .Catalog}}
   </div>
 </div>

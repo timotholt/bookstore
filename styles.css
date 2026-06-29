@@ -1243,7 +1243,8 @@ input[type="range"] {
   min-width: 160px;
 }
 
-.book-grid {
+.book-grid,
+.product-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
@@ -2148,7 +2149,8 @@ input[type="range"] {
 }
 
 @media (max-width: 1080px) {
-  .book-grid {
+  .book-grid,
+  .product-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
@@ -2257,6 +2259,7 @@ input[type="range"] {
 
   .filters,
   .book-grid,
+  .product-grid,
   .mini-shelf {
     grid-template-columns: 1fr;
   }
@@ -3927,4 +3930,65 @@ input[type="range"] {
 
 .copyright-text {
   margin: 0;
+}
+
+/* Swatch Option Selectors */
+.swatch-btn {
+  border: 1px solid var(--line);
+  padding: 8px 16px;
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  transition: all 0.15s ease;
+}
+
+.swatch-btn:hover {
+  border-color: var(--muted);
+  background: var(--light-surface);
+}
+
+.swatch-btn.is-active {
+  border-color: var(--rust);
+  color: var(--rust);
+  background: rgba(194, 89, 63, 0.05);
+  box-shadow: 0 0 0 1px var(--rust);
+}
+
+/* HTMX Loading Feedbacks */
+.card-btn.htmx-request,
+.primary-button.htmx-request,
+.small-action.htmx-request {
+  opacity: 0.6 !important;
+  pointer-events: none !important;
+  position: relative !important;
+  color: transparent !important; /* Hide text while loading */
+}
+
+.card-btn.htmx-request::after,
+.primary-button.htmx-request::after,
+.small-action.htmx-request::after {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  top: calc(50% - 8px);
+  left: calc(50% - 8px);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: swatch-spin 0.6s linear infinite;
+}
+
+/* For dark text buttons, make spinner border dark */
+.card-btn.add-btn.htmx-request::after,
+.small-action.htmx-request::after {
+  border-color: rgba(0, 0, 0, 0.1);
+  border-top-color: var(--sage-dark);
+}
+
+@keyframes swatch-spin {
+  to { transform: rotate(360deg); }
 }

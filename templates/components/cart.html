@@ -26,7 +26,7 @@
         </div>
         <div class="cart-item-main">
           <strong>{{.Book.Title}}</strong>
-          <span>{{.Book.Condition}} · {{.Book.Format}}</span>
+          <span>{{if .Book.Condition}}{{.Book.Condition}} · {{end}}{{.Book.Format}}</span>
           <span>{{money .Book.Price}} each</span>
           <div class="quantity-stepper">
             <button type="button" aria-label="Decrease quantity" hx-post="/cart/items/{{.Book.CopyID}}/decrease" hx-target="#cartDrawer" hx-swap="outerHTML">-</button>

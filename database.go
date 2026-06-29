@@ -47,6 +47,27 @@ func resetLegacySchema(db *sql.DB) error {
 	if count == 0 {
 		return nil
 	}
+
+	// Drop schema and re-migrate if variant_attributes is missing (merchandise release)
+	var hasAttribs int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'variant_attributes'`).Scan(&hasAttribs); err != nil {
+		return err
+	}
+	if hasAttribs == 0 {
+		_, err := db.Exec(`
+			DROP TABLE IF EXISTS book_cache_tags;
+			DROP TABLE IF EXISTS cache_tags;
+			DROP TABLE IF EXISTS book_collection_items;
+			DROP TABLE IF EXISTS book_collections;
+			DROP TABLE IF EXISTS book_copies;
+			DROP TABLE IF EXISTS book_genres;
+			DROP TABLE IF EXISTS book_authors;
+			DROP TABLE IF EXISTS books;
+			DROP TABLE IF EXISTS genres;
+			DROP TABLE IF EXISTS authors;
+		`)
+		return err
+	}
 	rows, err := db.Query(`PRAGMA table_info(books)`)
 	if err != nil {
 		return err

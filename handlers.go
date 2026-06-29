@@ -106,6 +106,16 @@ func (app *application) bookDetail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "book unavailable", http.StatusInternalServerError)
 		return
 	}
+	copies, err := app.copiesByProductID(bookID)
+	if err != nil {
+		http.Error(w, "copies unavailable", http.StatusInternalServerError)
+		return
+	}
+	attribs, err := app.variantAttributes(bookID)
+	if err != nil {
+		http.Error(w, "attributes unavailable", http.StatusInternalServerError)
+		return
+	}
 	allBooks, err := app.listBooks(catalogFilters{})
 	if err != nil {
 		http.Error(w, "catalog unavailable", http.StatusInternalServerError)
@@ -117,11 +127,13 @@ func (app *application) bookDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := bookDetailPageData{
-		Title:   book.Title + " | Davis's Books",
-		Genres:  uniqueGenres(allBooks),
-		Book:    book,
-		Related: relatedBooks(allBooks, book, 4),
-		Cart:    cart,
+		Title:      book.Title + " | Davis's Books",
+		Genres:     uniqueGenres(allBooks),
+		Book:       book,
+		Copies:     copies,
+		Attributes: attribs,
+		Related:    relatedBooks(allBooks, book, 4),
+		Cart:       cart,
 	}
 	if err := app.templates.ExecuteTemplate(w, "book-detail-base", data); err != nil {
 		http.Error(w, "template error", http.StatusInternalServerError)

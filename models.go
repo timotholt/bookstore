@@ -55,12 +55,19 @@ type homePageData struct {
 	Filters      catalogFilters
 }
 
+type variantAttribute struct {
+	Name  string `json:"Name"`
+	Value string `json:"Value"`
+}
+
 type bookDetailPageData struct {
-	Title   string
-	Genres  []string
-	Book    bookCard
-	Related []bookCard
-	Cart    cartView
+	Title      string
+	Genres     []string
+	Book       bookCard
+	Copies     []bookCard
+	Attributes map[int64][]variantAttribute
+	Related    []bookCard
+	Cart       cartView
 }
 
 type catalogFilters struct {

@@ -113,7 +113,7 @@ func TestCatalogHTMXFiltersByQuery(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
 	}
 	body := rr.Body.String()
-	assertContains(t, body, "1 of 28 used books shown")
+	assertContains(t, body, "1 of 31 used books shown")
 	assertContains(t, body, "Dune")
 	if strings.Contains(body, "The Night Circus") {
 		t.Fatal("filtered catalog fragment included an unrelated title")
@@ -132,7 +132,7 @@ func TestCatalogFiltersByAuthorSlug(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
 	}
 	body := rr.Body.String()
-	assertContains(t, body, "1 of 28 used books shown")
+	assertContains(t, body, "1 of 31 used books shown")
 	assertContains(t, body, "Dune")
 	if strings.Contains(body, "Project Hail Mary") {
 		t.Fatal("author-filtered catalog fragment included another science fiction author")

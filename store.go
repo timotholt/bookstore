@@ -8,15 +8,22 @@ import (
 func (app *application) listBooks(filters catalogFilters) ([]bookCard, error) {
 	const base = `
 		SELECT
-			b.id, b.title, a.name, a.slug, g.name, g.slug, b.year, b.isbn, b.cover_color,
+			b.id, b.title, COALESCE(a.name, ''), COALESCE(a.slug, ''), COALESCE(g.name, ''), COALESCE(g.slug, ''), COALESCE(b.year, 0), COALESCE(b.isbn, ''), b.cover_color,
 			b.aspect_ratio, b.tags, b.is_new_arrival,
-			c.id, c.condition, c.price, c.notes, c.format, c.stock,
+			c.id, COALESCE(c.condition, ''), c.price, COALESCE(c.notes, ''), COALESCE(c.format, 'Standard'), c.stock,
 			c.is_staff_pick, COALESCE(c.staff_quote, ''), c.seal_style, c.seal_text
 		FROM books b
-		JOIN authors a ON a.id = b.primary_author_id
-		JOIN genres g ON g.id = b.primary_genre_id
+		LEFT JOIN authors a ON a.id = b.primary_author_id
+		LEFT JOIN genres g ON g.id = b.primary_genre_id
 		JOIN book_copies c ON c.book_id = b.id
-		WHERE c.is_sold = 0`
+		WHERE c.is_sold = 0
+		  AND c.id = (
+			SELECT c2.id 
+			FROM book_copies c2 
+			WHERE c2.book_id = b.id AND c2.is_sold = 0 
+			ORDER BY c2.price ASC 
+			LIMIT 1
+		  )`
 
 	args := []any{}
 	where := ""
@@ -92,16 +99,23 @@ func (app *application) listBooks(filters catalogFilters) ([]bookCard, error) {
 func (app *application) collectionBooks(slug string, limit int) ([]bookCard, error) {
 	const query = `
 		SELECT
-			b.id, b.title, a.name, a.slug, g.name, g.slug, b.year, b.isbn, b.cover_color,
+			b.id, b.title, COALESCE(a.name, ''), COALESCE(a.slug, ''), COALESCE(g.name, ''), COALESCE(g.slug, ''), COALESCE(b.year, 0), COALESCE(b.isbn, ''), b.cover_color,
 			b.aspect_ratio, b.tags, b.is_new_arrival,
-			c.id, c.condition, c.price, c.notes, c.format, c.stock,
+			c.id, COALESCE(c.condition, ''), c.price, COALESCE(c.notes, ''), COALESCE(c.format, 'Standard'), c.stock,
 			c.is_staff_pick, COALESCE(c.staff_quote, ''), c.seal_style, c.seal_text
 		FROM book_collection_items i
 		JOIN books b ON b.id = i.book_id
-		JOIN authors a ON a.id = b.primary_author_id
-		JOIN genres g ON g.id = b.primary_genre_id
+		LEFT JOIN authors a ON a.id = b.primary_author_id
+		LEFT JOIN genres g ON g.id = b.primary_genre_id
 		JOIN book_copies c ON c.book_id = b.id
 		WHERE i.collection_slug = ? AND i.is_active = 1 AND c.is_sold = 0
+		  AND c.id = (
+			SELECT c2.id 
+			FROM book_copies c2 
+			WHERE c2.book_id = b.id AND c2.is_sold = 0 
+			ORDER BY c2.price ASC 
+			LIMIT 1
+		  )
 		ORDER BY i.position ASC, c.is_staff_pick DESC, c.price ASC
 		LIMIT ?`
 	rows, err := app.db.Query(query, slug, limit)
@@ -129,13 +143,13 @@ func (app *application) collectionBooks(slug string, limit int) ([]bookCard, err
 func (app *application) bookByCopyID(copyID int64) (bookCard, error) {
 	row := app.db.QueryRow(`
 		SELECT
-			b.id, b.title, a.name, a.slug, g.name, g.slug, b.year, b.isbn, b.cover_color,
+			b.id, b.title, COALESCE(a.name, ''), COALESCE(a.slug, ''), COALESCE(g.name, ''), COALESCE(g.slug, ''), COALESCE(b.year, 0), COALESCE(b.isbn, ''), b.cover_color,
 			b.aspect_ratio, b.tags, b.is_new_arrival,
-			c.id, c.condition, c.price, c.notes, c.format, c.stock,
+			c.id, COALESCE(c.condition, ''), c.price, COALESCE(c.notes, ''), COALESCE(c.format, 'Standard'), c.stock,
 			c.is_staff_pick, COALESCE(c.staff_quote, ''), c.seal_style, c.seal_text
 		FROM books b
-		JOIN authors a ON a.id = b.primary_author_id
-		JOIN genres g ON g.id = b.primary_genre_id
+		LEFT JOIN authors a ON a.id = b.primary_author_id
+		LEFT JOIN genres g ON g.id = b.primary_genre_id
 		JOIN book_copies c ON c.book_id = b.id
 		WHERE c.id = ? AND c.is_sold = 0`, copyID)
 	var b bookCard
@@ -151,13 +165,13 @@ func (app *application) bookByCopyID(copyID int64) (bookCard, error) {
 func (app *application) bookByID(bookID string) (bookCard, error) {
 	row := app.db.QueryRow(`
 		SELECT
-			b.id, b.title, a.name, a.slug, g.name, g.slug, b.year, b.isbn, b.cover_color,
+			b.id, b.title, COALESCE(a.name, ''), COALESCE(a.slug, ''), COALESCE(g.name, ''), COALESCE(g.slug, ''), COALESCE(b.year, 0), COALESCE(b.isbn, ''), b.cover_color,
 			b.aspect_ratio, b.tags, b.is_new_arrival,
-			c.id, c.condition, c.price, c.notes, c.format, c.stock,
+			c.id, COALESCE(c.condition, ''), c.price, COALESCE(c.notes, ''), COALESCE(c.format, 'Standard'), c.stock,
 			c.is_staff_pick, COALESCE(c.staff_quote, ''), c.seal_style, c.seal_text
 		FROM books b
-		JOIN authors a ON a.id = b.primary_author_id
-		JOIN genres g ON g.id = b.primary_genre_id
+		LEFT JOIN authors a ON a.id = b.primary_author_id
+		LEFT JOIN genres g ON g.id = b.primary_genre_id
 		JOIN book_copies c ON c.book_id = b.id
 		WHERE b.id = ? AND c.is_sold = 0
 		ORDER BY c.is_staff_pick DESC, c.price ASC
@@ -176,4 +190,64 @@ func (app *application) copyStock(copyID int64) (int, error) {
 	var stock int
 	err := app.db.QueryRow(`SELECT stock FROM book_copies WHERE id = ? AND is_sold = 0`, copyID).Scan(&stock)
 	return stock, err
+}
+
+func (app *application) copiesByProductID(productID string) ([]bookCard, error) {
+	rows, err := app.db.Query(`
+		SELECT
+			b.id, b.title, COALESCE(a.name, ''), COALESCE(a.slug, ''), COALESCE(g.name, ''), COALESCE(g.slug, ''), COALESCE(b.year, 0), COALESCE(b.isbn, ''), b.cover_color,
+			b.aspect_ratio, b.tags, b.is_new_arrival,
+			c.id, COALESCE(c.condition, ''), c.price, COALESCE(c.notes, ''), COALESCE(c.format, 'Standard'), c.stock,
+			c.is_staff_pick, COALESCE(c.staff_quote, ''), c.seal_style, c.seal_text
+		FROM books b
+		LEFT JOIN authors a ON a.id = b.primary_author_id
+		LEFT JOIN genres g ON g.id = b.primary_genre_id
+		JOIN book_copies c ON c.book_id = b.id
+		WHERE b.id = ? AND c.is_sold = 0
+		ORDER BY c.price ASC`, productID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var copies []bookCard
+	for rows.Next() {
+		var b bookCard
+		if err := rows.Scan(
+			&b.ID, &b.Title, &b.Author, &b.AuthorSlug, &b.Genre, &b.GenreSlug, &b.Year, &b.ISBN, &b.CoverColor,
+			&b.AspectRatio, &b.Tags, &b.IsNewArrival,
+			&b.CopyID, &b.Condition, &b.Price, &b.Notes, &b.Format, &b.Stock,
+			&b.IsStaffPick, &b.StaffQuote, &b.SealStyle, &b.SealText,
+		); err != nil {
+			return nil, err
+		}
+		copies = append(copies, b)
+	}
+	return copies, rows.Err()
+}
+
+func (app *application) variantAttributes(bookID string) (map[int64][]variantAttribute, error) {
+	rows, err := app.db.Query(`
+		SELECT a.variant_id, a.name, a.value
+		FROM variant_attributes a
+		JOIN book_copies c ON c.id = a.variant_id
+		WHERE c.book_id = ?`, bookID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	attribs := make(map[int64][]variantAttribute)
+	for rows.Next() {
+		var variantID int64
+		var name, value string
+		if err := rows.Scan(&variantID, &name, &value); err != nil {
+			return nil, err
+		}
+		attribs[variantID] = append(attribs[variantID], variantAttribute{
+			Name:  name,
+			Value: value,
+		})
+	}
+	return attribs, rows.Err()
 }

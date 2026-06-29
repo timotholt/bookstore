@@ -55,9 +55,13 @@
 
     <div class="details-middle-specs">
       <section class="detail-info-card detail-summary-card" aria-labelledby="bookDetailTitle">
+        {{if .Book.Author}}
         <p class="details-brand-link">Visit the <a href="/?author={{.Book.AuthorSlug}}#catalog">{{.Book.Author}} shelf</a></p>
+        {{end}}
         <h1 class="details-title" id="bookDetailTitle">{{.Book.Title}}</h1>
+        {{if .Book.Author}}
         <p class="details-author">by <span class="author-name">{{.Book.Author}}</span></p>
+        {{end}}
 
         <div class="details-rating">
           <div class="stars">★★★★★</div>
@@ -67,18 +71,18 @@
         <div class="details-price-row">
           <span class="discount-badge">-33%</span>
           <span class="price-symbol">$</span>
-          <span class="price-val-large">{{priceDollars .Book.Price}}</span>
-          <span class="price-cents-large">{{priceCents .Book.Price}}</span>
+          <span class="price-val-large" id="mainPriceDollars">{{priceDollars .Book.Price}}</span>
+          <span class="price-cents-large" id="mainPriceCents">{{priceCents .Book.Price}}</span>
         </div>
         <div class="list-price-row">
-          List Price: <span class="list-price-strike">{{money (listPrice .Book.Price)}}</span>
+          List Price: <span class="list-price-strike" id="mainListPrice">{{money (listPrice .Book.Price)}}</span>
         </div>
 
         <div class="details-quick-specs">
-          <span><strong>Published:</strong> {{.Book.Year}}</span>
-          <span><strong>Format:</strong> {{.Book.Format}}</span>
-          <span><strong>ISBN:</strong> {{.Book.ISBN}}</span>
-          <span><strong>Genre:</strong> {{.Book.Genre}}</span>
+          {{if gt .Book.Year 0}}<span><strong>Published:</strong> {{.Book.Year}}</span>{{end}}
+          {{if .Book.Format}}<span><strong>Format:</strong> {{.Book.Format}}</span>{{end}}
+          {{if .Book.ISBN}}<span><strong>ISBN:</strong> {{.Book.ISBN}}</span>{{end}}
+          {{if .Book.Genre}}<span><strong>Genre:</strong> {{.Book.Genre}}</span>{{end}}
         </div>
       </section>
 
@@ -87,29 +91,28 @@
         <p>{{.Book.Notes}}</p>
       </section>
 
-      <section class="detail-info-card details-copies-section" aria-labelledby="availableCopyTitle">
-        <h2 id="availableCopyTitle">Available copy</h2>
-        <p class="section-sub">Each used copy is hand-inspected and priced by condition.</p>
-        <table class="copies-table">
-          <thead>
-            <tr>
-              <th>Stock</th>
-              <th>Condition</th>
-              <th>Price</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>{{.Book.Stock}}</td>
-              <td>{{.Book.Condition}}</td>
-              <td class="copy-price">{{money .Book.Price}}</td>
-              <td>
-                <button class="small-action add" type="button" hx-post="/cart/items" hx-vals='{"copy_id":"{{.Book.CopyID}}"}' hx-target="#cartDrawer" hx-swap="outerHTML">Add</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <section class="detail-info-card details-options-section" aria-labelledby="optionSelectorTitle">
+        <h2 id="optionSelectorTitle" style="font-size: 1.15rem; font-weight: 700; margin-bottom: 12px; color: var(--ink);">Select Format / Option</h2>
+        <div class="swatches-container" style="display: flex; gap: 10px; flex-wrap: wrap;">
+          {{range $index, $copy := .Copies}}
+          <button class="swatch-btn {{if eq $index 0}}is-active{{end}}"
+                  type="button"
+                  data-copy-id="{{.CopyID}}"
+                  data-price-dollars="{{priceDollars .Price}}"
+                  data-price-cents="{{priceCents .Price}}"
+                  data-price-formatted="{{money .Price}}"
+                  data-list-price="{{money (listPrice .Price)}}"
+                  data-stock="{{.Stock}}"
+                  data-notes="{{.Notes}}"
+                  data-condition="{{if .Condition}}{{.Condition}}{{else}}New{{end}}"
+                  data-format="{{.Format}}"
+                  data-attributes="{{index $.Attributes .CopyID | json}}"
+                  onclick="selectVariant(this)">
+            <span style="display: block; font-size: 0.95rem; font-weight: 700;">{{.Format}}</span>
+            <span style="display: block; font-size: 0.8rem; color: var(--muted); margin-top: 2px;">{{money .Price}}</span>
+          </button>
+          {{end}}
+        </div>
       </section>
 
       <section class="detail-info-card details-tabs-section" aria-label="Book details and condition guide">
@@ -120,10 +123,14 @@
         <div class="modal-tab-content is-active" id="details-tab-specs">
           <table class="specs-table">
             <tbody>
-              <tr><td>ISBN-13</td><td>{{.Book.ISBN}}</td></tr>
+              {{if .Book.ISBN}}<tr><td>ISBN-13</td><td>{{.Book.ISBN}}</td></tr>{{end}}
               <tr><td>Language</td><td>English</td></tr>
-              <tr><td>Condition</td><td>{{.Book.Condition}}</td></tr>
+              <tr><td>Condition</td><td id="specsCondition">{{if .Book.Condition}}{{.Book.Condition}}{{else}}New{{end}}</td></tr>
               <tr><td>Store</td><td>Davis's Books, La Habra</td></tr>
+              <tr class="dynamic-attribute-row" id="attr-color" style="display: none;"><td>Color</td><td class="value"></td></tr>
+              <tr class="dynamic-attribute-row" id="attr-size" style="display: none;"><td>Size</td><td class="value"></td></tr>
+              <tr class="dynamic-attribute-row" id="attr-material" style="display: none;"><td>Material</td><td class="value"></td></tr>
+              <tr class="dynamic-attribute-row" id="attr-type" style="display: none;"><td>Type</td><td class="value"></td></tr>
             </tbody>
           </table>
         </div>
@@ -150,13 +157,13 @@
           <span class="in-stock">In Stock.</span>
         </div>
         <div class="buybox-condition-wrapper">
-          <label>Selected copy condition</label>
-          <select class="buybox-select" disabled>
-            <option>{{.Book.Condition}} - {{money .Book.Price}}</option>
-          </select>
+          <label style="display: block; font-size: 0.82rem; font-weight: 700; color: var(--muted); margin-bottom: 4px;">Selected Option</label>
+          <div id="buyboxOptionText" style="font-size: 0.95rem; font-weight: 600; color: var(--ink);">
+            {{.Book.Format}} · {{if .Book.Condition}}{{.Book.Condition}}{{else}}New{{end}}
+          </div>
         </div>
         <div class="buybox-actions">
-          <button class="buybox-btn add-to-stack" type="button" hx-post="/cart/items" hx-vals='{"copy_id":"{{.Book.CopyID}}"}' hx-target="#cartDrawer" hx-swap="outerHTML">Add to Stack</button>
+          <button class="buybox-btn add-to-stack" type="button" data-action="add" hx-post="/cart/items" hx-vals='{"copy_id":"{{.Book.CopyID}}"}' hx-target="#cartDrawer" hx-swap="outerHTML">Add to Stack</button>
           <button class="buybox-btn buy-now" type="button" data-action="buy-now-card" hx-post="/cart/items" hx-vals='{"copy_id":"{{.Book.CopyID}}"}' hx-target="#cartDrawer" hx-swap="outerHTML">Buy Now</button>
         </div>
         <div class="buybox-merchant-details">
@@ -186,5 +193,95 @@
     </div>
   </section>
   {{end}}
+  <script>
+    function updateSpecs(attributesJson, condition) {
+      const specsCondition = document.getElementById('specsCondition');
+      if (specsCondition) specsCondition.innerText = condition;
+
+      // Hide all dynamic rows first
+      document.querySelectorAll('.dynamic-attribute-row').forEach(row => {
+        row.style.display = 'none';
+      });
+
+      if (!attributesJson) return;
+      try {
+        const attrs = JSON.parse(attributesJson);
+        if (Array.isArray(attrs)) {
+          attrs.forEach(attr => {
+            const row = document.getElementById('attr-' + attr.Name.toLowerCase());
+            if (row) {
+              row.style.display = 'table-row';
+              row.querySelector('.value').innerText = attr.Value;
+            }
+          });
+        }
+      } catch(e) {
+        console.error("Error parsing attributes JSON:", e);
+      }
+    }
+
+    function selectVariant(btn) {
+      // 1. Update swatch active classes
+      btn.parentElement.querySelectorAll('.swatch-btn').forEach(b => {
+        b.classList.remove('is-active');
+      });
+      btn.classList.add('is-active');
+
+      // 2. Extract dataset
+      const copyId = btn.getAttribute('data-copy-id');
+      const dollars = btn.getAttribute('data-price-dollars');
+      const cents = btn.getAttribute('data-price-cents');
+      const formatted = btn.getAttribute('data-price-formatted');
+      const listPrice = btn.getAttribute('data-list-price');
+      const stock = btn.getAttribute('data-stock');
+      const condition = btn.getAttribute('data-condition');
+      const format = btn.getAttribute('data-format');
+      const attributes = btn.getAttribute('data-attributes');
+
+      // 3. Update main summary card price
+      const dollarsEl = document.getElementById('mainPriceDollars');
+      if (dollarsEl) dollarsEl.innerText = dollars;
+      const centsEl = document.getElementById('mainPriceCents');
+      if (centsEl) centsEl.innerText = cents;
+      const listPriceEl = document.getElementById('mainListPrice');
+      if (listPriceEl) listPriceEl.innerText = listPrice;
+
+      // 4. Update right column buybox price
+      const buyboxPriceEl = document.querySelector('.buybox-price');
+      if (buyboxPriceEl) buyboxPriceEl.innerText = formatted;
+
+      // 5. Update selected option text
+      const optionTextEl = document.getElementById('buyboxOptionText');
+      if (optionTextEl) {
+        optionTextEl.innerText = format + ' · ' + condition;
+      }
+
+      // 6. Update availability status
+      const stockEl = document.querySelector('.buybox-stock-status');
+      if (stockEl) {
+        stockEl.innerHTML = `<span class="in-stock">${stock} in stock.</span>`;
+      }
+
+      // 7. Update specs tab dynamic attributes
+      updateSpecs(attributes, condition);
+
+      // 8. Update HTMX buttons values and trigger processing
+      const htmxButtons = document.querySelectorAll('.buybox-actions button');
+      htmxButtons.forEach(button => {
+        button.setAttribute('hx-vals', '{"copy_id":"' + copyId + '"}');
+        htmx.process(button);
+      });
+    }
+
+    // Trigger initial selection specs update on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      const activeBtn = document.querySelector('.swatch-btn.is-active');
+      if (activeBtn) {
+        const attributes = activeBtn.getAttribute('data-attributes');
+        const condition = activeBtn.getAttribute('data-condition');
+        updateSpecs(attributes, condition);
+      }
+    });
+  </script>
 </main>
 {{end}}

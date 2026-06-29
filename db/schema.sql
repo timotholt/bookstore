@@ -23,13 +23,13 @@ CREATE TABLE IF NOT EXISTS books (
     id TEXT PRIMARY KEY,
     slug TEXT NOT NULL UNIQUE,
     title TEXT NOT NULL,
-    primary_author_id INTEGER NOT NULL REFERENCES authors(id),
-    primary_genre_id INTEGER NOT NULL REFERENCES genres(id),
-    year INTEGER NOT NULL,
-    isbn TEXT NOT NULL UNIQUE,
+    primary_author_id INTEGER REFERENCES authors(id),
+    primary_genre_id INTEGER REFERENCES genres(id),
+    year INTEGER,
+    isbn TEXT UNIQUE,
     publication_date TEXT,
-    cover_color TEXT NOT NULL,
-    aspect_ratio REAL NOT NULL DEFAULT 0.68,
+    cover_color TEXT NOT NULL DEFAULT '#cccccc',
+    aspect_ratio REAL NOT NULL DEFAULT 1.0,
     tags TEXT NOT NULL DEFAULT '',
     search_text TEXT NOT NULL DEFAULT '',
     is_new_arrival INTEGER NOT NULL DEFAULT 0,
@@ -55,10 +55,10 @@ CREATE TABLE IF NOT EXISTS book_genres (
 CREATE TABLE IF NOT EXISTS book_copies (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
-    condition TEXT NOT NULL CHECK (condition IN ('New (Sealed)', 'New (Open)', 'Fine', 'Like New', 'Very Good', 'Good', 'Fair', 'Poor')),
+    condition TEXT CHECK (condition IS NULL OR condition IN ('New (Sealed)', 'New (Open)', 'Fine', 'Like New', 'Very Good', 'Good', 'Fair', 'Poor')),
     price REAL NOT NULL CHECK (price >= 0),
     notes TEXT,
-    format TEXT NOT NULL CHECK (format IN ('Hardcover', 'Paperback', 'Trade Paperback')),
+    format TEXT CHECK (format IS NULL OR length(format) > 0),
     stock INTEGER NOT NULL DEFAULT 1 CHECK (stock >= 0),
     is_sold INTEGER NOT NULL DEFAULT 0,
     is_staff_pick INTEGER NOT NULL DEFAULT 0,
@@ -68,6 +68,14 @@ CREATE TABLE IF NOT EXISTS book_copies (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (book_id, condition, format, price)
+);
+
+CREATE TABLE IF NOT EXISTS variant_attributes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    variant_id INTEGER NOT NULL REFERENCES book_copies(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    value TEXT NOT NULL,
+    UNIQUE(variant_id, name)
 );
 
 CREATE TABLE IF NOT EXISTS book_collections (
@@ -189,43 +197,51 @@ INSERT OR IGNORE INTO books (id, slug, title, primary_author_id, primary_genre_i
 ('b025', 'say-nothing', 'Say Nothing', (SELECT id FROM authors WHERE slug='patrick-radden-keefe'), (SELECT id FROM genres WHERE slug='history'), 2020, '9780307279286', '2020-01-01', '#323528', 0.648, 'ireland,true crime,politics', 'Say Nothing Patrick Radden Keefe History ireland true crime politics', 0),
 ('b026', 'the-invisible-life-of-addie-larue', 'The Invisible Life of Addie LaRue', (SELECT id FROM authors WHERE slug='v-e-schwab'), (SELECT id FROM genres WHERE slug='fantasy'), 2020, '9780765387561', '2020-01-01', '#13273b', 0.658, 'immortality,romance,paris', 'The Invisible Life of Addie LaRue V.E. Schwab Fantasy immortality romance paris', 1),
 ('b027', 'atomic-habits', 'Atomic Habits', (SELECT id FROM authors WHERE slug='james-clear'), (SELECT id FROM genres WHERE slug='business'), 2018, '9780735211292', '2018-01-01', '#162329', 0.662, 'habits,productivity,practical', 'Atomic Habits James Clear Business habits productivity practical', 0),
-('b028', 'the-feather-thief', 'The Feather Thief', (SELECT id FROM authors WHERE slug='kirk-wallace-johnson'), (SELECT id FROM genres WHERE slug='mystery'), 2019, '9781101981634', '2019-01-01', '#2e4a46', 0.652, 'true crime,natural history,odd', 'The Feather Thief Kirk Wallace Johnson Mystery true crime natural history odd', 0);
+('b028', 'the-feather-thief', 'The Feather Thief', (SELECT id FROM authors WHERE slug='kirk-wallace-johnson'), (SELECT id FROM genres WHERE slug='mystery'), 2019, '9781101981634', '2019-01-01', '#2e4a46', 0.652, 'true crime,natural history,odd', 'The Feather Thief Kirk Wallace Johnson Mystery true crime natural history odd', 0),
+('m001', 'davis-brass-bookmark', 'Davis''s Brass Bookmark', NULL, NULL, NULL, NULL, NULL, '#ab8e43', 0.50, 'bookmark,accessory,brass,gift', 'Davis''s Brass Bookmark accessory brass gift', 1),
+('m002', 'hogwarts-acceptance-letter', 'Hogwarts Acceptance Letter Replica', NULL, NULL, NULL, NULL, NULL, '#ebdcb9', 1.20, 'harry potter,collectible,replica,hogwarts,letter', 'Hogwarts Acceptance Letter Replica harry potter collectible replica hogwarts letter', 1),
+('m003', 'i-love-books-tshirt', '"I Love Books" Classic T-Shirt', NULL, NULL, NULL, NULL, NULL, '#1c2b3c', 0.90, 'apparel,t-shirt,shirt,merchandise,clothing', 'I Love Books Classic T-Shirt apparel tshirt shirt merchandise clothing', 1);
 
 INSERT OR IGNORE INTO book_authors (book_id, author_id, role, position)
-SELECT id, primary_author_id, 'Author', 1 FROM books;
+SELECT id, primary_author_id, 'Author', 1 FROM books WHERE primary_author_id IS NOT NULL;
 
 INSERT OR IGNORE INTO book_genres (book_id, genre_id, is_primary)
-SELECT id, primary_genre_id, 1 FROM books;
+SELECT id, primary_genre_id, 1 FROM books WHERE primary_genre_id IS NOT NULL;
 
-INSERT OR IGNORE INTO book_copies (book_id, condition, price, notes, format, stock, is_staff_pick, staff_quote, seal_style, seal_text) VALUES
-('b001', 'Very Good', 9.50, 'Clean pages, faint spine crease, soft corner wear.', 'Trade Paperback', 3, 1, 'An atmospheric, dream-like escape. It feels like stepping into a midnight festival. - Sarah', 'circle', 'DB'),
-('b002', 'Good', 8.75, 'Readable copy with shelf scuffs and a small owner stamp.', 'Paperback', 2, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'square', 'USED'),
-('b003', 'Very Good', 11.25, 'Tight binding, light page tanning, no markings.', 'Paperback', 4, 1, 'The definitive epic. The worldbuilding is so rich you will feel the sand on your fingers. - Dan', 'diamond', '1st'),
-('b004', 'Good', 10.50, 'Some margin notes in pencil, square spine.', 'Trade Paperback', 2, 1, 'A dark campus mystery that is impossible to put down. Truly haunting. - Claire', 'none', ''),
-('b005', 'Like New', 12.75, 'Gift-quality copy with a tiny back-cover nick.', 'Paperback', 3, 1, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'circle', 'CRISP'),
-('b006', 'Very Good', 7.95, 'Bright cover, minor shelf rubbing.', 'Paperback', 5, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'diamond', 'GOLD'),
-('b007', 'Very Good', 9.25, 'Smooth spine, lightly bumped lower corner.', 'Trade Paperback', 3, 1, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'square', 'DB'),
-('b008', 'Fair', 6.95, 'Well-loved reading copy with creases and tanned pages.', 'Paperback', 6, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'none', ''),
-('b009', 'Very Good', 18.50, 'No food stains, jacket has a short closed tear.', 'Hardcover', 1, 1, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'circle', 'COOK'),
-('b010', 'Good', 13.95, 'Strong reading copy with several dog-eared pages.', 'Paperback', 2, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'none', ''),
-('b011', 'Like New', 10.95, 'Crisp copy with a clean unbroken spine.', 'Paperback', 4, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'circle', 'NEW'),
-('b012', 'Very Good', 8.95, 'Clean text block, faint bend on front cover.', 'Paperback', 3, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'diamond', 'DB'),
-('b013', 'Very Good', 7.50, 'Small remainder mark, otherwise fresh.', 'Hardcover', 2, 1, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'square', 'WILD'),
-('b014', 'Good', 6.75, 'Moderate cover wear, clean pages.', 'Paperback', 5, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'none', ''),
-('b015', 'Like New', 8.25, 'Jacket and boards look nearly untouched.', 'Hardcover', 2, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'circle', 'SOUL'),
-('b016', 'Good', 9.75, 'One cracked spine line, pages bright and unmarked.', 'Paperback', 3, 1, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'circle', 'PUL'),
-('b017', 'Very Good', 7.75, 'Light edge wear, no notes or highlighting.', 'Paperback', 4, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'none', ''),
-('b018', 'Good', 6.50, 'Clean copy with a remainder dot.', 'Trade Paperback', 2, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'diamond', 'ART'),
-('b019', 'Very Good', 10.25, 'Minor shelf wear, tight and clean inside.', 'Paperback', 3, 1, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'circle', 'DB'),
-('b020', 'Very Good', 12.50, 'Jacket has light rubbing, pages pristine.', 'Hardcover', 2, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'square', 'WAR'),
-('b021', 'Very Good', 8.95, 'Fresh pages, small crease on back cover.', 'Paperback', 4, 1, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'diamond', 'MYTH'),
-('b022', 'Good', 11.50, 'A few highlighted passages in early chapters.', 'Paperback', 2, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'none', ''),
-('b023', 'Good', 16.95, 'Sturdy kitchen copy with light page waviness.', 'Hardcover', 1, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'circle', 'JOY'),
-('b024', 'Like New', 9.95, 'Excellent copy with a bright, clean cover.', 'Paperback', 3, 1, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'circle', 'LOVE'),
-('b025', 'Very Good', 9.50, 'Unmarked pages, faint corner curl.', 'Paperback', 2, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'diamond', 'TRUE'),
-('b026', 'Very Good', 10.75, 'Jacket lightly rubbed, boards and pages clean.', 'Hardcover', 2, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'square', 'MAGIC'),
-('b027', 'Good', 8.50, 'A few underlined sections, clean cover.', 'Paperback', 5, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'circle', 'FOCUS'),
-('b028', 'Very Good', 7.25, 'Clean and square with light shelf scuffs.', 'Paperback', 3, 1, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'circle', 'FEATH');
+INSERT OR IGNORE INTO book_copies (id, book_id, condition, price, notes, format, stock, is_staff_pick, staff_quote, seal_style, seal_text) VALUES
+(1, 'b001', 'Very Good', 9.50, 'Clean pages, faint spine crease, soft corner wear.', 'Trade Paperback', 3, 1, 'An atmospheric, dream-like escape. It feels like stepping into a midnight festival. - Sarah', 'circle', 'DB'),
+(2, 'b002', 'Good', 8.75, 'Readable copy with shelf scuffs and a small owner stamp.', 'Paperback', 2, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'square', 'USED'),
+(3, 'b003', 'Very Good', 11.25, 'Tight binding, light page tanning, no markings.', 'Paperback', 4, 1, 'The definitive epic. The worldbuilding is so rich you will feel the sand on your fingers. - Dan', 'diamond', '1st'),
+(4, 'b004', 'Good', 10.50, 'Some margin notes in pencil, square spine.', 'Trade Paperback', 2, 1, 'A dark campus mystery that is impossible to put down. Truly haunting. - Claire', 'none', ''),
+(5, 'b005', 'Like New', 12.75, 'Gift-quality copy with a tiny back-cover nick.', 'Paperback', 3, 1, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'circle', 'CRISP'),
+(6, 'b006', 'Very Good', 7.95, 'Bright cover, minor shelf rubbing.', 'Paperback', 5, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'diamond', 'GOLD'),
+(7, 'b007', 'Very Good', 9.25, 'Smooth spine, lightly bumped lower corner.', 'Trade Paperback', 3, 1, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'square', 'DB'),
+(8, 'b008', 'Fair', 6.95, 'Well-loved reading copy with creases and tanned pages.', 'Paperback', 6, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'none', ''),
+(9, 'b009', 'Very Good', 18.50, 'No food stains, jacket has a short closed tear.', 'Hardcover', 1, 1, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'circle', 'COOK'),
+(10, 'b010', 'Good', 13.95, 'Strong reading copy with several dog-eared pages.', 'Paperback', 2, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'none', ''),
+(11, 'b011', 'Like New', 10.95, 'Crisp copy with a clean unbroken spine.', 'Paperback', 4, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'circle', 'NEW'),
+(12, 'b012', 'Very Good', 8.95, 'Clean text block, faint bend on front cover.', 'Paperback', 3, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'diamond', 'DB'),
+(13, 'b013', 'Very Good', 7.50, 'Small remainder mark, otherwise fresh.', 'Hardcover', 2, 1, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'square', 'WILD'),
+(14, 'b014', 'Good', 6.75, 'Moderate cover wear, clean pages.', 'Paperback', 5, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'none', ''),
+(15, 'b015', 'Like New', 8.25, 'Jacket and boards look nearly untouched.', 'Hardcover', 2, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'circle', 'SOUL'),
+(16, 'b016', 'Good', 9.75, 'One cracked spine line, pages bright and unmarked.', 'Paperback', 3, 1, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'circle', 'PUL'),
+(17, 'b017', 'Very Good', 7.75, 'Light edge wear, no notes or highlighting.', 'Paperback', 4, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'none', ''),
+(18, 'b018', 'Good', 6.50, 'Clean copy with a remainder dot.', 'Trade Paperback', 2, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'diamond', 'ART'),
+(19, 'b019', 'Very Good', 10.25, 'Minor shelf wear, tight and clean inside.', 'Paperback', 3, 1, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'circle', 'DB'),
+(20, 'b020', 'Very Good', 12.50, 'Jacket has light rubbing, pages pristine.', 'Hardcover', 2, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'square', 'WAR'),
+(21, 'b021', 'Very Good', 8.95, 'Fresh pages, small crease on back cover.', 'Paperback', 4, 1, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'diamond', 'MYTH'),
+(22, 'b022', 'Good', 11.50, 'A few highlighted passages in early chapters.', 'Paperback', 2, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'none', ''),
+(23, 'b023', 'Good', 16.95, 'Sturdy kitchen copy with light page waviness.', 'Hardcover', 1, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'circle', 'JOY'),
+(24, 'b024', 'Like New', 9.95, 'Excellent copy with a bright, clean cover.', 'Paperback', 3, 1, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'circle', 'LOVE'),
+(25, 'b025', 'Very Good', 9.50, 'Unmarked pages, faint corner curl.', 'Paperback', 2, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'diamond', 'TRUE'),
+(26, 'b026', 'Very Good', 10.75, 'Jacket lightly rubbed, boards and pages clean.', 'Hardcover', 2, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'square', 'MAGIC'),
+(27, 'b027', 'Good', 8.50, 'A few underlined sections, clean cover.', 'Paperback', 5, 0, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'circle', 'FOCUS'),
+(28, 'b028', 'Very Good', 7.25, 'Clean and square with light shelf scuffs.', 'Paperback', 3, 1, 'A wonderful pre-loved copy, carefully chosen for our shelf. - Davis Team', 'circle', 'FEATH'),
+(29, 'm001', NULL, 4.95, 'Polished brass with engraved Davis''s Books logo.', 'Standard', 15, 0, '', 'none', ''),
+(30, 'm002', NULL, 12.50, 'Handmade parchment with real red wax seal envelope.', 'Standard', 8, 1, 'Authentic wax seal feels like magic. Perfect collectible. - Davis Team', 'none', ''),
+(31, 'm003', NULL, 19.99, '100% organic cotton, Navy Blue.', 'S', 5, 0, '', 'none', ''),
+(32, 'm003', NULL, 19.99, '100% organic cotton, Navy Blue.', 'M', 10, 0, '', 'none', ''),
+(33, 'm003', NULL, 19.99, '100% organic cotton, Navy Blue.', 'L', 8, 0, '', 'none', '');
 
 INSERT OR IGNORE INTO book_collections (slug, name, description, cache_key, cache_ttl_seconds) VALUES
 ('best-sellers', 'Best Sellers', 'Popular copies readers keep grabbing from the used shelf.', 'collection:best-sellers', 300),
@@ -252,6 +268,7 @@ INSERT OR IGNORE INTO book_collection_items (collection_slug, book_id, position)
 ('staff-picks', 'b021', 10),
 ('staff-picks', 'b024', 11),
 ('staff-picks', 'b028', 12),
+('staff-picks', 'm002', 13),
 ('new-arrivals', 'b002', 1),
 ('new-arrivals', 'b003', 2),
 ('new-arrivals', 'b006', 3),
@@ -261,6 +278,8 @@ INSERT OR IGNORE INTO book_collection_items (collection_slug, book_id, position)
 ('new-arrivals', 'b019', 7),
 ('new-arrivals', 'b024', 8),
 ('new-arrivals', 'b026', 9),
+('new-arrivals', 'm001', 10),
+('new-arrivals', 'm003', 11),
 ('used-deals', 'b018', 1),
 ('used-deals', 'b014', 2),
 ('used-deals', 'b008', 3),
@@ -268,6 +287,16 @@ INSERT OR IGNORE INTO book_collection_items (collection_slug, book_id, position)
 ('used-deals', 'b013', 5),
 ('used-deals', 'b017', 6),
 ('used-deals', 'b006', 7);
+
+INSERT OR IGNORE INTO variant_attributes (variant_id, name, value) VALUES
+(29, 'material', 'Brass'),
+(30, 'type', 'Parchment Replica'),
+(31, 'size', 'S'),
+(31, 'color', 'Navy'),
+(32, 'size', 'M'),
+(32, 'color', 'Navy'),
+(33, 'size', 'L'),
+(33, 'color', 'Navy');
 
 INSERT OR IGNORE INTO cache_tags (tag, description)
 SELECT 'book:' || b.id, 'Invalidate one public book detail page.' FROM books b;
@@ -287,12 +316,14 @@ SELECT b.id, 'book:' || b.id FROM books b;
 INSERT OR IGNORE INTO book_cache_tags (book_id, tag)
 SELECT b.id, 'author:' || a.slug
 FROM books b
-JOIN authors a ON a.id = b.primary_author_id;
+JOIN authors a ON a.id = b.primary_author_id
+WHERE b.primary_author_id IS NOT NULL;
 
 INSERT OR IGNORE INTO book_cache_tags (book_id, tag)
 SELECT b.id, 'genre:' || g.slug
 FROM books b
-JOIN genres g ON g.id = b.primary_genre_id;
+JOIN genres g ON g.id = b.primary_genre_id
+WHERE b.primary_genre_id IS NOT NULL;
 
 INSERT OR IGNORE INTO book_cache_tags (book_id, tag)
 SELECT i.book_id, 'collection:' || i.collection_slug

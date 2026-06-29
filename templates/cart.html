@@ -28,8 +28,8 @@
             </div>
             <div class="cart-item-details" style="display: flex; flex-direction: column; justify-content: center; gap: 4px;">
               <strong style="font-size: 1.15rem; color: var(--ink);">{{.Book.Title}}</strong>
-              <span style="color: var(--muted); font-size: 0.92rem;">by {{.Book.Author}}</span>
-              <span style="color: var(--muted); font-size: 0.92rem;">{{.Book.Condition}} · {{.Book.Format}}</span>
+              {{if .Book.Author}}<span style="color: var(--muted); font-size: 0.92rem;">by {{.Book.Author}}</span>{{end}}
+              <span style="color: var(--muted); font-size: 0.92rem;">{{if .Book.Condition}}{{.Book.Condition}} · {{end}}{{.Book.Format}}</span>
               
               <!-- Quantity Stepper -->
               <div class="quantity-stepper" style="margin-top: 12px; display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 4px; width: fit-content; background: #faf8f3; overflow: hidden;">
