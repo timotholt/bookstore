@@ -1,6 +1,73 @@
 (function () {
   let pendingCartOpen = false;
 
+  function sendEvent(payload) {
+    const body = JSON.stringify(Object.assign({
+      page_path: window.location.pathname + window.location.search,
+      metadata: {}
+    }, payload));
+
+    if (navigator.sendBeacon) {
+      const blob = new Blob([body], { type: "application/json" });
+      if (navigator.sendBeacon("/events", blob)) return;
+    }
+
+    fetch("/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body,
+      keepalive: true
+    }).catch(function () {});
+  }
+
+  function trackedPayload(element, eventName) {
+    return {
+      event_name: eventName,
+      source: element.dataset.source || "",
+      target_type: element.dataset.targetType || "",
+      target_id: element.dataset.targetId || "",
+      metadata: {
+        text: (element.textContent || "").trim().slice(0, 160),
+        action: element.dataset.action || "",
+        href: element.getAttribute("href") || "",
+        tag: element.tagName.toLowerCase()
+      }
+    };
+  }
+
+  function trackClick(event) {
+    const element = event.target.closest("[data-track-click]");
+    if (!element) return;
+    const eventName = element.dataset.trackClick;
+    if (!eventName) return;
+    sendEvent(trackedPayload(element, eventName));
+  }
+
+  function trackSearch(form, source) {
+    const data = new FormData(form);
+    const query = (data.get("q") || "").toString().trim();
+    const genre = (data.get("genre") || "").toString();
+    const condition = (data.get("condition") || "").toString();
+    const format = (data.get("format") || "").toString();
+    const sort = (data.get("sort") || "").toString();
+    const maxPrice = (data.get("max_price") || "").toString();
+
+    sendEvent({
+      event_name: "catalog_searched",
+      source: source,
+      target_type: "search",
+      target_id: query || genre || condition || format || sort || maxPrice || "catalog",
+      metadata: {
+        q: query,
+        genre: genre,
+        condition: condition,
+        format: format,
+        sort: sort,
+        max_price: maxPrice
+      }
+    });
+  }
+
   function cartDrawer() {
     return document.getElementById("cartDrawer");
   }
@@ -101,6 +168,7 @@
   }
 
   document.addEventListener("click", function (event) {
+    trackClick(event);
 
     if (event.target.closest(".close-cart")) {
       closeCart();
@@ -133,7 +201,11 @@
   });
 
   document.addEventListener("submit", function (event) {
-    if (!event.target.matches("#headerSearchForm") || document.getElementById("catalogResults")) {
+    if (!event.target.matches("#headerSearchForm")) {
+      return;
+    }
+    trackSearch(event.target, "header.search");
+    if (document.getElementById("catalogResults")) {
       return;
     }
     event.preventDefault();
@@ -145,6 +217,19 @@
     const search = params.toString();
     window.location.href = "/" + (search ? "?" + search : "") + "#catalog";
   }, true);
+
+  document.addEventListener("submit", function (event) {
+    if (!event.target.matches("#catalogFilters")) return;
+    trackSearch(event.target, "catalog.filters");
+  }, true);
+
+  document.body.addEventListener("htmx:beforeRequest", function (event) {
+    const source = event.detail && event.detail.elt;
+    if (!source || !source.closest) return;
+    const form = source.matches("#catalogFilters") ? source : source.closest("#catalogFilters");
+    if (!form) return;
+    trackSearch(form, "catalog.filters");
+  });
 
   document.body.addEventListener("htmx:afterSwap", function (event) {
     syncCartCount();

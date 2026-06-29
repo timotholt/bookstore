@@ -1,7 +1,7 @@
 use axum::{
-    extract::{Path, Query, State, Form},
+    extract::{Form, Json, Path, Query, State},
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
-    http::HeaderMap,
 };
 use serde::Deserialize;
 use tower_sessions::Session;
@@ -190,6 +190,50 @@ pub async fn readyz(State(state): State<AppState>) -> Result<&'static str, AppEr
         .fetch_one(&state.db)
         .await?;
     Ok("ready")
+}
+
+pub async fn record_event(
+    State(state): State<AppState>,
+    session: Session,
+    Json(payload): Json<AnalyticsEventPayload>,
+) -> Result<StatusCode, AppError> {
+    validate_analytics_event(&payload)?;
+    let session_key = analytics_session_key(&session).await?;
+    store::record_analytics_event(&state.db, &session_key, &payload).await?;
+    Ok(StatusCode::ACCEPTED)
+}
+
+async fn analytics_session_key(session: &Session) -> Result<String, AppError> {
+    if let Some(session_key) = session.get::<String>("analytics_session_key").await? {
+        return Ok(session_key);
+    }
+
+    let session_key = uuid::Uuid::new_v4().to_string();
+    session.insert("analytics_session_key", &session_key).await?;
+    Ok(session_key)
+}
+
+fn validate_analytics_event(payload: &AnalyticsEventPayload) -> Result<(), AppError> {
+    let event_name = payload.event_name.trim();
+    if event_name.is_empty() || event_name.len() > 80 {
+        return Err(AppError::Validation("invalid analytics event".into()));
+    }
+
+    for value in [
+        payload.source.as_deref(),
+        payload.target_type.as_deref(),
+        payload.target_id.as_deref(),
+        payload.page_path.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if value.len() > 512 {
+            return Err(AppError::Validation("analytics field too long".into()));
+        }
+    }
+
+    Ok(())
 }
 
 pub async fn home(

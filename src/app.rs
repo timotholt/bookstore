@@ -22,6 +22,7 @@ pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/healthz", get(handlers::healthz))
         .route("/readyz", get(handlers::readyz))
+        .route("/events", post(handlers::record_event))
         .route("/", get(handlers::home))
         .route("/catalog", get(handlers::catalog))
         .route("/books/:book_id", get(handlers::book_detail))
@@ -45,10 +46,15 @@ mod tests {
         body::{to_bytes, Body},
         http::{header, Request, StatusCode},
     };
+    use serde_json::json;
     use sqlx::sqlite::SqlitePoolOptions;
     use tower::ServiceExt;
 
     async fn test_app() -> Router {
+        test_app_with_db().await.0
+    }
+
+    async fn test_app_with_db() -> (Router, SqlitePool) {
         let db = SqlitePoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")
@@ -59,7 +65,12 @@ mod tests {
             .await
             .expect("run test migrations");
 
-        build_router(AppState { db })
+        (build_router(AppState { db: db.clone() }), db)
+    }
+
+    async fn response_body(response: axum::response::Response) -> String {
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        String::from_utf8(body.to_vec()).unwrap()
     }
 
     #[tokio::test]
@@ -100,6 +111,26 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn home_route_renders_product_tracking_contract() {
+        let app = test_app().await;
+
+        let response = app
+            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_body(response).await;
+        assert!(body.contains(r#"data-track-impression="product_impression""#));
+        assert!(body.contains(r#"data-track-click="product_clicked""#));
+        assert!(body.contains(r#"data-track-click="add_to_cart_clicked""#));
+        assert!(body.contains(r#"data-track-click="buy_now_clicked""#));
+        assert!(body.contains(r#"data-source="home.best_sellers""#));
+        assert!(body.contains(r#"data-target-type="book""#));
+        assert!(body.contains(r#"data-target-id="b003""#));
     }
 
     #[tokio::test]
@@ -158,5 +189,84 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn events_endpoint_persists_analytics_payload() {
+        let (app, db) = test_app_with_db().await;
+        let payload = json!({
+            "event_name": "product_clicked",
+            "source": "home.best_sellers",
+            "target_type": "book",
+            "target_id": "b003",
+            "page_path": "/",
+            "metadata": {
+                "tag": "article",
+                "text": "Dune"
+            }
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/events")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+
+        let row = sqlx::query_as::<_, (String, String, String, String, String, String, String)>(
+            r#"
+            SELECT
+                session_key,
+                event_name,
+                source,
+                target_type,
+                target_id,
+                page_path,
+                metadata_json
+            FROM analytics_events
+            LIMIT 1
+            "#,
+        )
+        .fetch_one(&db)
+        .await
+        .unwrap();
+
+        assert!(!row.0.is_empty());
+        assert_eq!(row.1, "product_clicked");
+        assert_eq!(row.2, "home.best_sellers");
+        assert_eq!(row.3, "book");
+        assert_eq!(row.4, "b003");
+        assert_eq!(row.5, "/");
+        assert!(row.6.contains(r#""tag":"article""#));
+    }
+
+    #[tokio::test]
+    async fn events_endpoint_rejects_empty_event_name() {
+        let app = test_app().await;
+        let payload = json!({
+            "event_name": "",
+            "source": "home.best_sellers"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/events")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 }

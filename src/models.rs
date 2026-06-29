@@ -1,5 +1,6 @@
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
 pub struct BookCard {
@@ -73,4 +74,14 @@ pub struct CartView {
     pub free_shipping: bool,
     pub progress_text: String,
     pub progress_ratio: f64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AnalyticsEventPayload {
+    pub event_name: String,
+    pub source: Option<String>,
+    pub target_type: Option<String>,
+    pub target_id: Option<String>,
+    pub page_path: Option<String>,
+    pub metadata: Option<Value>,
 }

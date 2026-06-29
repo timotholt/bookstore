@@ -1,5 +1,5 @@
 use sqlx::{SqlitePool, QueryBuilder};
-use crate::models::{BookCard, CatalogFilters, VariantAttribute};
+use crate::models::{AnalyticsEventPayload, BookCard, CatalogFilters, VariantAttribute};
 
 const BASE_SELECT: &str = r#"
     SELECT
@@ -230,4 +230,42 @@ pub async fn variant_attributes(db: &SqlitePool, book_id: &str) -> Result<Vec<Va
     .bind(book_id)
     .fetch_all(db)
     .await
+}
+
+pub async fn record_analytics_event(
+    db: &SqlitePool,
+    session_key: &str,
+    payload: &AnalyticsEventPayload,
+) -> Result<i64, sqlx::Error> {
+    let metadata_json = payload
+        .metadata
+        .as_ref()
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "{}".to_string());
+
+    let result = sqlx::query(
+        r#"
+        INSERT INTO analytics_events (
+            session_key,
+            event_name,
+            source,
+            target_type,
+            target_id,
+            page_path,
+            metadata_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        "#,
+    )
+    .bind(session_key)
+    .bind(payload.event_name.trim())
+    .bind(payload.source.as_deref().unwrap_or("").trim())
+    .bind(payload.target_type.as_deref().unwrap_or("").trim())
+    .bind(payload.target_id.as_deref().unwrap_or("").trim())
+    .bind(payload.page_path.as_deref().unwrap_or("").trim())
+    .bind(metadata_json)
+    .execute(db)
+    .await?;
+
+    Ok(result.last_insert_rowid())
 }

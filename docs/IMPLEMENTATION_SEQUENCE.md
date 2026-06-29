@@ -39,7 +39,7 @@ Initial progress:
 - Add `LinkView`.
 - Add `AnalyticsAttrs`.
 - Render consistent `data-*` tracking attributes from the view objects.
-- Do not persist analytics events yet; just standardize the markup contract.
+- Keep first-party product event names stable before adding replay or analytics providers.
 
 Initial progress:
 
@@ -47,6 +47,9 @@ Initial progress:
 - Product card add/buy buttons use `ButtonView`.
 - Featured deal and book-detail buy box purchase buttons use `ButtonView`.
 - Product cards render click and impression metadata from shared view objects.
+- Route tests assert that the rendered home page keeps the product tracking contract.
+- `/events` persists first-party analytics events to SQLite.
+- `app.js` captures shared click attributes plus catalog/header search events.
 
 ### 4. Buttons and form controls
 
@@ -109,6 +112,12 @@ Initial progress:
 - Add first-party analytics events before adding a replay/analytics provider.
 - Decide between PostHog/OpenReplay/Plausible only after first-party event names exist.
 - Integrate Neon/Railway after health checks, tests, and config shape are solid.
+
+Initial progress:
+
+- First-party click and search events are captured through the shared UI data attributes.
+- Event payloads are stored in `analytics_events`.
+- Session replay/provider integration remains deferred until the first-party event vocabulary proves useful.
 
 ## Stop Rule
 
