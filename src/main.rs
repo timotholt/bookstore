@@ -1,13 +1,8 @@
-use axum::{
-    routing::{get, post},
-    Router,
-};
 use sqlx::sqlite::SqlitePool;
 use std::net::SocketAddr;
-use tower_http::services::{ServeDir, ServeFile};
-use tower_sessions::{SessionManagerLayer, MemoryStore};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+mod app;
 mod models;
 mod errors;
 mod templates;
@@ -46,28 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     sqlx::migrate!("./migrations").run(&db).await?;
     tracing::info!("Database migrations executed successfully");
 
-    // Configure session management (MemoryStore matches Go SCS session store)
-    let session_store = MemoryStore::default();
-    let session_layer = SessionManagerLayer::new(session_store)
-        .with_secure(std::env::var("APP_ENV").unwrap_or_default() == "production")
-        .with_same_site(tower_sessions::cookie::SameSite::Lax);
-
-    // Axum Router registration
-    let app = Router::new()
-        .route("/", get(handlers::home))
-        .route("/catalog", get(handlers::catalog))
-        .route("/books/:book_id", get(handlers::book_detail))
-        .route("/cart", get(handlers::cart_page))
-        .route("/cart/items", post(handlers::add_cart_item))
-        .route("/cart/items/:copy_id/increase", post(handlers::increase_cart_item))
-        .route("/cart/items/:copy_id/decrease", post(handlers::decrease_cart_item))
-        .route("/cart/items/:copy_id/remove", post(handlers::remove_cart_item))
-        .route("/checkout", post(handlers::checkout))
-        .nest_service("/assets", ServeDir::new("assets"))
-        .route_service("/app.js", ServeFile::new("app.js"))
-        .route_service("/styles.css", ServeFile::new("styles.css"))
-        .layer(session_layer)
-        .with_state(db);
+    let app = app::build_router(app::AppState { db });
 
     // Bind and start the server
     let addr_str = std::env::var("ADDR").unwrap_or_else(|_| "127.0.0.1:8080".to_string());

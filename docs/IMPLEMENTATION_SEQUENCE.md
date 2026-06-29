@@ -4,11 +4,11 @@ Status: active execution order.
 
 This document turns the product architecture spec into the current build sequence. Follow this order unless a real blocker or product decision changes the lane.
 
-## Current Lane: UI Pattern Refactor First
+## Current Lane: Server Foundation
 
-Before adding auth, persistent carts, reviews, analytics providers, Neon, or deployment work, refactor the current UI into the shared pattern system from [PRODUCT_ARCHITECTURE_SPEC.md](PRODUCT_ARCHITECTURE_SPEC.md).
+Before adding auth, persistent carts, reviews, analytics providers, Neon, or deployment work, harden the Rust server boundary from [PRODUCT_ARCHITECTURE_SPEC.md](PRODUCT_ARCHITECTURE_SPEC.md).
 
-The goal is to avoid adding new product features on top of one-off markup and duplicated card/button/link behavior.
+The shared UI pattern is now in place for product cards, sections, links, purchase buttons, and cart drawer lines. The current goal is to make the server easy to test and operate before adding new database-backed product features.
 
 ## Ordered Work
 
@@ -77,6 +77,13 @@ Initial progress:
 - Add `/healthz` and `/readyz`.
 - Add route-level tests for home, catalog HTMX, book detail, and cart.
 - Move cart helpers out of `handlers.rs`.
+
+Initial progress:
+
+- Router construction now lives in `src/app.rs`.
+- Route handlers receive shared `AppState`.
+- `/healthz` and `/readyz` are available for local smoke tests and deployment checks.
+- Route-level tests cover health, readiness, home, catalog HTMX, catalog redirect, book detail, and cart page rendering.
 
 ### 7. Persistent cart
 

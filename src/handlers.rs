@@ -11,6 +11,7 @@ use rust_decimal::prelude::{ToPrimitive, FromPrimitive};
 use std::str::FromStr;
 use std::collections::HashMap;
 
+use crate::app::AppState;
 use crate::errors::AppError;
 use crate::models::*;
 use crate::templates::*;
@@ -180,17 +181,29 @@ fn result_filters(filters: CatalogFilters, count: usize, total: usize) -> Catalo
 }
 
 // Handlers
+pub async fn healthz() -> &'static str {
+    "ok"
+}
+
+pub async fn readyz(State(state): State<AppState>) -> Result<&'static str, AppError> {
+    sqlx::query_scalar::<_, i64>("SELECT 1")
+        .fetch_one(&state.db)
+        .await?;
+    Ok("ready")
+}
+
 pub async fn home(
-    State(db): State<SqlitePool>,
+    State(state): State<AppState>,
     session: Session,
     Query(filters): Query<CatalogFilters>,
 ) -> Result<impl IntoResponse, AppError> {
-    let books = store::list_books(&db, &filters).await?;
-    let all_books = store::list_books(&db, &CatalogFilters::default()).await?;
-    let best_sellers = store::collection_books(&db, "best-sellers", 6).await?;
-    let deals = store::collection_books(&db, "used-deals", 6).await?;
-    let staff_picks = store::collection_books(&db, "staff-picks", 3).await?;
-    let cart = cart_view(&db, &session).await?;
+    let db = &state.db;
+    let books = store::list_books(db, &filters).await?;
+    let all_books = store::list_books(db, &CatalogFilters::default()).await?;
+    let best_sellers = store::collection_books(db, "best-sellers", 6).await?;
+    let deals = store::collection_books(db, "used-deals", 6).await?;
+    let staff_picks = store::collection_books(db, "staff-picks", 3).await?;
+    let cart = cart_view(db, &session).await?;
     let cart_lines = ui::cart_lines(cart.lines.clone(), "#cartDrawer");
 
     let featured = all_books.iter()
@@ -275,12 +288,13 @@ pub async fn home(
 }
 
 pub async fn catalog(
-    State(db): State<SqlitePool>,
+    State(state): State<AppState>,
     headers: HeaderMap,
     Query(filters): Query<CatalogFilters>,
 ) -> Result<impl IntoResponse, AppError> {
-    let books = store::list_books(&db, &filters).await?;
-    let all_books = store::list_books(&db, &CatalogFilters::default()).await?;
+    let db = &state.db;
+    let books = store::list_books(db, &filters).await?;
+    let all_books = store::list_books(db, &CatalogFilters::default()).await?;
 
     if headers.get("HX-Request").and_then(|v| v.to_str().ok()) == Some("true") {
         let template = CatalogResultsTemplate {
@@ -296,26 +310,27 @@ pub async fn catalog(
 }
 
 pub async fn book_detail(
-    State(db): State<SqlitePool>,
+    State(state): State<AppState>,
     session: Session,
     Path(book_id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
-    let book = match store::book_by_id(&db, &book_id).await {
+    let db = &state.db;
+    let book = match store::book_by_id(db, &book_id).await {
         Ok(b) => b,
         Err(sqlx::Error::RowNotFound) => return Err(AppError::NotFound),
         Err(err) => return Err(err.into()),
     };
 
-    let copies = store::copies_by_product_id(&db, &book_id).await?;
-    let raw_attribs = store::variant_attributes(&db, &book_id).await?;
+    let copies = store::copies_by_product_id(db, &book_id).await?;
+    let raw_attribs = store::variant_attributes(db, &book_id).await?;
     
     let mut attributes = HashMap::new();
     for attr in raw_attribs {
         attributes.entry(attr.variant_id).or_insert_with(Vec::new).push(attr);
     }
 
-    let all_books = store::list_books(&db, &CatalogFilters::default()).await?;
-    let cart = cart_view(&db, &session).await?;
+    let all_books = store::list_books(db, &CatalogFilters::default()).await?;
+    let cart = cart_view(db, &session).await?;
     let cart_lines = ui::cart_lines(cart.lines.clone(), "#cartDrawer");
 
     let related: Vec<BookCard> = all_books.iter()
@@ -361,16 +376,17 @@ pub struct AddCartForm {
 }
 
 pub async fn add_cart_item(
-    State(db): State<SqlitePool>,
+    State(state): State<AppState>,
     session: Session,
     Form(form): Form<AddCartForm>,
 ) -> Result<impl IntoResponse, AppError> {
+    let db = &state.db;
     let copy_id = form.copy_id.parse::<i64>().map_err(|_| AppError::Validation("invalid copy id".into()))?;
     if copy_id < 1 {
         return Err(AppError::Validation("invalid copy".into()));
     }
 
-    let stock = match store::copy_stock(&db, copy_id).await {
+    let stock = match store::copy_stock(db, copy_id).await {
         Ok(s) => s,
         Err(sqlx::Error::RowNotFound) => return Err(AppError::NotFound),
         Err(err) => return Err(err.into()),
@@ -385,36 +401,36 @@ pub async fn add_cart_item(
     let next_qty = std::cmp::min(current_qty + 1, stock);
     set_cart_quantity(&session, copy_id, next_qty).await?;
 
-    render_cart(State(db), session).await
+    render_cart(db, session).await
 }
 
 pub async fn increase_cart_item(
-    State(db): State<SqlitePool>,
+    State(state): State<AppState>,
     session: Session,
     Path(copy_id): Path<i64>,
 ) -> Result<impl IntoResponse, AppError> {
-    change_cart_quantity(State(db), session, copy_id, 1).await
+    change_cart_quantity(&state.db, session, copy_id, 1).await
 }
 
 pub async fn decrease_cart_item(
-    State(db): State<SqlitePool>,
+    State(state): State<AppState>,
     session: Session,
     Path(copy_id): Path<i64>,
 ) -> Result<impl IntoResponse, AppError> {
-    change_cart_quantity(State(db), session, copy_id, -1).await
+    change_cart_quantity(&state.db, session, copy_id, -1).await
 }
 
 pub async fn remove_cart_item(
-    State(db): State<SqlitePool>,
+    State(state): State<AppState>,
     session: Session,
     Path(copy_id): Path<i64>,
 ) -> Result<impl IntoResponse, AppError> {
     set_cart_quantity(&session, copy_id, 0).await?;
-    render_cart(State(db), session).await
+    render_cart(&state.db, session).await
 }
 
 async fn change_cart_quantity(
-    State(db): State<SqlitePool>,
+    db: &SqlitePool,
     session: Session,
     copy_id: i64,
     delta: i32,
@@ -432,14 +448,15 @@ async fn change_cart_quantity(
     }
 
     set_cart_quantity(&session, copy_id, next_qty).await?;
-    render_cart(State(db), session).await
+    render_cart(db, session).await
 }
 
 pub async fn checkout(
-    State(db): State<SqlitePool>,
+    State(state): State<AppState>,
     session: Session,
 ) -> Result<impl IntoResponse, AppError> {
-    let cart = cart_view(&db, &session).await?;
+    let db = &state.db;
+    let cart = cart_view(db, &session).await?;
     if cart.item_count == 0 {
         return Err(AppError::Validation("cart is empty".into()));
     }
@@ -450,11 +467,12 @@ pub async fn checkout(
 }
 
 pub async fn cart_page(
-    State(db): State<SqlitePool>,
+    State(state): State<AppState>,
     session: Session,
 ) -> Result<impl IntoResponse, AppError> {
-    let all_books = store::list_books(&db, &CatalogFilters::default()).await?;
-    let cart = cart_view(&db, &session).await?;
+    let db = &state.db;
+    let all_books = store::list_books(db, &CatalogFilters::default()).await?;
+    let cart = cart_view(db, &session).await?;
 
     let template = CartPageTemplate {
         genres: unique_genres(&all_books),
@@ -465,10 +483,10 @@ pub async fn cart_page(
 }
 
 async fn render_cart(
-    State(db): State<SqlitePool>,
+    db: &SqlitePool,
     session: Session,
 ) -> Result<Response, AppError> {
-    let cart = cart_view(&db, &session).await?;
+    let cart = cart_view(db, &session).await?;
     let cart_lines = ui::cart_lines(cart.lines.clone(), "#cartDrawer");
     let template = CartDrawerTemplate { cart, cart_lines };
     Ok(template.into_response())
