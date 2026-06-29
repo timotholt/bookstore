@@ -326,27 +326,39 @@ pub async fn add_cart_item(
 pub async fn increase_cart_item(
     State(state): State<AppState>,
     session: Session,
+    headers: HeaderMap,
     Path(copy_id): Path<i64>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<Response, AppError> {
     cart::change_quantity(&state.db, &session, copy_id, 1).await?;
+    if wants_cart_page_redirect(&headers) {
+        return Ok(cart_page_redirect());
+    }
     render_cart(&state.db, session).await
 }
 
 pub async fn decrease_cart_item(
     State(state): State<AppState>,
     session: Session,
+    headers: HeaderMap,
     Path(copy_id): Path<i64>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<Response, AppError> {
     cart::change_quantity(&state.db, &session, copy_id, -1).await?;
+    if wants_cart_page_redirect(&headers) {
+        return Ok(cart_page_redirect());
+    }
     render_cart(&state.db, session).await
 }
 
 pub async fn remove_cart_item(
     State(state): State<AppState>,
     session: Session,
+    headers: HeaderMap,
     Path(copy_id): Path<i64>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<Response, AppError> {
     cart::set_quantity(&state.db, &session, copy_id, 0).await?;
+    if wants_cart_page_redirect(&headers) {
+        return Ok(cart_page_redirect());
+    }
     render_cart(&state.db, session).await
 }
 
@@ -389,4 +401,15 @@ async fn render_cart(db: &SqlitePool, session: Session) -> Result<Response, AppE
     let cart_lines = ui::cart_lines(cart.lines.clone(), "#cartDrawer");
     let template = CartDrawerTemplate { cart, cart_lines };
     Ok(template.into_response())
+}
+
+fn wants_cart_page_redirect(headers: &HeaderMap) -> bool {
+    headers
+        .get("X-Cart-View")
+        .and_then(|value| value.to_str().ok())
+        == Some("page")
+}
+
+fn cart_page_redirect() -> Response {
+    (StatusCode::NO_CONTENT, [("HX-Redirect", "/cart")]).into_response()
 }

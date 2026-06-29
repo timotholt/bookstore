@@ -30,14 +30,14 @@
               <span>{% if !line.book.condition.is_empty() %}{{ line.book.condition }} · {% endif %}{{ line.book.format }}</span>
               
               <div class="stepper cart-page-stepper">
-                <button type="button" aria-label="Decrease quantity" hx-post="/cart/items/{{ line.book.copy_id }}/decrease" hx-target="body" hx-swap="outerHTML">-</button>
+                <button type="button" aria-label="Decrease quantity" hx-post="/cart/items/{{ line.book.copy_id }}/decrease" hx-headers='{"X-Cart-View":"page"}' hx-swap="none">-</button>
                 <span>{{ line.quantity }}</span>
-                <button type="button" aria-label="Increase quantity" hx-post="/cart/items/{{ line.book.copy_id }}/increase" hx-target="body" hx-swap="outerHTML">+</button>
+                <button type="button" aria-label="Increase quantity" hx-post="/cart/items/{{ line.book.copy_id }}/increase" hx-headers='{"X-Cart-View":"page"}' hx-swap="none">+</button>
               </div>
             </div>
             <div class="cart-item-price-side">
               <strong>{{ self.money_dec(line.line_total) }}</strong>
-              <button class="remove-button" type="button" hx-post="/cart/items/{{ line.book.copy_id }}/remove" hx-target="body" hx-swap="outerHTML">Remove</button>
+              <button class="remove-button" type="button" hx-post="/cart/items/{{ line.book.copy_id }}/remove" hx-headers='{"X-Cart-View":"page"}' hx-swap="none">Remove</button>
             </div>
           </div>
           {% else %}

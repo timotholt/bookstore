@@ -371,6 +371,53 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn cart_page_remove_redirects_instead_of_returning_drawer_fragment() {
+        let (app, db) = test_app_with_db().await;
+        let add_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/cart/items")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from("copy_id=3"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let cookie = session_cookie(&add_response);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/cart/items/3/remove")
+                    .header(header::COOKIE, cookie)
+                    .header("X-Cart-View", "page")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        assert_eq!(
+            response
+                .headers()
+                .get("HX-Redirect")
+                .and_then(|value| value.to_str().ok()),
+            Some("/cart")
+        );
+
+        let remaining =
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM cart_items WHERE copy_id = 3")
+                .fetch_one(&db)
+                .await
+                .unwrap();
+        assert_eq!(remaining, 0);
+    }
+
+    #[tokio::test]
     async fn cart_add_caps_quantity_at_available_stock() {
         let (app, db) = test_app_with_db().await;
         let first_response = app
