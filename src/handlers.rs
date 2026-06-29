@@ -196,6 +196,22 @@ pub async fn home(
         .find(|b| b.id == "b005")
         .cloned()
         .unwrap_or_else(|| all_books[0].clone());
+    let featured_add_button = ui::ButtonView::cart_action(
+        "Add to Cart",
+        "card-btn add-btn",
+        "add",
+        "add_to_cart_clicked",
+        &featured,
+        "home.featured_deal",
+    );
+    let featured_buy_now_button = ui::ButtonView::cart_action(
+        "Buy Now",
+        "card-btn buy-now-btn",
+        "buy-now-card",
+        "buy_now_clicked",
+        &featured,
+        "home.featured_deal",
+    );
 
     let quick_fillers: Vec<BookCard> = all_books.iter()
         .filter(|b| b.price < 8.0)
@@ -243,6 +259,8 @@ pub async fn home(
         conditions: unique_conditions(&all_books),
         formats: unique_formats(&all_books),
         featured,
+        featured_add_button,
+        featured_buy_now_button,
         quick_fillers,
         product_sections,
         catalog_cards: ui::product_cards(books.clone(), "catalog.results"),
@@ -302,6 +320,22 @@ pub async fn book_detail(
         .take(4)
         .cloned()
         .collect();
+    let add_button = ui::ButtonView::cart_action(
+        "Add to Stack",
+        "buybox-btn add-to-stack",
+        "add",
+        "add_to_cart_clicked",
+        &book,
+        "book_detail.buybox",
+    );
+    let buy_now_button = ui::ButtonView::cart_action(
+        "Buy Now",
+        "buybox-btn buy-now",
+        "buy-now-card",
+        "buy_now_clicked",
+        &book,
+        "book_detail.buybox",
+    );
 
     let template = BookDetailTemplate {
         genres: unique_genres(&all_books),
@@ -309,6 +343,8 @@ pub async fn book_detail(
         copies,
         attributes,
         related_cards: ui::product_cards(related, "book_detail.related"),
+        add_button,
+        buy_now_button,
         cart,
     };
 

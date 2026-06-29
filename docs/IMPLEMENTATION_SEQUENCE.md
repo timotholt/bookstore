@@ -45,6 +45,7 @@ Initial progress:
 
 - Product card title links use `LinkView`.
 - Product card add/buy buttons use `ButtonView`.
+- Featured deal and book-detail buy box purchase buttons use `ButtonView`.
 - Product cards render click and impression metadata from shared view objects.
 
 ### 4. Buttons and form controls

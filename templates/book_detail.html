@@ -144,8 +144,10 @@
           </div>
         </div>
         <div class="buybox-actions">
-          <button class="buybox-btn add-to-stack" type="button" data-action="add" hx-post="/cart/items" hx-vals='{"copy_id":"{{ book.copy_id }}"}' hx-target="#cartDrawer" hx-swap="outerHTML">Add to Stack</button>
-          <button class="buybox-btn buy-now" type="button" data-action="buy-now-card" hx-post="/cart/items" hx-vals='{"copy_id":"{{ book.copy_id }}"}' hx-target="#cartDrawer" hx-swap="outerHTML">Buy Now</button>
+          {% let button = add_button.clone() %}
+          {% include "components/ui/button.html" %}
+          {% let button = buy_now_button.clone() %}
+          {% include "components/ui/button.html" %}
         </div>
         <div class="buybox-merchant-details">
           <div class="merchant-row">

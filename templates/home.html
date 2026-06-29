@@ -110,8 +110,10 @@
               </div>
               <div class="shipping-tag">FREE store pickup tomorrow</div>
               <div class="card-double-buttons">
-                <button class="card-btn add-btn" type="button" data-action="add" data-book-id="{{ featured.id }}" hx-post="/cart/items" hx-vals='{"copy_id":"{{ featured.copy_id }}"}' hx-target="#cartDrawer" hx-swap="outerHTML">Add to Cart</button>
-                <button class="card-btn buy-now-btn" type="button" data-action="buy-now-card" data-book-id="{{ featured.id }}" hx-post="/cart/items" hx-vals='{"copy_id":"{{ featured.copy_id }}"}' hx-target="#cartDrawer" hx-swap="outerHTML">Buy Now</button>
+                {% let button = featured_add_button.clone() %}
+                {% include "components/ui/button.html" %}
+                {% let button = featured_buy_now_button.clone() %}
+                {% include "components/ui/button.html" %}
               </div>
             </div>
           </div>
