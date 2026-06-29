@@ -38,7 +38,8 @@
     <div class="details-left-media">
       <div class="thumbnail-strip">
         <button class="thumb-btn is-active" type="button" aria-label="Cover front">
-          <span class="thumb-color-block front" style="background-color: {{.Book.CoverColor}}"></span>
+          <img src="/assets/covers/{{.Book.ID}}.jpg" alt="Cover front" style="display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 2px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+          <span class="thumb-color-block front" style="background-color: {{.Book.CoverColor}}; display: none;"></span>
         </button>
         <button class="thumb-btn" type="button" aria-label="Cover spine">
           <span class="thumb-color-block spine" style="background-color: {{.Book.CoverColor}}"></span>
@@ -102,7 +103,7 @@
             <tr>
               <td>{{.Book.Stock}}</td>
               <td>{{.Book.Condition}}</td>
-              <td class="price">{{money .Book.Price}}</td>
+              <td class="copy-price">{{money .Book.Price}}</td>
               <td>
                 <button class="small-action add" type="button" hx-post="/cart/items" hx-vals='{"copy_id":"{{.Book.CopyID}}"}' hx-target="#cartDrawer" hx-swap="outerHTML">Add</button>
               </td>

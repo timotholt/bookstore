@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -202,6 +203,13 @@ func (app *application) checkout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) renderCart(w http.ResponseWriter, r *http.Request) {
+	currentURL := r.Header.Get("HX-Current-URL")
+	if strings.Contains(currentURL, "/cart") {
+		w.Header().Set("HX-Redirect", "/cart")
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
 	cart, err := app.cartView(r)
 	if err != nil {
 		http.Error(w, "cart unavailable", http.StatusInternalServerError)
@@ -209,6 +217,34 @@ func (app *application) renderCart(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := app.templates.ExecuteTemplate(w, "cart-drawer", cart); err != nil {
+		http.Error(w, "template error", http.StatusInternalServerError)
+	}
+}
+
+type cartPageData struct {
+	Title  string
+	Genres []string
+	Cart   cartView
+}
+
+func (app *application) cartPage(w http.ResponseWriter, r *http.Request) {
+	allBooks, err := app.listBooks(catalogFilters{})
+	if err != nil {
+		http.Error(w, "catalog unavailable", http.StatusInternalServerError)
+		return
+	}
+	cart, err := app.cartView(r)
+	if err != nil {
+		http.Error(w, "cart unavailable", http.StatusInternalServerError)
+		return
+	}
+	data := cartPageData{
+		Title:  "Shopping Cart | Davis's Books",
+		Genres: uniqueGenres(allBooks),
+		Cart:   cart,
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := app.templates.ExecuteTemplate(w, "cart-page", data); err != nil {
 		http.Error(w, "template error", http.StatusInternalServerError)
 	}
 }

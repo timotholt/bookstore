@@ -1,10 +1,8 @@
 {{define "book-cover"}}
 <div class="book-cover-container" style="--book-aspect-ratio: {{.AspectRatio}}; --cover-color: {{.CoverColor}}">
   <div class="book-cover" aria-hidden="true">
-    <div class="cover-text">
-      <span class="cover-title">{{.Title}}</span>
-      <span class="cover-author">{{.Author}}</span>
-    </div>
+    <img class="cover-image" src="/assets/covers/{{.ID}}.jpg" alt="{{.Title}} cover" onerror="this.src='/assets/covers/placeholder.jpg';">
+    <div class="cover-overlay"></div>
   </div>
 </div>
 {{end}}

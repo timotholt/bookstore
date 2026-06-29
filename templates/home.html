@@ -4,7 +4,7 @@
     <section class="hero-amazon-carousel" aria-label="Store highlights carousel">
       <div class="carousel-track-wrapper">
         <div class="hero-carousel-track" id="heroCarouselTrack">
-          <div class="hero-slide active" style="--bg-grad: linear-gradient(135deg, #1B352B 0%, #11221B 100%)">
+          <div class="hero-slide active" style="background-image: linear-gradient(to right, rgba(20, 40, 32, 0.75) 30%, rgba(20, 40, 32, 0.15) 100%), url('/assets/hero_used_books.jpg')">
             <div class="slide-content">
               <span class="slide-eyebrow">Summer Reads Bargains</span>
               <h2>Thousands of used books starting at $3.95</h2>
@@ -12,7 +12,7 @@
               <a href="#catalog" class="slide-cta">Shop Bargains</a>
             </div>
           </div>
-          <div class="hero-slide" style="--bg-grad: linear-gradient(135deg, #4A2B11 0%, #2A1808 100%)">
+          <div class="hero-slide" style="background-image: linear-gradient(to right, rgba(60, 35, 15, 0.75) 30%, rgba(60, 35, 15, 0.15) 100%), url('/assets/hero_trade_in.jpg')">
             <div class="slide-content">
               <span class="slide-eyebrow">Clear Your Shelves</span>
               <h2>Get up to 50% store credit for your trade-ins</h2>
@@ -20,7 +20,7 @@
               <a href="#sell" class="slide-cta">Start a Trade-In</a>
             </div>
           </div>
-          <div class="hero-slide" style="--bg-grad: linear-gradient(135deg, #182035 0%, #0E1220 100%)">
+          <div class="hero-slide" style="background-image: linear-gradient(to right, rgba(20, 25, 40, 0.75) 30%, rgba(20, 25, 40, 0.15) 100%), url('/assets/hero_first_editions.jpg')">
             <div class="slide-content">
               <span class="slide-eyebrow">Rare & Collectible Editions</span>
               <h2>Discover first editions, signed copies, and vintage releases</h2>
@@ -40,47 +40,45 @@
     </section>
 
     <section class="hero-overlay-grid" aria-label="Quick browse options">
-      <div class="overlay-card">
+      <div class="overlay-card category-browse-card">
         <h3>Shop by Category</h3>
-        <div class="card-grid-4">
+        <div class="browse-button-list">
           <a class="grid-item-link" href="/?genre=Fiction#catalog">
             <div class="grid-img-placeholder fiction">Fiction</div>
-            <span>Fiction</span>
           </a>
           <a class="grid-item-link" href="/?genre=Mystery#catalog">
             <div class="grid-img-placeholder mystery">Mystery</div>
-            <span>Mystery</span>
           </a>
           <a class="grid-item-link" href="/?genre=History#catalog">
             <div class="grid-img-placeholder history">History</div>
-            <span>History</span>
           </a>
           <a class="grid-item-link" href="/?genre=Cookbooks#catalog">
             <div class="grid-img-placeholder cookbooks">Cookbooks</div>
-            <span>Cookbooks</span>
+          </a>
+          <a class="grid-item-link" href="/?genre=Science%20Fiction#catalog">
+            <div class="grid-img-placeholder science-fiction">Science Fiction</div>
+          </a>
+          <a class="grid-item-link" href="/?genre=Memoir#catalog">
+            <div class="grid-img-placeholder memoir">Memoir</div>
           </a>
         </div>
         <a href="#catalog" class="card-bottom-link">See all categories</a>
       </div>
 
-      <div class="overlay-card">
+      <div class="overlay-card bargain-browse-card">
         <h3>Bargains by Price</h3>
-        <div class="card-grid-4">
+        <div class="browse-button-list">
           <a class="grid-item-link" href="/?max_price=5#catalog">
-            <div class="grid-img-placeholder price-5">$5</div>
-            <span>Under $5</span>
+            <div class="grid-img-placeholder price-5">Under $5</div>
           </a>
           <a class="grid-item-link" href="/?max_price=10#catalog">
-            <div class="grid-img-placeholder price-10">$10</div>
-            <span>Under $10</span>
+            <div class="grid-img-placeholder price-10">Under $10</div>
           </a>
           <a class="grid-item-link" href="/?max_price=15#catalog">
-            <div class="grid-img-placeholder price-15">$15</div>
-            <span>Under $15</span>
+            <div class="grid-img-placeholder price-15">Under $15</div>
           </a>
           <a class="grid-item-link" href="/?max_price=22#catalog">
-            <div class="grid-img-placeholder price-22">$$</div>
-            <span>Under $22</span>
+            <div class="grid-img-placeholder price-22">Under $22</div>
           </a>
         </div>
         <a href="#catalog" class="card-bottom-link">Browse deals</a>

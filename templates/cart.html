@@ -1,0 +1,100 @@
+{{define "cart-page"}}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Shopping Cart | Davis's Books</title>
+    <meta name="description" content="Review your stack and checkout at Davis's Books.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/assets/htmx.min.js" defer></script>
+  </head>
+  <body>
+    {{template "site-header" .}}
+    
+    <main class="cart-page-main container" style="max-width: 1000px; margin: 40px auto; padding: 0 20px; min-height: 60vh;">
+      <h1 style="font-family: var(--font-serif); margin-bottom: 24px; font-size: 2.2rem; color: var(--ink);">Your Stack</h1>
+      
+      <div class="cart-page-layout" style="display: grid; grid-template-columns: 2fr 1fr; gap: 40px;">
+        <!-- Left: Cart items -->
+        <div class="cart-items-section">
+          {{range .Cart.Lines}}
+          <div class="cart-item" style="--cover-color: {{.Book.CoverColor}}; display: grid; grid-template-columns: 80px 1fr 120px; gap: 20px; padding: 20px 0; border-bottom: 1px solid var(--line);">
+            <div class="cart-cover" style="position: relative; overflow: hidden; width: 80px; height: 115px; border-radius: 4px; box-shadow: 2px 2px 8px rgba(0,0,0,0.15);">
+              <img src="/assets/covers/{{.Book.ID}}.jpg" alt="{{.Book.Title}} cover" onerror="this.src='/assets/covers/placeholder.jpg';" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;">
+            </div>
+            <div class="cart-item-details" style="display: flex; flex-direction: column; justify-content: center; gap: 4px;">
+              <strong style="font-size: 1.15rem; color: var(--ink);">{{.Book.Title}}</strong>
+              <span style="color: var(--muted); font-size: 0.92rem;">by {{.Book.Author}}</span>
+              <span style="color: var(--muted); font-size: 0.92rem;">{{.Book.Condition}} · {{.Book.Format}}</span>
+              
+              <!-- Quantity Stepper -->
+              <div class="quantity-stepper" style="margin-top: 12px; display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 4px; width: fit-content; background: #faf8f3; overflow: hidden;">
+                <button type="button" aria-label="Decrease quantity" hx-post="/cart/items/{{.Book.CopyID}}/decrease" hx-target="body" hx-swap="outerHTML" style="border: none; background: none; padding: 6px 12px; cursor: pointer; font-weight: 700; color: var(--sage-dark); font-size: 1.1rem; outline: none;">-</button>
+                <span style="font-family: var(--font-sans); font-size: 0.95rem; font-weight: 700; min-width: 20px; text-align: center; color: var(--ink);">{{.Quantity}}</span>
+                <button type="button" aria-label="Increase quantity" hx-post="/cart/items/{{.Book.CopyID}}/increase" hx-target="body" hx-swap="outerHTML" style="border: none; background: none; padding: 6px 12px; cursor: pointer; font-weight: 700; color: var(--sage-dark); font-size: 1.1rem; outline: none;">+</button>
+              </div>
+            </div>
+            <div class="cart-item-price-side" style="display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 12px;">
+              <strong style="font-size: 1.2rem; color: var(--ink);">{{money .LineTotal}}</strong>
+              <button class="remove-button" type="button" hx-post="/cart/items/{{.Book.CopyID}}/remove" hx-target="body" hx-swap="outerHTML" style="color: #b91c1c; background: none; border: none; cursor: pointer; font-size: 0.9rem; font-weight: 500; padding: 0;">Remove</button>
+            </div>
+          </div>
+          {{else}}
+          <div class="empty-cart-message" style="text-align: center; padding: 60px 0; background: #faf8f3; border-radius: var(--radius); border: 1px dashed var(--line);">
+            <p style="font-size: 1.25rem; color: var(--muted); margin-bottom: 20px;">Your stack is empty.</p>
+            <a class="primary-button" href="/#catalog" style="display: inline-block; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: 600;">Browse used books</a>
+          </div>
+          {{end}}
+        </div>
+        
+        <!-- Right: Summary Card -->
+        <div class="cart-summary-section">
+          <div class="cart-summary-card" style="background: #faf8f3; border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; position: sticky; top: 20px; box-shadow: var(--shadow-sm);">
+            <h2 style="font-family: var(--font-serif); font-size: 1.4rem; margin-bottom: 20px; color: var(--ink);">Order Summary</h2>
+            
+            <div class="shipping-progress-container" style="margin-bottom: 24px;">
+              <span class="shipping-progress-text" id="shippingProgressText" style="font-size: 0.85rem; color: var(--muted);">{{.Cart.ProgressText}}</span>
+              <div class="shipping-progress-bar" style="background: var(--line); height: 6px; border-radius: 3px; margin-top: 8px; overflow: hidden;">
+                <div class="shipping-progress-fill" style="background: var(--gold); height: 100%; transition: width 0.3s ease; width: {{printf "%.0f" .Cart.ProgressRatio}}%"></div>
+              </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; margin-bottom: 14px; font-size: 0.98rem; color: var(--ink);">
+              <span>Subtotal</span>
+              <strong>{{money .Cart.Subtotal}}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 14px; font-size: 0.98rem; color: var(--ink);">
+              <span>Shipping</span>
+              <strong>{{if .Cart.FreeShipping}}Free{{else}}{{money .Cart.Shipping}}{{end}}</strong>
+            </div>
+            <hr style="border: 0; border-top: 1px solid var(--line); margin: 18px 0;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 24px; font-size: 1.25rem; color: var(--ink);">
+              <span>Total</span>
+              <strong>{{money .Cart.Total}}</strong>
+            </div>
+            
+            <form action="/checkout" method="post">
+              <button class="primary-button checkout-button" type="submit" style="width: 100%; padding: 14px; font-size: 1.05rem; border-radius: 4px; font-weight: 700;" {{if eq .Cart.ItemCount 0}}disabled{{end}}>Proceed to Checkout</button>
+            </form>
+            
+            <div style="margin-top: 24px; font-size: 0.85rem; color: var(--muted); display: grid; gap: 10px; text-align: center; border-top: 1px solid var(--line); padding-top: 16px;">
+              <span>✓ Hand-inspected copies</span>
+              <span>✓ Ships in 1-2 days</span>
+              <span>✓ Secure checkout</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    {{template "site-footer" .}}
+    
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="/app.js"></script>
+  </body>
+</html>
+{{end}}

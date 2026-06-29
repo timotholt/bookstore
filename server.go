@@ -18,6 +18,7 @@ func (app *application) routes() http.Handler {
 	r.Get("/", app.home)
 	r.Get("/catalog", app.catalog)
 	r.Get("/books/{bookID}", app.bookDetail)
+	r.Get("/cart", app.cartPage)
 	r.Post("/cart/items", app.addCartItem)
 	r.Post("/cart/items/{copyID}/increase", app.increaseCartItem)
 	r.Post("/cart/items/{copyID}/decrease", app.decreaseCartItem)

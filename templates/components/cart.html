@@ -21,7 +21,9 @@
     <div class="cart-items" id="cartItems">
       {{range .Lines}}
       <div class="cart-item" style="--cover-color: {{.Book.CoverColor}}">
-        <div class="cart-cover" aria-hidden="true"></div>
+        <div class="cart-cover" aria-hidden="true">
+          <img src="/assets/covers/{{.Book.ID}}.jpg" alt="{{.Book.Title}} cover" onerror="this.src='/assets/covers/placeholder.jpg';">
+        </div>
         <div class="cart-item-main">
           <strong>{{.Book.Title}}</strong>
           <span>{{.Book.Condition}} · {{.Book.Format}}</span>

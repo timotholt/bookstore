@@ -9,7 +9,14 @@
     const drawer = cartDrawer();
     const badge = document.querySelector("[data-cart-count]");
     if (drawer && badge) {
-      badge.textContent = drawer.dataset.cartCount || "0";
+      const oldCount = badge.textContent || "0";
+      const newCount = drawer.dataset.cartCount || "0";
+      badge.textContent = newCount;
+      if (parseInt(newCount) > parseInt(oldCount)) {
+        badge.classList.remove("badge-pop");
+        void badge.offsetWidth; // Trigger reflow to restart animation
+        badge.classList.add("badge-pop");
+      }
     }
   }
 
@@ -94,10 +101,7 @@
   }
 
   document.addEventListener("click", function (event) {
-    if (event.target.closest(".cart-toggle")) {
-      openCart();
-      return;
-    }
+
     if (event.target.closest(".close-cart")) {
       closeCart();
       return;
