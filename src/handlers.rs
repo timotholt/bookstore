@@ -15,6 +15,7 @@ use crate::errors::AppError;
 use crate::models::*;
 use crate::templates::*;
 use crate::store;
+use crate::ui;
 
 // Helper: retrieve cart items from session
 async fn get_cart_items(session: &Session) -> Vec<CartItem> {
@@ -208,6 +209,34 @@ pub async fn home(
         .cloned()
         .collect();
 
+    let product_sections = vec![
+        ui::product_shelf(
+            "best-sellers",
+            "Best sellers",
+            "Readers keep grabbing these",
+            "bestSellerShelf",
+            "home.best_sellers",
+            best_sellers,
+        ),
+        ui::product_shelf(
+            "new-arrivals",
+            "New arrivals",
+            "Just checked in",
+            "newArrivalShelf",
+            "home.new_arrivals",
+            new_arrivals,
+        )
+        .with_cta("#catalog", "Browse new arrivals"),
+        ui::product_shelf(
+            "deals",
+            "Deals",
+            "Used books under $8",
+            "dealShelf",
+            "home.deals",
+            deals,
+        ),
+    ];
+
     let template = HomeTemplate {
         title: String::from("Davis's Books | Used Books Online"),
         genres: unique_genres(&all_books),
@@ -215,10 +244,8 @@ pub async fn home(
         formats: unique_formats(&all_books),
         featured,
         quick_fillers,
-        best_sellers,
-        new_arrivals,
-        deals,
-        catalog: books.clone(),
+        product_sections,
+        catalog_cards: ui::product_cards(books.clone(), "catalog.results"),
         staff_picks,
         cart,
         filters: result_filters(filters, books.len(), all_books.len()),
@@ -237,7 +264,7 @@ pub async fn catalog(
 
     if headers.get("HX-Request").and_then(|v| v.to_str().ok()) == Some("true") {
         let template = CatalogResultsTemplate {
-            catalog: books.clone(),
+            catalog_cards: ui::product_cards(books.clone(), "catalog.results"),
             filters: result_filters(filters, books.len(), all_books.len()),
         };
         Ok(template.into_response())
@@ -281,7 +308,7 @@ pub async fn book_detail(
         book,
         copies,
         attributes,
-        related,
+        related_cards: ui::product_cards(related, "book_detail.related"),
         cart,
     };
 

@@ -1,5 +1,7 @@
 # Davis's Books Infrastructure, Accounts, and Secret Recovery Spec
 
+Status: active infrastructure spec. Product architecture, feature order, styling rules, and code organization standards live in [PRODUCT_ARCHITECTURE_SPEC.md](PRODUCT_ARCHITECTURE_SPEC.md).
+
 ## Purpose
 
 This document defines how Davis's Books should be deployed as a credible full-stack demo project on Railway and Neon while staying portable enough to rebuild quickly if either provider becomes unusable.

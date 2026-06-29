@@ -1,0 +1,6 @@
+<a class="{{ link.class_name }}"
+  href="{{ link.href }}"
+  data-track-click="{{ link.analytics.click_event }}"
+  data-source="{{ link.analytics.source }}"
+  data-target-type="{{ link.analytics.target_type }}"
+  data-target-id="{{ link.analytics.target_id }}">{% if link.strong %}<strong>{{ link.label }}</strong>{% else %}{{ link.label }}{% endif %}</a>

@@ -1,0 +1,10 @@
+<button class="{{ button.class_name }}"
+  type="{{ button.button_type }}"
+  data-action="{{ button.data_action }}"
+  data-book-id="{{ button.target_id }}"
+  data-track-click="{{ button.analytics.click_event }}"
+  data-source="{{ button.analytics.source }}"
+  data-target-type="{{ button.analytics.target_type }}"
+  data-target-id="{{ button.analytics.target_id }}"
+  {% if button.htmx.enabled %}hx-post="{{ button.htmx.post_url }}" hx-vals='{{ button.htmx.vals }}' hx-target="{{ button.htmx.target }}" hx-swap="{{ button.htmx.swap }}"{% endif %}
+  {% if button.disabled %}disabled{% endif %}>{{ button.label }}</button>

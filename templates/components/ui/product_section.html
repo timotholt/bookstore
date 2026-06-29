@@ -1,0 +1,18 @@
+<section class="product-shelf" id="{{ section.id }}" aria-labelledby="{{ section.title_id }}">
+  <div class="shelf-heading">
+    <div>
+      <p class="eyebrow">{{ section.eyebrow }}</p>
+      <h2 id="{{ section.title_id }}">{{ section.title }}</h2>
+    </div>
+    {% if section.has_cta %}
+    <div class="shelf-actions">
+      <a class="secondary-button" href="{{ section.cta_href }}">{{ section.cta_label }}</a>
+    </div>
+    {% endif %}
+  </div>
+  <div class="product-row" id="{{ section.row_id }}">
+    {% for card in section.cards %}
+      {% include "components/ui/product_card.html" %}
+    {% endfor %}
+  </div>
+</section>

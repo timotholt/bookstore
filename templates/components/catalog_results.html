@@ -17,8 +17,8 @@
     </div>
   </div>
   <div class="product-grid" id="bookGrid" aria-live="polite">
-    {% for book in catalog %}
-      {% include "components/book_card.html" %}
+    {% for card in catalog_cards %}
+      {% include "components/ui/product_card.html" %}
     {% else %}
       <div class="empty-state">
         <p class="eyebrow">No matching copies found</p>

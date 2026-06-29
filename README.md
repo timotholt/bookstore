@@ -24,6 +24,7 @@ APP_ENV=production
 
 ```bash
 cargo check
+cargo test
 ```
 
 ## Current MVP
@@ -44,10 +45,20 @@ cargo check
 - Decide whether production persistence should use PostgreSQL or SQLite for the hosted demo.
 - Move session persistence out of memory before production deployment.
 
-## Architecture Plan
+## Product Architecture
 
-See [MIGRATION_PLAN.md](MIGRATION_PLAN.md) for the Rust architecture notes and remaining roadmap.
+See [docs/PRODUCT_ARCHITECTURE_SPEC.md](docs/PRODUCT_ARCHITECTURE_SPEC.md) for the canonical product architecture, feature order, auth/cart/review plan, styling rules, and implementation standards.
+
+See [docs/IMPLEMENTATION_SEQUENCE.md](docs/IMPLEMENTATION_SEQUENCE.md) for the current execution order.
+
+## Agent Guidance
+
+See [AGENTS.md](AGENTS.md) before making structural changes. It captures the repo rules for avoiding duplicate code, inline CSS, unnecessary dependencies, and legacy Go paths.
 
 ## Infrastructure Plan
 
 See [docs/INFRASTRUCTURE_SPEC.md](docs/INFRASTRUCTURE_SPEC.md) for deployment, account ownership, secrets recovery, and production migration planning.
+
+## Deprecated Docs
+
+[MIGRATION_PLAN.md](MIGRATION_PLAN.md) is deprecated and remains only as a historical pointer after the Rust migration.

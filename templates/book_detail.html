@@ -161,7 +161,7 @@
     </div>
   </div>
 
-  {% if related.len() > 0 %}
+  {% if related_cards.len() > 0 %}
   <section class="product-shelf" aria-labelledby="relatedBooksTitle">
     <div class="shelf-heading">
       <div>
@@ -170,8 +170,8 @@
       </div>
     </div>
     <div class="product-row">
-      {% for book in related %}
-        {% include "components/product_tile.html" %}
+      {% for card in related_cards %}
+        {% include "components/ui/product_card.html" %}
       {% endfor %}
     </div>
   </section>

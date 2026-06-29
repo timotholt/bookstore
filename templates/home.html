@@ -165,50 +165,9 @@
         </a>
       </div>
 
-      <section class="product-shelf" id="best-sellers" aria-labelledby="bestSellersTitle">
-        <div class="shelf-heading">
-          <div>
-            <p class="eyebrow">Best sellers</p>
-            <h2 id="bestSellersTitle">Readers keep grabbing these</h2>
-          </div>
-        </div>
-        <div class="product-row" id="bestSellerShelf">
-          {% for book in best_sellers %}
-            {% include "components/product_tile.html" %}
-          {% endfor %}
-        </div>
-      </section>
-
-      <section class="product-shelf" id="new-arrivals" aria-labelledby="newArrivalsTitle">
-        <div class="shelf-heading">
-          <div>
-            <p class="eyebrow">New arrivals</p>
-            <h2 id="newArrivalsTitle">Just checked in</h2>
-          </div>
-          <div class="shelf-actions">
-            <a class="secondary-button" href="#catalog">Browse new arrivals</a>
-          </div>
-        </div>
-        <div class="product-row" id="newArrivalShelf">
-          {% for book in new_arrivals %}
-            {% include "components/product_tile.html" %}
-          {% endfor %}
-        </div>
-      </section>
-
-      <section class="product-shelf" id="deals" aria-labelledby="dealsTitle">
-        <div class="shelf-heading">
-          <div>
-            <p class="eyebrow">Deals</p>
-            <h2 id="dealsTitle">Used books under $8</h2>
-          </div>
-        </div>
-        <div class="product-row" id="dealShelf">
-          {% for book in deals %}
-            {% include "components/product_tile.html" %}
-          {% endfor %}
-        </div>
-      </section>
+      {% for section in product_sections %}
+        {% include "components/ui/product_section.html" %}
+      {% endfor %}
     </section>
 
     <section class="catalog-shell" id="catalog" aria-labelledby="catalogTitle">

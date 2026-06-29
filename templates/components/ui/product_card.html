@@ -1,0 +1,38 @@
+<article class="product-tile {{ card.extra_class }}"
+  data-action="details"
+  data-book-id="{{ card.book.id }}"
+  data-book-url="{{ card.title_link.href }}"
+  data-track-impression="{{ card.analytics.impression_event }}"
+  data-track-click="{{ card.analytics.click_event }}"
+  data-source="{{ card.analytics.source }}"
+  data-target-type="{{ card.analytics.target_type }}"
+  data-target-id="{{ card.analytics.target_id }}">
+  {% let book = card.book.clone() %}
+  {% include "components/book_cover.html" %}
+  <div class="product-copy">
+    {% let link = card.title_link.clone() %}
+    {% include "components/ui/link.html" %}
+    {% if !card.book.author.is_empty() %}<span class="author">by {{ card.book.author }}</span>{% endif %}
+    <div class="stars-rating">
+      <span class="stars-val">★★★★★</span>
+      <span class="rating-count">{{ card.rating_count }}</span>
+    </div>
+    <div class="price-row">
+      <span class="price"><span class="price-prefix">from </span><strong class="price-val">{{ card.price_label }}</strong></span>
+    </div>
+    {% if !card.book.condition.is_empty() %}
+    <div class="condition-row">
+      <span class="pill condition">{{ card.book.condition }}</span>
+    </div>
+    {% endif %}
+  </div>
+  <div class="product-actions-wrapper">
+    {% if crate::templates::free_pickup(card.book.price) %}<div class="shipping-tag">FREE store pickup tomorrow</div>{% endif %}
+    <div class="card-double-buttons">
+      {% let button = card.add_button.clone() %}
+      {% include "components/ui/button.html" %}
+      {% let button = card.buy_now_button.clone() %}
+      {% include "components/ui/button.html" %}
+    </div>
+  </div>
+</article>
