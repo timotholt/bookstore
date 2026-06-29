@@ -1,5 +1,5 @@
-.gocache/
-.gomodcache/
 bookstore
 data/*.db
 data/*.db-*
+/target/
+.env

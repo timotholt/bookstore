@@ -1,0 +1,29 @@
+<div id="catalogResults">
+  <div class="catalog-toolbar toolbar">
+    <div class="toolbar-left-group">
+      <span class="all-items-badge">All items</span>
+      <span class="result-count-label" id="resultSummary">{{ filters.result_text }}</span>
+    </div>
+    <div class="sort-wrapper">
+      <label class="sort-label" for="sortSelect">
+        <span>Sort by</span>
+        <select id="sortSelect" name="sort" form="catalogFilters" hx-get="/catalog" hx-include="#catalogFilters" hx-target="#catalogResults" hx-swap="innerHTML">
+          <option value="popular" {% if crate::templates::is_selected(filters.sort.as_deref(), "popular") %}selected{% endif %}>Popularity</option>
+          <option value="price-asc" {% if crate::templates::is_selected(filters.sort.as_deref(), "price-asc") %}selected{% endif %}>Price: Low to High</option>
+          <option value="price-desc" {% if crate::templates::is_selected(filters.sort.as_deref(), "price-desc") %}selected{% endif %}>Price: High to Low</option>
+          <option value="year-desc" {% if crate::templates::is_selected(filters.sort.as_deref(), "year-desc") %}selected{% endif %}>Year: New to Old</option>
+        </select>
+      </label>
+    </div>
+  </div>
+  <div class="product-grid" id="bookGrid" aria-live="polite">
+    {% for book in catalog %}
+      {% include "components/book_card.html" %}
+    {% else %}
+      <div class="empty-state">
+        <p class="eyebrow">No matching copies found</p>
+        <h3>Try widening your search filters</h3>
+      </div>
+    {% endfor %}
+  </div>
+</div>

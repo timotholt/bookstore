@@ -4,7 +4,7 @@
 
 This document defines how Davis's Books should be deployed as a credible full-stack demo project on Railway and Neon while staying portable enough to rebuild quickly if either provider becomes unusable.
 
-The goal is not PCI-grade production commerce. The goal is a professional interview-ready stack that demonstrates real backend engineering: Go server rendering, PostgreSQL persistence, migrations, sessions, Stripe Checkout handoff, staff auth, CMS inventory workflows, and a repeatable infrastructure story.
+The goal is not PCI-grade production commerce. The goal is a professional interview-ready stack that demonstrates real backend engineering: Rust/Axum server rendering, PostgreSQL persistence, migrations, sessions, Stripe Checkout handoff, staff auth, CMS inventory workflows, and a repeatable infrastructure story.
 
 ## Operating Principles
 
@@ -20,11 +20,11 @@ The goal is not PCI-grade production commerce. The goal is a professional interv
 
 ### Railway
 
-Railway hosts the Go web process.
+Railway hosts the Rust/Axum web process.
 
 Responsibilities:
 
-- Build and run the Go application.
+- Build and run the Rust application.
 - Store application runtime environment variables.
 - Provide public HTTPS routing.
 - Run one web service for the Davis's Books storefront and admin panel.
@@ -36,7 +36,7 @@ Expected Railway project resources:
 - Service: `web`
 - Environment: `production`
 - Deploy source: GitHub repository `timotholt/bookstore`
-- Start command: the compiled Go binary, or Railway's detected Go start command if compatible
+- Start command: the compiled Rust binary, or Railway's detected Cargo start command if compatible
 - Health endpoint: `GET /healthz`
 
 ### Neon
@@ -272,7 +272,7 @@ Cacheable page families:
 
 Recommended first implementation:
 
-- In-process Go cache with short TTLs for public catalog reads.
+- In-process Rust cache with short TTLs for public catalog reads.
 - Cache keys built from normalized query parameters.
 - Cache tags modeled in SQL for future invalidation.
 - Explicit invalidation after CMS writes.
@@ -305,7 +305,7 @@ Current session behavior can remain cookie/session-manager based, but production
 
 Requirements:
 
-- Use `alexedwards/scs`.
+- Use `tower-sessions`.
 - Set secure cookie flags in production.
 - Store session data in Postgres once Postgres is enabled.
 - Rotate session tokens on login.
@@ -366,7 +366,7 @@ The target rebuild workflow after accounts and CLIs are authenticated:
 
 1. Clone repo.
 2. Install required CLIs if missing:
-   - Go
+   - Rust
    - Railway CLI
    - Neon CLI, if used
    - Stripe CLI, optional for webhook testing
@@ -412,7 +412,7 @@ Smoke test assertions:
 
 If Railway is replaced:
 
-- The app must run anywhere that supports a Go binary and environment variables.
+- The app must run anywhere that supports a Rust binary and environment variables.
 - No Railway-specific code should exist in application packages.
 - Railway-specific scripts and docs stay under `infra/`.
 
@@ -494,7 +494,7 @@ Accepted demo simplifications:
 ## Open Decisions
 
 - Whether to keep dual SQLite/Postgres support long term or make Postgres the only supported database after Railway/Neon deployment.
-- Whether to use a migration library such as Goose, Atlas, or a small custom migration runner.
+- Whether to keep using embedded `sqlx` migrations, adopt Atlas, or add a small custom migration runner.
 - Whether the recovery packet should use plaintext email, encrypted local file, or both.
 - Whether Railway deploys should run migrations automatically or require an explicit migration command before deploy.
 - Whether the admin CMS should use classic server-rendered forms only or HTMX-enhanced forms.

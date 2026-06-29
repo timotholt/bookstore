@@ -1,5 +1,4 @@
-{{define "cart-drawer"}}
-<aside class="cart-drawer" id="cartDrawer" aria-label="Shopping cart" aria-hidden="true" data-cart-count="{{.ItemCount}}">
+<aside class="cart-drawer" id="cartDrawer" aria-label="Shopping cart" aria-hidden="true" data-cart-count="{{ cart.item_count }}">
   <div class="cart-panel" role="dialog" aria-modal="true" aria-labelledby="cartTitle">
     <div class="cart-header">
       <div>
@@ -13,54 +12,54 @@
       </button>
     </div>
     <div class="shipping-progress-container">
-      <span class="shipping-progress-text" id="shippingProgressText">{{.ProgressText}}</span>
+      <span class="shipping-progress-text" id="shippingProgressText">{{ cart.progress_text }}</span>
       <div class="shipping-progress-bar">
-        <div class="shipping-progress-fill" id="shippingProgressFill" style="width: {{printf "%.0f" .ProgressRatio}}%"></div>
+        <div class="shipping-progress-fill" id="shippingProgressFill" style="width: {{ cart.progress_ratio }}%"></div>
       </div>
     </div>
     <div class="cart-items" id="cartItems">
-      {{range .Lines}}
-      <div class="cart-item" style="--cover-color: {{.Book.CoverColor}}">
+      {% for line in cart.lines %}
+      <div class="cart-item" style="--cover-color: {{ line.book.cover_color }}">
         <div class="cart-cover" aria-hidden="true">
-          <img src="/assets/covers/{{.Book.ID}}.jpg" alt="{{.Book.Title}} cover" onerror="this.src='/assets/covers/placeholder.jpg';">
+          <img src="/assets/covers/{{ line.book.id }}.jpg" alt="{{ line.book.title }} cover" onerror="this.src='/assets/covers/placeholder.jpg';">
         </div>
         <div class="cart-item-main">
-          <strong>{{.Book.Title}}</strong>
-          <span>{{if .Book.Condition}}{{.Book.Condition}} · {{end}}{{.Book.Format}}</span>
-          <span>{{money .Book.Price}} each</span>
+          <strong>{{ line.book.title }}</strong>
+          <span>{% if !line.book.condition.is_empty() %}{{ line.book.condition }} · {% endif %}{{ line.book.format }}</span>
+          <span>{{ self.money(line.book.price) }} each</span>
           <div class="quantity-stepper">
-            <button type="button" aria-label="Decrease quantity" hx-post="/cart/items/{{.Book.CopyID}}/decrease" hx-target="#cartDrawer" hx-swap="outerHTML">-</button>
-            <span>{{.Quantity}}</span>
-            <button type="button" aria-label="Increase quantity" hx-post="/cart/items/{{.Book.CopyID}}/increase" hx-target="#cartDrawer" hx-swap="outerHTML">+</button>
+            <button type="button" aria-label="Decrease quantity" hx-post="/cart/items/{{ line.book.copy_id }}/decrease" hx-target="#cartDrawer" hx-swap="outerHTML">-</button>
+            <span>{{ line.quantity }}</span>
+            <button type="button" aria-label="Increase quantity" hx-post="/cart/items/{{ line.book.copy_id }}/increase" hx-target="#cartDrawer" hx-swap="outerHTML">+</button>
           </div>
         </div>
         <div class="cart-item-side">
-          <strong>{{money .LineTotal}}</strong>
-          <button class="remove-button" type="button" hx-post="/cart/items/{{.Book.CopyID}}/remove" hx-target="#cartDrawer" hx-swap="outerHTML">Remove</button>
+          <strong>{{ self.money_dec(line.line_total) }}</strong>
+          <button class="remove-button" type="button" hx-post="/cart/items/{{ line.book.copy_id }}/remove" hx-target="#cartDrawer" hx-swap="outerHTML">Remove</button>
         </div>
       </div>
-      {{else}}
+      {% else %}
       <div class="empty-cart-message">
         <p>Your stack is empty.</p>
         <a class="secondary-button" href="/#catalog">Browse used books</a>
       </div>
-      {{end}}
+      {% endfor %}
     </div>
     <div class="cart-footer">
       <div class="cart-row">
         <span>Subtotal</span>
-        <strong id="cartSubtotal">{{money .Subtotal}}</strong>
+        <strong id="cartSubtotal">{{ self.money_dec(cart.subtotal) }}</strong>
       </div>
       <div class="cart-row">
         <span>Shipping</span>
-        <strong id="cartShipping">{{if .FreeShipping}}Free{{else}}{{money .Shipping}}{{end}}</strong>
+        <strong id="cartShipping">{% if cart.free_shipping %}Free{% else %}{{ self.money_dec(cart.shipping) }}{% endif %}</strong>
       </div>
       <div class="cart-row total">
         <span>Total</span>
-        <strong id="cartTotal">{{money .Total}}</strong>
+        <strong id="cartTotal">{{ self.money_dec(cart.total) }}</strong>
       </div>
       <form action="/checkout" method="post">
-        <button class="primary-button checkout-button" type="submit" id="checkoutButton" {{if eq .ItemCount 0}}disabled{{end}}>Checkout</button>
+        <button class="primary-button checkout-button" type="submit" id="checkoutButton" {% if cart.item_count == 0 %}disabled{% endif %}>Checkout</button>
       </form>
       <div class="cart-trust-badges">
         <span>Hand-inspected copies</span>
@@ -70,4 +69,3 @@
     </div>
   </div>
 </aside>
-{{end}}

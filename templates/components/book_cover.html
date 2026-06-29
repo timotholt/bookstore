@@ -1,0 +1,6 @@
+<div class="book-cover-container" style="--book-aspect-ratio: {{ book.aspect_ratio }}; --cover-color: {{ book.cover_color }}">
+  <div class="book-cover" aria-hidden="true">
+    <img class="cover-image" src="/assets/covers/{{ book.id }}.jpg" alt="{{ book.title }} cover" onerror="this.src='/assets/covers/placeholder.jpg';">
+    {% if !book.author.is_empty() %}<div class="cover-overlay"></div>{% endif %}
+  </div>
+</div>

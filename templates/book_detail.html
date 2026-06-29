@@ -1,29 +1,9 @@
-{{define "book-detail-base"}}
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{.Title}}</title>
-    <meta name="description" content="View condition notes, price, and pickup details for {{.Book.Title}} at Davis's Books.">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/styles.css">
-    <script src="/assets/htmx.min.js" defer></script>
-  </head>
-  <body>
-    {{template "site-header" .}}
-    {{template "book-detail" .}}
-    {{template "site-footer" .}}
-    {{template "cart-drawer" .Cart}}
-    <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="/app.js"></script>
-  </body>
-</html>
-{{end}}
+{% extends "layouts/base.html" %}
 
-{{define "book-detail"}}
+{% block title %}{{ book.title }} | Davis's Books{% endblock %}
+{% block description %}View condition notes, price, and pickup details for {{ book.title }} at Davis's Books.{% endblock %}
+
+{% block content %}
 <main id="top" class="book-details-view">
   <div class="details-nav">
     <a class="back-link" href="/#catalog">
@@ -38,30 +18,31 @@
     <div class="details-left-media">
       <div class="thumbnail-strip">
         <button class="thumb-btn is-active" type="button" aria-label="Cover front">
-          <img src="/assets/covers/{{.Book.ID}}.jpg" alt="Cover front" style="display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 2px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-          <span class="thumb-color-block front" style="background-color: {{.Book.CoverColor}}; display: none;"></span>
+          <img src="/assets/covers/{{ book.id }}.jpg" alt="Cover front" style="display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 2px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+          <span class="thumb-color-block front" style="background-color: {{ book.cover_color }}; display: none;"></span>
         </button>
         <button class="thumb-btn" type="button" aria-label="Cover spine">
-          <span class="thumb-color-block spine" style="background-color: {{.Book.CoverColor}}"></span>
+          <span class="thumb-color-block spine" style="background-color: {{ book.cover_color }}"></span>
         </button>
         <button class="thumb-btn" type="button" aria-label="Cover back">
-          <span class="thumb-color-block back" style="background-color: {{.Book.CoverColor}}"></span>
+          <span class="thumb-color-block back" style="background-color: {{ book.cover_color }}"></span>
         </button>
       </div>
       <div class="main-cover-wrapper">
-        {{template "book-cover" .Book}}
+        {% let book = book.clone() %}
+        {% include "components/book_cover.html" %}
       </div>
     </div>
 
     <div class="details-middle-specs">
       <section class="detail-info-card detail-summary-card" aria-labelledby="bookDetailTitle">
-        {{if .Book.Author}}
-        <p class="details-brand-link">Visit the <a href="/?author={{.Book.AuthorSlug}}#catalog">{{.Book.Author}} shelf</a></p>
-        {{end}}
-        <h1 class="details-title" id="bookDetailTitle">{{.Book.Title}}</h1>
-        {{if .Book.Author}}
-        <p class="details-author">by <span class="author-name">{{.Book.Author}}</span></p>
-        {{end}}
+        {% if !book.author.is_empty() %}
+        <p class="details-brand-link">Visit the <a href="/?author={{ book.author_slug }}#catalog">{{ book.author }} shelf</a></p>
+        {% endif %}
+        <h1 class="details-title" id="bookDetailTitle">{{ book.title }}</h1>
+        {% if !book.author.is_empty() %}
+        <p class="details-author">by <span class="author-name">{{ book.author }}</span></p>
+        {% endif %}
 
         <div class="details-rating">
           <div class="stars">★★★★★</div>
@@ -71,47 +52,47 @@
         <div class="details-price-row">
           <span class="discount-badge">-33%</span>
           <span class="price-symbol">$</span>
-          <span class="price-val-large" id="mainPriceDollars">{{priceDollars .Book.Price}}</span>
-          <span class="price-cents-large" id="mainPriceCents">{{priceCents .Book.Price}}</span>
+          <span class="price-val-large" id="mainPriceDollars">{{ self.price_dollars(book.price) }}</span>
+          <span class="price-cents-large" id="mainPriceCents">{{ self.price_cents(book.price) }}</span>
         </div>
         <div class="list-price-row">
-          List Price: <span class="list-price-strike" id="mainListPrice">{{money (listPrice .Book.Price)}}</span>
+          List Price: <span class="list-price-strike" id="mainListPrice">{{ self.money_val(self.list_price(book.price)) }}</span>
         </div>
 
         <div class="details-quick-specs">
-          {{if gt .Book.Year 0}}<span><strong>Published:</strong> {{.Book.Year}}</span>{{end}}
-          {{if .Book.Format}}<span><strong>Format:</strong> {{.Book.Format}}</span>{{end}}
-          {{if .Book.ISBN}}<span><strong>ISBN:</strong> {{.Book.ISBN}}</span>{{end}}
-          {{if .Book.Genre}}<span><strong>Genre:</strong> {{.Book.Genre}}</span>{{end}}
+          {% if book.year > 0 %}<span><strong>Published:</strong> {{ book.year }}</span>{% endif %}
+          {% if !book.format.is_empty() %}<span><strong>Format:</strong> {{ book.format }}</span>{% endif %}
+          {% if !book.isbn.is_empty() %}<span><strong>ISBN:</strong> {{ book.isbn }}</span>{% endif %}
+          {% if !book.genre.is_empty() %}<span><strong>Genre:</strong> {{ book.genre }}</span>{% endif %}
         </div>
       </section>
 
       <section class="detail-info-card details-description" aria-labelledby="copyNotesTitle">
         <h2 id="copyNotesTitle">About this copy</h2>
-        <p>{{.Book.Notes}}</p>
+        <p>{{ book.notes.as_deref().unwrap_or("") }}</p>
       </section>
 
       <section class="detail-info-card details-options-section" aria-labelledby="optionSelectorTitle">
         <h2 id="optionSelectorTitle" style="font-size: 1.15rem; font-weight: 700; margin-bottom: 12px; color: var(--ink);">Select Format / Option</h2>
         <div class="swatches-container" style="display: flex; gap: 10px; flex-wrap: wrap;">
-          {{range $index, $copy := .Copies}}
-          <button class="swatch-btn {{if eq $index 0}}is-active{{end}}"
+          {% for copy in copies %}
+          <button class="swatch-btn {% if loop.first %}is-active{% endif %}"
                   type="button"
-                  data-copy-id="{{.CopyID}}"
-                  data-price-dollars="{{priceDollars .Price}}"
-                  data-price-cents="{{priceCents .Price}}"
-                  data-price-formatted="{{money .Price}}"
-                  data-list-price="{{money (listPrice .Price)}}"
-                  data-stock="{{.Stock}}"
-                  data-notes="{{.Notes}}"
-                  data-condition="{{if .Condition}}{{.Condition}}{{else}}New{{end}}"
-                  data-format="{{.Format}}"
-                  data-attributes="{{index $.Attributes .CopyID | json}}"
+                  data-copy-id="{{ copy.copy_id }}"
+                  data-price-dollars="{{ self.price_dollars(copy.price) }}"
+                  data-price-cents="{{ self.price_cents(copy.price) }}"
+                  data-price-formatted="{{ self.money(copy.price) }}"
+                  data-list-price="{{ self.money_val(self.list_price(copy.price)) }}"
+                  data-stock="{{ copy.stock }}"
+                  data-notes="{{ copy.notes.as_deref().unwrap_or("") }}"
+                  data-condition="{% if !copy.condition.is_empty() %}{{ copy.condition }}{% else %}New{% endif %}"
+                  data-format="{{ copy.format }}"
+                  data-attributes="{{ self.json_attributes(copy.copy_id) }}"
                   onclick="selectVariant(this)">
-            <span style="display: block; font-size: 0.95rem; font-weight: 700;">{{.Format}}</span>
-            <span style="display: block; font-size: 0.8rem; color: var(--muted); margin-top: 2px;">{{money .Price}}</span>
+            <span style="display: block; font-size: 0.95rem; font-weight: 700;">{{ copy.format }}</span>
+            <span style="display: block; font-size: 0.8rem; color: var(--muted); margin-top: 2px;">{{ self.money(copy.price) }}</span>
           </button>
-          {{end}}
+          {% endfor %}
         </div>
       </section>
 
@@ -123,9 +104,9 @@
         <div class="modal-tab-content is-active" id="details-tab-specs">
           <table class="specs-table">
             <tbody>
-              {{if .Book.ISBN}}<tr><td>ISBN-13</td><td>{{.Book.ISBN}}</td></tr>{{end}}
+              {% if !book.isbn.is_empty() %}<tr><td>ISBN-13</td><td>{{ book.isbn }}</td></tr>{% endif %}
               <tr><td>Language</td><td>English</td></tr>
-              <tr><td>Condition</td><td id="specsCondition">{{if .Book.Condition}}{{.Book.Condition}}{{else}}New{{end}}</td></tr>
+              <tr><td>Condition</td><td id="specsCondition">{% if !book.condition.is_empty() %}{{ book.condition }}{% else %}New{% endif %}</td></tr>
               <tr><td>Store</td><td>Davis's Books, La Habra</td></tr>
               <tr class="dynamic-attribute-row" id="attr-color" style="display: none;"><td>Color</td><td class="value"></td></tr>
               <tr class="dynamic-attribute-row" id="attr-size" style="display: none;"><td>Size</td><td class="value"></td></tr>
@@ -146,7 +127,7 @@
     <div class="details-right-buybox">
       <div class="buybox-card">
         <div class="buybox-price-line">
-          <span class="buybox-price">{{money .Book.Price}}</span>
+          <span class="buybox-price">{{ self.money(book.price) }}</span>
           <span class="prime-badge-icon">pickup</span>
         </div>
         <div class="buybox-delivery">
@@ -159,12 +140,12 @@
         <div class="buybox-condition-wrapper">
           <label style="display: block; font-size: 0.82rem; font-weight: 700; color: var(--muted); margin-bottom: 4px;">Selected Option</label>
           <div id="buyboxOptionText" style="font-size: 0.95rem; font-weight: 600; color: var(--ink);">
-            {{.Book.Format}} · {{if .Book.Condition}}{{.Book.Condition}}{{else}}New{{end}}
+            {{ book.format }} · {% if !book.condition.is_empty() %}{{ book.condition }}{% else %}New{% endif %}
           </div>
         </div>
         <div class="buybox-actions">
-          <button class="buybox-btn add-to-stack" type="button" data-action="add" hx-post="/cart/items" hx-vals='{"copy_id":"{{.Book.CopyID}}"}' hx-target="#cartDrawer" hx-swap="outerHTML">Add to Stack</button>
-          <button class="buybox-btn buy-now" type="button" data-action="buy-now-card" hx-post="/cart/items" hx-vals='{"copy_id":"{{.Book.CopyID}}"}' hx-target="#cartDrawer" hx-swap="outerHTML">Buy Now</button>
+          <button class="buybox-btn add-to-stack" type="button" data-action="add" hx-post="/cart/items" hx-vals='{"copy_id":"{{ book.copy_id }}"}' hx-target="#cartDrawer" hx-swap="outerHTML">Add to Stack</button>
+          <button class="buybox-btn buy-now" type="button" data-action="buy-now-card" hx-post="/cart/items" hx-vals='{"copy_id":"{{ book.copy_id }}"}' hx-target="#cartDrawer" hx-swap="outerHTML">Buy Now</button>
         </div>
         <div class="buybox-merchant-details">
           <div class="merchant-row">
@@ -180,19 +161,21 @@
     </div>
   </div>
 
-  {{if .Related}}
+  {% if related.len() > 0 %}
   <section class="product-shelf" aria-labelledby="relatedBooksTitle">
     <div class="shelf-heading">
       <div>
-        <p class="eyebrow">More in {{.Book.Genre}}</p>
+        <p class="eyebrow">More in {{ book.genre }}</p>
         <h2 id="relatedBooksTitle">Keep browsing this shelf</h2>
       </div>
     </div>
     <div class="product-row">
-      {{range .Related}}{{template "product-tile" .}}{{end}}
+      {% for book in related %}
+        {% include "components/product_tile.html" %}
+      {% endfor %}
     </div>
   </section>
-  {{end}}
+  {% endif %}
   <script>
     function updateSpecs(attributesJson, condition) {
       const specsCondition = document.getElementById('specsCondition');
@@ -284,4 +267,4 @@
     });
   </script>
 </main>
-{{end}}
+{% endblock %}

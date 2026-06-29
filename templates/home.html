@@ -1,4 +1,6 @@
-{{define "home"}}
+{% extends "layouts/base.html" %}
+
+{% block content %}
 <main id="top">
   <div id="storefrontView">
     <section class="hero-amazon-carousel" aria-label="Store highlights carousel">
@@ -87,55 +89,56 @@
       <div class="overlay-card single-feature-card">
         <h3>Featured Deal</h3>
         <div class="single-feature-content">
-          <div class="feature-tile" data-action="details" data-book-id="{{.Featured.ID}}" data-book-url="/books/{{.Featured.ID}}">
+          <div class="feature-tile" data-action="details" data-book-id="{{ featured.id }}" data-book-url="/books/{{ featured.id }}">
             <div class="feature-tile-cover">
-              {{template "book-cover" .Featured}}
+              {% let book = featured.clone() %}
+              {% include "components/book_cover.html" %}
             </div>
             <div class="feature-tile-info">
-              <h4>{{.Featured.Title}}</h4>
-              <p class="author">by {{.Featured.Author}}</p>
+              <h4>{{ featured.title }}</h4>
+              <p class="author">by {{ featured.author }}</p>
               <div class="stars-rating">
                 <span class="stars-val">★★★★★</span>
                 <span class="rating-count">85</span>
               </div>
               <div class="price-row">
                 <span class="discount-badge">-33%</span>
-                <span class="price"><span class="price-prefix">from </span><strong class="price-val">{{money .Featured.Price}}</strong></span>
+                <span class="price"><span class="price-prefix">from </span><strong class="price-val">{{ self.money(featured.price) }}</strong></span>
               </div>
               <div class="condition-row">
-                <span class="pill condition">{{.Featured.Condition}}</span>
+                <span class="pill condition">{{ featured.condition }}</span>
               </div>
               <div class="shipping-tag">FREE store pickup tomorrow</div>
               <div class="card-double-buttons">
-                <button class="card-btn add-btn" type="button" data-action="add" data-book-id="{{.Featured.ID}}" hx-post="/cart/items" hx-vals='{"copy_id":"{{.Featured.CopyID}}"}' hx-target="#cartDrawer" hx-swap="outerHTML">Add to Cart</button>
-                <button class="card-btn buy-now-btn" type="button" data-action="buy-now-card" data-book-id="{{.Featured.ID}}" hx-post="/cart/items" hx-vals='{"copy_id":"{{.Featured.CopyID}}"}' hx-target="#cartDrawer" hx-swap="outerHTML">Buy Now</button>
+                <button class="card-btn add-btn" type="button" data-action="add" data-book-id="{{ featured.id }}" hx-post="/cart/items" hx-vals='{"copy_id":"{{ featured.copy_id }}"}' hx-target="#cartDrawer" hx-swap="outerHTML">Add to Cart</button>
+                <button class="card-btn buy-now-btn" type="button" data-action="buy-now-card" data-book-id="{{ featured.id }}" hx-post="/cart/items" hx-vals='{"copy_id":"{{ featured.copy_id }}"}' hx-target="#cartDrawer" hx-swap="outerHTML">Buy Now</button>
               </div>
             </div>
           </div>
         </div>
-        <a href="/books/{{.Featured.ID}}" class="card-bottom-link">See today's deal</a>
+        <a href="/books/{{ featured.id }}" class="card-bottom-link">See today's deal</a>
       </div>
 
       <div class="overlay-card stack-builder-card">
         <h3>Stack Builder</h3>
         <div class="shipping-progress-content">
-          <p class="progress-status-text" id="overlayProgressText">{{.Cart.ProgressText}}</p>
+          <p class="progress-status-text" id="overlayProgressText">{{ cart.progress_text }}</p>
           <div class="progress-bar-wrapper">
-            <div class="progress-bar-fill" id="overlayProgressBar" style="width: {{printf "%.0f" .Cart.ProgressRatio}}%"></div>
+            <div class="progress-bar-fill" id="overlayProgressBar" style="width: {{ cart.progress_ratio }}%"></div>
           </div>
           <p class="progress-subtext">Free shipping on all orders over $35</p>
           <div class="quick-filler-section">
             <span class="quick-add-title">Quick stack fillers:</span>
             <div class="quick-filler-row" id="overlayQuickFillers">
-              {{range .QuickFillers}}
-              <a class="filler-book-row" href="/books/{{.ID}}" style="--cover-color: {{.CoverColor}}">
+              {% for book in quick_fillers %}
+              <a class="filler-book-row" href="/books/{{ book.id }}" style="--cover-color: {{ book.cover_color }}">
                 <span class="filler-cover-mini"></span>
                 <span class="filler-details">
-                  <span class="filler-title">{{.Title}}</span>
-                  <span class="filler-price">{{money .Price}}</span>
+                  <span class="filler-title">{{ book.title }}</span>
+                  <span class="filler-price">{{ self.money(book.price) }}</span>
                 </span>
               </a>
-              {{end}}
+              {% endfor %}
             </div>
           </div>
         </div>
@@ -170,7 +173,9 @@
           </div>
         </div>
         <div class="product-row" id="bestSellerShelf">
-          {{range .BestSellers}}{{template "product-tile" .}}{{end}}
+          {% for book in best_sellers %}
+            {% include "components/product_tile.html" %}
+          {% endfor %}
         </div>
       </section>
 
@@ -185,7 +190,9 @@
           </div>
         </div>
         <div class="product-row" id="newArrivalShelf">
-          {{range .NewArrivals}}{{template "product-tile" .}}{{end}}
+          {% for book in new_arrivals %}
+            {% include "components/product_tile.html" %}
+          {% endfor %}
         </div>
       </section>
 
@@ -197,7 +204,9 @@
           </div>
         </div>
         <div class="product-row" id="dealShelf">
-          {{range .Deals}}{{template "product-tile" .}}{{end}}
+          {% for book in deals %}
+            {% include "components/product_tile.html" %}
+          {% endfor %}
         </div>
       </section>
     </section>
@@ -214,43 +223,49 @@
         <form class="filters" id="catalogFilters" aria-label="Catalog filters" hx-get="/catalog" hx-target="#catalogResults" hx-swap="innerHTML">
           <div class="filter-block">
             <label for="sidebarSearchInput">Keyword Search</label>
-            <input id="sidebarSearchInput" name="q" type="search" value="{{.Filters.Query}}" placeholder="Title, author, or ISBN..." autocomplete="off" hx-trigger="keyup changed delay:250ms">
+            <input id="sidebarSearchInput" name="q" type="search" value="{{ filters.q.as_deref().unwrap_or("") }}" placeholder="Title, author, or ISBN..." autocomplete="off" hx-trigger="keyup changed delay:250ms">
           </div>
           <div class="filter-block">
             <label for="genreFilter">Genre</label>
             <select id="genreFilter" name="genre" hx-trigger="change">
               <option value="All">All genres</option>
-              {{range .Genres}}<option value="{{.}}" {{if selected $.Filters.Genre .}}selected{{end}}>{{.}}</option>{{end}}
+              {% for gen in genres %}
+              <option value="{{ gen }}" {% if self.selected(filters.genre.as_deref(), gen) %}selected{% endif %}>{{ gen }}</option>
+              {% endfor %}
             </select>
           </div>
           <div class="filter-block">
             <label for="conditionFilter">Condition</label>
             <select id="conditionFilter" name="condition" hx-trigger="change">
               <option value="All">Any condition</option>
-              {{range .Conditions}}<option value="{{.}}" {{if selected $.Filters.Condition .}}selected{{end}}>{{.}}</option>{{end}}
+              {% for cond in conditions %}
+              <option value="{{ cond }}" {% if self.selected(filters.condition.as_deref(), cond) %}selected{% endif %}>{{ cond }}</option>
+              {% endfor %}
             </select>
           </div>
           <div class="filter-block">
             <div class="price-header">
               <label for="priceFilter">Max Price</label>
-              <span id="priceValue">{{if .Filters.MaxPrice}}${{.Filters.MaxPrice}}{{else}}$22{{end}}</span>
+              <span id="priceValue">${{ filters.max_price.as_deref().unwrap_or("22") }}</span>
             </div>
             <div class="slider-container">
-              <input id="priceFilter" name="max_price" type="range" min="4" max="22" value="{{if .Filters.MaxPrice}}{{.Filters.MaxPrice}}{{else}}22{{end}}" hx-trigger="input changed delay:150ms">
+              <input id="priceFilter" name="max_price" type="range" min="4" max="22" value="{{ filters.max_price.as_deref().unwrap_or("22") }}" hx-trigger="input changed delay:150ms">
             </div>
           </div>
           <div class="filter-block">
             <label for="formatFilter">Format</label>
             <select id="formatFilter" name="format" hx-trigger="change">
               <option value="All">All formats</option>
-              {{range .Formats}}<option value="{{.}}" {{if selected $.Filters.Format .}}selected{{end}}>{{.}}</option>{{end}}
+              {% for fmt in formats %}
+              <option value="{{ fmt }}" {% if self.selected(filters.format.as_deref(), fmt) %}selected{% endif %}>{{ fmt }}</option>
+              {% endfor %}
             </select>
           </div>
           <a class="secondary-button" id="resetFilters" href="/#catalog">Reset filters</a>
         </form>
 
         <main class="catalog-main">
-          {{template "catalog-results" .}}
+          {% include "components/catalog_results.html" %}
         </main>
       </div>
     </section>
@@ -262,21 +277,23 @@
         <p>Each highlighted copy has crisp notes, fair pricing, and enough character to make used feel better than new.</p>
       </div>
       <div class="mini-shelf" id="miniShelf">
-        {{range .StaffPicks}}
-        <article class="staff-pick-card" data-action="details" data-book-id="{{.ID}}" data-book-url="/books/{{.ID}}">
-          <div class="staff-pick-cover">{{template "book-cover" .}}</div>
+        {% for book in staff_picks %}
+        <article class="staff-pick-card" data-action="details" data-book-id="{{ book.id }}" data-book-url="/books/{{ book.id }}">
+          <div class="staff-pick-cover">
+            {% include "components/book_cover.html" %}
+          </div>
           <div class="staff-pick-info">
             <span class="staff-badge">Staff Pick</span>
-            <h4>{{.Title}}</h4>
-            <span class="author">by {{.Author}}</span>
-            <p class="staff-quote">{{.StaffQuote}}</p>
+            <h4>{{ book.title }}</h4>
+            <span class="author">by {{ book.author }}</span>
+            <p class="staff-quote">{{ book.staff_quote }}</p>
             <div class="staff-footer">
-              <span class="price">from <strong>{{money .Price}}</strong></span>
+              <span class="price">from <strong>{{ self.money(book.price) }}</strong></span>
               <button class="staff-btn" type="button">Details</button>
             </div>
           </div>
         </article>
-        {{end}}
+        {% endfor %}
       </div>
     </section>
 
@@ -291,4 +308,4 @@
   </div>
   <div id="bookDetailsView" class="book-details-view" hidden></div>
 </main>
-{{end}}
+{% endblock %}
