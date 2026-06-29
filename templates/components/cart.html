@@ -23,7 +23,8 @@
       {% else %}
       <div class="empty-cart-message">
         <p>Your stack is empty.</p>
-        <a class="secondary-button" href="/#catalog">Browse used books</a>
+        {% let link = drawer_browse_books_link.clone() %}
+        {% include "components/ui/link.html" %}
       </div>
       {% endfor %}
     </div>
@@ -40,8 +41,9 @@
         <span>Total</span>
         <strong id="cartTotal">{{ self.money_dec(cart.total) }}</strong>
       </div>
-      <form action="/checkout" method="post">
-        <button class="primary-button checkout-button" type="submit" id="checkoutButton" {% if cart.item_count == 0 %}disabled{% endif %}>Checkout</button>
+      <form action="/checkout" method="get">
+        {% let button = drawer_checkout_button.clone() %}
+        {% include "components/ui/button.html" %}
       </form>
       <div class="cart-trust-badges">
         <span>Hand-inspected copies</span>

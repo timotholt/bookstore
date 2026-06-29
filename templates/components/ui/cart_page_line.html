@@ -1,0 +1,29 @@
+<div class="cart-item cart-item--page">
+  <div class="cart-cover-slot cart-cover-slot--page">
+    {% let book = cart_line.line.book.clone() %}
+    {% include "components/book_cover.html" %}
+  </div>
+  <div class="cart-item-details">
+    <strong>{{ cart_line.line.book.title }}</strong>
+    {% if !cart_line.line.book.author.is_empty() %}<span>by {{ cart_line.line.book.author }}</span>{% endif %}
+    <span>{{ cart_line.option_label }}</span>
+    
+    <div class="cart-quantity-meta">
+      <div class="stepper cart-page-stepper">
+        {% let button = cart_line.decrease_button.clone() %}
+        {% include "components/ui/button.html" %}
+        <span>{{ cart_line.line.quantity }}</span>
+        {% let button = cart_line.increase_button.clone() %}
+        {% include "components/ui/button.html" %}
+      </div>
+      {% if !cart_line.stock_limit_label.is_empty() %}
+      <span class="cart-line-limit">{{ cart_line.stock_limit_label }}</span>
+      {% endif %}
+    </div>
+  </div>
+  <div class="cart-item-price-side">
+    <strong>{{ cart_line.line_total_label }}</strong>
+    {% let button = cart_line.remove_button.clone() %}
+    {% include "components/ui/button.html" %}
+  </div>
+</div>

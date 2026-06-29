@@ -40,7 +40,10 @@ pub fn build_router(state: AppState) -> Router {
             "/cart/items/:copy_id/remove",
             post(handlers::remove_cart_item),
         )
-        .route("/checkout", post(handlers::checkout))
+        .route(
+            "/checkout",
+            get(handlers::checkout).post(handlers::checkout),
+        )
         .nest_service("/assets", ServeDir::new("assets"))
         .route_service("/app.js", ServeFile::new("app.js"))
         .route_service("/styles.css", ServeFile::new("styles.css"))
@@ -447,6 +450,9 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(second_response.status(), StatusCode::OK);
+        let second_body = response_body(second_response).await;
+        assert!(second_body.contains("Only 1 available"));
+        assert!(second_body.contains(r#"disabled aria-disabled="true">+</button>"#));
 
         let quantity =
             sqlx::query_scalar::<_, i32>("SELECT quantity FROM cart_items WHERE copy_id = 9")
@@ -454,6 +460,76 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(quantity, 1);
+    }
+
+    #[tokio::test]
+    async fn cart_page_marks_stock_capped_lines() {
+        let (app, _db) = test_app_with_db().await;
+        let add_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/cart/items")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from("copy_id=9"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let cookie = session_cookie(&add_response);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/cart")
+                    .header(header::COOKIE, cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_body(response).await;
+        assert!(body.contains("Only 1 available"));
+        assert!(body.contains(r#"disabled aria-disabled="true">+</button>"#));
+    }
+
+    #[tokio::test]
+    async fn checkout_route_renders_review_page_from_cart() {
+        let (app, _db) = test_app_with_db().await;
+        let add_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/cart/items")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from("copy_id=3"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let cookie = session_cookie(&add_response);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/checkout")
+                    .header(header::COOKIE, cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_body(response).await;
+        assert!(body.contains("Secure Checkout"));
+        assert!(body.contains("Place your order"));
+        assert!(body.contains("Arriving for pickup in 1-2 days"));
+        assert!(body.contains("Dune"));
     }
 
     #[tokio::test]

@@ -204,6 +204,8 @@ pub async fn home(
         product_sections,
         catalog_cards: ui::product_cards(books.clone(), "catalog.results"),
         staff_picks,
+        drawer_checkout_button: ui::checkout_start_button("cart.drawer", cart.item_count == 0),
+        drawer_browse_books_link: ui::browse_books_link("cart.drawer.empty", "secondary-button"),
         cart,
         cart_lines,
         filters: result_filters(filters, books.len(), all_books.len()),
@@ -292,6 +294,8 @@ pub async fn book_detail(
         related_cards: ui::product_cards(related, "book_detail.related"),
         add_button,
         buy_now_button,
+        drawer_checkout_button: ui::checkout_start_button("cart.drawer", cart.item_count == 0),
+        drawer_browse_books_link: ui::browse_books_link("cart.drawer.empty", "secondary-button"),
         cart,
         cart_lines,
     };
@@ -372,12 +376,22 @@ pub async fn checkout(
         return Err(AppError::Validation("cart is empty".into()));
     }
 
-    // In production, this redirect to Stripe Checkout, clear sessions on webhook, etc.
-    let body = format!(
-        "Stripe Checkout will be connected in Phase 4. Cart total: ${:.2}",
-        cart.total
-    );
-    Ok(body)
+    let checkout_lines = ui::checkout_lines(cart.lines.clone());
+    let summary = ui::order_summary(&cart, "checkout.summary");
+    Ok(CheckoutTemplate {
+        sections: ui::checkout_sections(),
+        checkout_lines,
+        summary,
+        cart_link: ui::LinkView::tracked(
+            "Cart",
+            "/cart",
+            "checkout-cart-link",
+            "checkout_cart_clicked",
+            "checkout.header",
+            "cart",
+            "current",
+        ),
+    })
 }
 
 pub async fn cart_page(
@@ -387,10 +401,27 @@ pub async fn cart_page(
     let db = &state.db;
     let all_books = store::list_books(db, &CatalogFilters::default()).await?;
     let cart = cart::view(db, &session).await?;
+    let cart_lines = ui::cart_page_lines(cart.lines.clone());
+
+    let mut checkout_button = ui::ButtonView::tracked(
+        "Proceed to Checkout",
+        "primary-button checkout-button checkout-button--page",
+        "submit",
+        "checkout",
+        "Proceed to checkout",
+        "checkout_started",
+        "cart.page",
+        "checkout",
+        "current",
+    );
+    checkout_button.disabled = cart.item_count == 0;
 
     let template = CartPageTemplate {
         genres: unique_genres(&all_books),
         cart,
+        cart_lines,
+        checkout_button,
+        browse_books_link: ui::browse_books_link("cart.page.empty", "primary-button"),
     };
 
     Ok(template)
@@ -399,7 +430,13 @@ pub async fn cart_page(
 async fn render_cart(db: &SqlitePool, session: Session) -> Result<Response, AppError> {
     let cart = cart::view(db, &session).await?;
     let cart_lines = ui::cart_lines(cart.lines.clone(), "#cartDrawer");
-    let template = CartDrawerTemplate { cart, cart_lines };
+    let drawer_checkout_button = ui::checkout_start_button("cart.drawer", cart.item_count == 0);
+    let template = CartDrawerTemplate {
+        cart,
+        cart_lines,
+        drawer_checkout_button,
+        drawer_browse_books_link: ui::browse_books_link("cart.drawer.empty", "secondary-button"),
+    };
     Ok(template.into_response())
 }
 

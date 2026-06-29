@@ -72,6 +72,10 @@
     return document.getElementById("cartDrawer");
   }
 
+  function isInsideCartDrawer(element) {
+    return element && element.closest && element.closest("#cartDrawer");
+  }
+
   function syncCartCount() {
     const drawer = cartDrawer();
     const badge = document.querySelector("[data-cart-count]");
@@ -226,6 +230,9 @@
   document.body.addEventListener("htmx:beforeRequest", function (event) {
     const source = event.detail && event.detail.elt;
     if (!source || !source.closest) return;
+    if (isInsideCartDrawer(source)) {
+      pendingCartOpen = true;
+    }
     const form = source.matches("#catalogFilters") ? source : source.closest("#catalogFilters");
     if (!form) return;
     trackSearch(form, "catalog.filters");
@@ -233,7 +240,7 @@
 
   document.body.addEventListener("htmx:afterSwap", function (event) {
     syncCartCount();
-    if (event.detail && event.detail.target && event.detail.target.id === "cartDrawer") {
+    if ((event.detail && event.detail.target && event.detail.target.id === "cartDrawer") || pendingCartOpen) {
       openCart();
     }
   });

@@ -1,6 +1,7 @@
-<div class="cart-item" style="--cover-color: {{ cart_line.line.book.cover_color }}">
-  <div class="cart-cover" aria-hidden="true">
-    <img src="/assets/covers/{{ cart_line.line.book.id }}.jpg" alt="{{ cart_line.line.book.title }} cover" onerror="this.src='/assets/covers/placeholder.jpg';">
+<div class="cart-item">
+  <div class="cart-cover-slot">
+    {% let book = cart_line.line.book.clone() %}
+    {% include "components/book_cover.html" %}
   </div>
   <div class="cart-item-main">
     <div class="cart-title-row">
@@ -11,12 +12,17 @@
     <p class="cart-author">{{ cart_line.option_label }}</p>
     <p class="cart-author">{{ cart_line.unit_price_label }}</p>
     <div class="quantity-row">
+      <div class="cart-quantity-meta">
       <div class="stepper">
         {% let button = cart_line.decrease_button.clone() %}
         {% include "components/ui/button.html" %}
         <span>{{ cart_line.line.quantity }}</span>
         {% let button = cart_line.increase_button.clone() %}
         {% include "components/ui/button.html" %}
+      </div>
+      {% if !cart_line.stock_limit_label.is_empty() %}
+      <span class="cart-line-limit">{{ cart_line.stock_limit_label }}</span>
+      {% endif %}
       </div>
       {% let button = cart_line.remove_button.clone() %}
       {% include "components/ui/button.html" %}

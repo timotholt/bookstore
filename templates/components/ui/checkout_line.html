@@ -1,0 +1,26 @@
+<article class="checkout-line">
+  <div class="checkout-line-cover">
+    {% let book = checkout_line.line.book.clone() %}
+    {% include "components/book_cover.html" %}
+  </div>
+  <div class="checkout-line-copy">
+    <h3>{{ checkout_line.line.book.title }}</h3>
+    {% if !checkout_line.line.book.author.is_empty() %}<p>by {{ checkout_line.line.book.author }}</p>{% endif %}
+    <p>{{ checkout_line.option_label }}</p>
+    <strong>{{ checkout_line.line_total_label }}</strong>
+    <p>{{ checkout_line.quantity_label }}</p>
+  </div>
+  <fieldset class="checkout-delivery-options">
+    <legend>Pickup window</legend>
+    <label data-track-click="checkout_pickup_window_selected" data-source="checkout.delivery_options" data-target-type="copy" data-target-id="{{ checkout_line.line.book.copy_id }}">
+      <input type="radio" name="{{ checkout_line.pickup_name }}" checked>
+      <span>Tomorrow, 10 AM - 7 PM</span>
+      <strong>Free</strong>
+    </label>
+    <label data-track-click="checkout_pickup_window_selected" data-source="checkout.delivery_options" data-target-type="copy" data-target-id="{{ checkout_line.line.book.copy_id }}">
+      <input type="radio" name="{{ checkout_line.pickup_name }}">
+      <span>Hold until weekend</span>
+      <strong>Free</strong>
+    </label>
+  </fieldset>
+</article>

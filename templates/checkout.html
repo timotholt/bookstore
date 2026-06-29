@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Secure Checkout | Davis's Books</title>
+    <meta name="description" content="Review your Davis's Books order before secure payment.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/assets/htmx.min.js" defer></script>
+  </head>
+  <body class="checkout-body">
+    <header class="checkout-header">
+      <a class="brand checkout-brand" href="/#top" aria-label="Davis's Books home">
+        <span class="brand-mark" aria-hidden="true">DB</span>
+        <span>Davis's Books</span>
+      </a>
+      <h1>Secure Checkout</h1>
+      {% let link = cart_link.clone() %}
+      {% include "components/ui/link.html" %}
+    </header>
+
+    <main class="checkout-main">
+      <div class="checkout-layout">
+        <div class="checkout-sections">
+          {% for section in sections %}
+          {% include "components/ui/checkout_section.html" %}
+          {% endfor %}
+
+          <section class="checkout-section checkout-delivery-section">
+            <p class="checkout-eyebrow">3. Review items and delivery</p>
+            <h2>Arriving for pickup in 1-2 days</h2>
+
+            {% for checkout_line in checkout_lines %}
+            {% include "components/ui/checkout_line.html" %}
+            {% endfor %}
+          </section>
+
+          <section class="checkout-place-order-band">
+            <form action="/checkout" method="get">
+              {% let button = summary.place_order_button.clone() %}
+              {% include "components/ui/button.html" %}
+            </form>
+            <div>
+              <h2>Order total: {{ summary.total_label }}</h2>
+              <p>By placing your order, you agree to Davis's Books pickup, return, and privacy policies.</p>
+            </div>
+          </section>
+
+          <section class="checkout-help-section">
+            <p>Need help? Contact the shop before pickup and we can adjust your order.</p>
+            <p>Prices and availability reflect the latest copy condition and stock in your cart.</p>
+            <p>Payment processing and order creation will be connected through Stripe Checkout in the next checkout phase.</p>
+          </section>
+        </div>
+
+        <aside class="checkout-summary">
+          <form action="/checkout" method="get">
+            {% let button = summary.place_order_button.clone() %}
+            {% include "components/ui/button.html" %}
+          </form>
+          <p>Review your order before payment. You will not be charged in this local demo.</p>
+          {% include "components/ui/order_summary.html" %}
+          <div class="checkout-summary-note">
+            <span>Secure checkout</span>
+            <span>Hand-inspected copies</span>
+            <span>Pickup support from Davis's Books</span>
+          </div>
+        </aside>
+      </div>
+    </main>
+  </body>
+</html>

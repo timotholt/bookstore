@@ -19,31 +19,13 @@
       
       <div class="cart-page-layout">
         <div class="cart-items-section">
-          {% for line in cart.lines %}
-          <div class="cart-item cart-item--page" style="--cover-color: {{ line.book.cover_color }}">
-            <div class="cart-cover cart-cover--page">
-              <img src="/assets/covers/{{ line.book.id }}.jpg" alt="{{ line.book.title }} cover" onerror="this.src='/assets/covers/placeholder.jpg';">
-            </div>
-            <div class="cart-item-details">
-              <strong>{{ line.book.title }}</strong>
-              {% if !line.book.author.is_empty() %}<span>by {{ line.book.author }}</span>{% endif %}
-              <span>{% if !line.book.condition.is_empty() %}{{ line.book.condition }} · {% endif %}{{ line.book.format }}</span>
-              
-              <div class="stepper cart-page-stepper">
-                <button type="button" aria-label="Decrease quantity" hx-post="/cart/items/{{ line.book.copy_id }}/decrease" hx-headers='{"X-Cart-View":"page"}' hx-swap="none">-</button>
-                <span>{{ line.quantity }}</span>
-                <button type="button" aria-label="Increase quantity" hx-post="/cart/items/{{ line.book.copy_id }}/increase" hx-headers='{"X-Cart-View":"page"}' hx-swap="none">+</button>
-              </div>
-            </div>
-            <div class="cart-item-price-side">
-              <strong>{{ self.money_dec(line.line_total) }}</strong>
-              <button class="remove-button" type="button" hx-post="/cart/items/{{ line.book.copy_id }}/remove" hx-headers='{"X-Cart-View":"page"}' hx-swap="none">Remove</button>
-            </div>
-          </div>
+          {% for cart_line in cart_lines %}
+          {% include "components/ui/cart_page_line.html" %}
           {% else %}
           <div class="empty-cart-message cart-page-empty">
             <p>Your stack is empty.</p>
-            <a class="primary-button" href="/#catalog">Browse used books</a>
+            {% let link = browse_books_link.clone() %}
+            {% include "components/ui/link.html" %}
           </div>
           {% endfor %}
         </div>
@@ -72,8 +54,9 @@
               <strong>{{ self.money_dec(cart.total) }}</strong>
             </div>
             
-            <form action="/checkout" method="post">
-              <button class="primary-button checkout-button checkout-button--page" type="submit" {% if cart.item_count == 0 %}disabled{% endif %}>Proceed to Checkout</button>
+            <form action="/checkout" method="get">
+              {% let button = checkout_button.clone() %}
+              {% include "components/ui/button.html" %}
             </form>
             
             <div class="cart-page-trust-badges">

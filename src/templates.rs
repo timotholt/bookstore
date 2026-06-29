@@ -1,8 +1,11 @@
+use crate::models::{BookCard, CartView, CatalogFilters, VariantAttribute};
+use crate::ui::{
+    ButtonView, CartLineView, CheckoutLineView, CheckoutSectionView, LinkView, OrderSummaryView,
+    ProductCardView, ProductSectionView,
+};
 use askama::Template;
 use rust_decimal::Decimal;
 use std::collections::HashMap;
-use crate::models::{BookCard, CartView, CatalogFilters, VariantAttribute};
-use crate::ui::{ButtonView, CartLineView, ProductCardView, ProductSectionView};
 
 pub fn format_money(val: &f64) -> String {
     format!("${:.2}", val)
@@ -63,6 +66,8 @@ pub struct HomeTemplate {
     pub staff_picks: Vec<BookCard>,
     pub cart: CartView,
     pub cart_lines: Vec<CartLineView>,
+    pub drawer_checkout_button: ButtonView,
+    pub drawer_browse_books_link: LinkView,
     pub filters: CatalogFilters,
 }
 impl TemplateHelpers for HomeTemplate {}
@@ -91,6 +96,8 @@ pub struct BookDetailTemplate {
     pub buy_now_button: ButtonView,
     pub cart: CartView,
     pub cart_lines: Vec<CartLineView>,
+    pub drawer_checkout_button: ButtonView,
+    pub drawer_browse_books_link: LinkView,
 }
 impl TemplateHelpers for BookDetailTemplate {}
 
@@ -121,6 +128,9 @@ impl BookDetailTemplate {
 pub struct CartPageTemplate {
     pub genres: Vec<String>,
     pub cart: CartView,
+    pub cart_lines: Vec<CartLineView>,
+    pub checkout_button: ButtonView,
+    pub browse_books_link: LinkView,
 }
 impl TemplateHelpers for CartPageTemplate {}
 
@@ -137,10 +147,34 @@ impl axum::response::IntoResponse for CartPageTemplate {
 }
 
 #[derive(Template)]
+#[template(path = "checkout.html")]
+pub struct CheckoutTemplate {
+    pub sections: Vec<CheckoutSectionView>,
+    pub checkout_lines: Vec<CheckoutLineView>,
+    pub summary: OrderSummaryView,
+    pub cart_link: LinkView,
+}
+impl TemplateHelpers for CheckoutTemplate {}
+
+impl axum::response::IntoResponse for CheckoutTemplate {
+    fn into_response(self) -> axum::response::Response {
+        match self.render() {
+            Ok(html) => axum::response::Html(html).into_response(),
+            Err(err) => {
+                tracing::error!("CheckoutTemplate rendering failed: {:?}", err);
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }
+        }
+    }
+}
+
+#[derive(Template)]
 #[template(path = "components/cart.html")]
 pub struct CartDrawerTemplate {
     pub cart: CartView,
     pub cart_lines: Vec<CartLineView>,
+    pub drawer_checkout_button: ButtonView,
+    pub drawer_browse_books_link: LinkView,
 }
 impl TemplateHelpers for CartDrawerTemplate {}
 

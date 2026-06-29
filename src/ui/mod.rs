@@ -43,9 +43,21 @@ pub struct HtmxAttrs {
     pub vals: String,
     pub target: String,
     pub swap: String,
+    pub headers: String,
 }
 
 impl HtmxAttrs {
+    pub fn none() -> Self {
+        Self {
+            enabled: false,
+            post_url: String::new(),
+            vals: String::new(),
+            target: String::new(),
+            swap: String::new(),
+            headers: String::new(),
+        }
+    }
+
     pub fn post(
         post_url: impl Into<String>,
         vals: impl Into<String>,
@@ -58,6 +70,7 @@ impl HtmxAttrs {
             vals: vals.into(),
             target: target.into(),
             swap: swap.into(),
+            headers: String::new(),
         }
     }
 }
@@ -72,6 +85,24 @@ pub struct LinkView {
 }
 
 impl LinkView {
+    pub fn tracked(
+        label: impl Into<String>,
+        href: impl Into<String>,
+        class_name: impl Into<String>,
+        click_event: &'static str,
+        source: impl Into<String>,
+        target_type: &'static str,
+        target_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            label: label.into(),
+            href: href.into(),
+            class_name: class_name.into(),
+            strong: false,
+            analytics: AnalyticsAttrs::click(click_event, source, target_type, target_id),
+        }
+    }
+
     pub fn product_title(book: &BookCard, source: impl Into<String>) -> Self {
         Self {
             label: book.title.clone(),
@@ -97,6 +128,31 @@ pub struct ButtonView {
 }
 
 impl ButtonView {
+    pub fn tracked(
+        label: impl Into<String>,
+        class_name: impl Into<String>,
+        button_type: &'static str,
+        data_action: impl Into<String>,
+        aria_label: impl Into<String>,
+        click_event: &'static str,
+        source: impl Into<String>,
+        target_type: &'static str,
+        target_id: impl Into<String>,
+    ) -> Self {
+        let target_id = target_id.into();
+        Self {
+            label: label.into(),
+            class_name: class_name.into(),
+            button_type,
+            disabled: false,
+            data_action: data_action.into(),
+            target_id: target_id.clone(),
+            aria_label: aria_label.into(),
+            analytics: AnalyticsAttrs::click(click_event, source, target_type, target_id),
+            htmx: HtmxAttrs::none(),
+        }
+    }
+
     pub fn cart_action(
         label: impl Into<String>,
         class_name: impl Into<String>,
@@ -131,6 +187,7 @@ impl ButtonView {
         copy_id: i64,
         url: impl Into<String>,
         target: impl Into<String>,
+        source: impl Into<String>,
     ) -> Self {
         Self {
             label: label.into(),
@@ -140,9 +197,23 @@ impl ButtonView {
             data_action: String::new(),
             target_id: copy_id.to_string(),
             aria_label: aria_label.into(),
-            analytics: AnalyticsAttrs::click(click_event, "cart.line", "copy", copy_id.to_string()),
+            analytics: AnalyticsAttrs::click(click_event, source, "copy", copy_id.to_string()),
             htmx: HtmxAttrs::post(url, "", target, "outerHTML"),
         }
+    }
+
+    pub fn checkout_place_order(source: impl Into<String>) -> Self {
+        Self::tracked(
+            "Place your order",
+            "primary-button checkout-place-order-button",
+            "submit",
+            "place-order",
+            "Place your order",
+            "checkout_place_order_clicked",
+            source,
+            "checkout",
+            "current",
+        )
     }
 }
 
@@ -164,6 +235,7 @@ pub struct CartLineView {
     pub unit_price_label: String,
     pub line_total_label: String,
     pub option_label: String,
+    pub stock_limit_label: String,
     pub decrease_button: ButtonView,
     pub increase_button: ButtonView,
     pub remove_button: ButtonView,
@@ -171,45 +243,83 @@ pub struct CartLineView {
 
 impl CartLineView {
     pub fn from_line(line: CartLine, htmx_target: impl Into<String>) -> Self {
+        Self::from_line_with_context(line, htmx_target, "cart.line", false)
+    }
+
+    pub fn for_cart_page(line: CartLine) -> Self {
+        Self::from_line_with_context(line, "this", "cart.page", true)
+    }
+
+    fn from_line_with_context(
+        line: CartLine,
+        htmx_target: impl Into<String>,
+        source: impl Into<String>,
+        page_redirect: bool,
+    ) -> Self {
         let htmx_target = htmx_target.into();
+        let source = source.into();
         let copy_id = line.book.copy_id;
         let option_label = if line.book.condition.is_empty() {
             line.book.format.clone()
         } else {
             format!("{} · {}", line.book.condition, line.book.format)
         };
+        let at_stock_limit = line.quantity >= line.book.stock;
+        let stock_limit_label = if at_stock_limit {
+            format!("Only {} available", line.book.stock)
+        } else {
+            String::new()
+        };
+        let mut increase_button = ButtonView::cart_line_action(
+            "+",
+            "stepper-button",
+            "Increase quantity",
+            "cart_quantity_increased",
+            copy_id,
+            format!("/cart/items/{}/increase", copy_id),
+            htmx_target.clone(),
+            source.clone(),
+        );
+        if page_redirect {
+            increase_button.htmx.swap = "none".to_string();
+            increase_button.htmx.headers = r#"{"X-Cart-View":"page"}"#.to_string();
+        }
+        increase_button.disabled = at_stock_limit;
+        let mut decrease_button = ButtonView::cart_line_action(
+            "-",
+            "stepper-button",
+            "Decrease quantity",
+            "cart_quantity_decreased",
+            copy_id,
+            format!("/cart/items/{}/decrease", copy_id),
+            htmx_target.clone(),
+            source.clone(),
+        );
+        let mut remove_button = ButtonView::cart_line_action(
+            "Remove",
+            "remove-button",
+            "Remove item",
+            "cart_item_removed",
+            copy_id,
+            format!("/cart/items/{}/remove", copy_id),
+            htmx_target,
+            source,
+        );
+        if page_redirect {
+            decrease_button.htmx.swap = "none".to_string();
+            decrease_button.htmx.headers = r#"{"X-Cart-View":"page"}"#.to_string();
+            remove_button.htmx.swap = "none".to_string();
+            remove_button.htmx.headers = r#"{"X-Cart-View":"page"}"#.to_string();
+        }
 
         Self {
             unit_price_label: format!("${:.2} each", line.book.price),
             line_total_label: format!("${:.2}", line.line_total),
             option_label,
-            decrease_button: ButtonView::cart_line_action(
-                "-",
-                "stepper-button",
-                "Decrease quantity",
-                "cart_quantity_decreased",
-                copy_id,
-                format!("/cart/items/{}/decrease", copy_id),
-                htmx_target.clone(),
-            ),
-            increase_button: ButtonView::cart_line_action(
-                "+",
-                "stepper-button",
-                "Increase quantity",
-                "cart_quantity_increased",
-                copy_id,
-                format!("/cart/items/{}/increase", copy_id),
-                htmx_target.clone(),
-            ),
-            remove_button: ButtonView::cart_line_action(
-                "Remove",
-                "remove-button",
-                "Remove item",
-                "cart_item_removed",
-                copy_id,
-                format!("/cart/items/{}/remove", copy_id),
-                htmx_target,
-            ),
+            stock_limit_label,
+            decrease_button,
+            increase_button,
+            remove_button,
             line,
         }
     }
@@ -221,6 +331,161 @@ pub fn cart_lines(lines: Vec<CartLine>, htmx_target: impl Into<String>) -> Vec<C
         .into_iter()
         .map(|line| CartLineView::from_line(line, htmx_target.clone()))
         .collect()
+}
+
+pub fn cart_page_lines(lines: Vec<CartLine>) -> Vec<CartLineView> {
+    lines.into_iter().map(CartLineView::for_cart_page).collect()
+}
+
+#[derive(Debug, Clone)]
+pub struct CheckoutSectionView {
+    pub class_name: String,
+    pub eyebrow: String,
+    pub title: String,
+    pub body: String,
+    pub status: String,
+    pub link: LinkView,
+}
+
+impl CheckoutSectionView {
+    pub fn new(
+        class_name: impl Into<String>,
+        eyebrow: impl Into<String>,
+        title: impl Into<String>,
+        body: impl Into<String>,
+        status: impl Into<String>,
+        link: LinkView,
+    ) -> Self {
+        Self {
+            class_name: class_name.into(),
+            eyebrow: eyebrow.into(),
+            title: title.into(),
+            body: body.into(),
+            status: status.into(),
+            link,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CheckoutLineView {
+    pub line: CartLine,
+    pub line_total_label: String,
+    pub option_label: String,
+    pub quantity_label: String,
+    pub pickup_name: String,
+}
+
+impl CheckoutLineView {
+    pub fn from_line(line: CartLine) -> Self {
+        let option_label = if line.book.condition.is_empty() {
+            line.book.format.clone()
+        } else {
+            format!("{} · {}", line.book.condition, line.book.format)
+        };
+        Self {
+            line_total_label: format!("${:.2}", line.line_total),
+            quantity_label: format!("Quantity: {}", line.quantity),
+            pickup_name: format!("pickup-{}", line.book.copy_id),
+            option_label,
+            line,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct OrderSummaryView {
+    pub subtotal_label: String,
+    pub shipping_label: String,
+    pub tax_label: String,
+    pub total_label: String,
+    pub place_order_button: ButtonView,
+}
+
+pub fn checkout_sections() -> Vec<CheckoutSectionView> {
+    vec![
+        CheckoutSectionView::new(
+            "checkout-address-section",
+            "1. Delivery",
+            "Delivering to La Habra, CA",
+            "Store pickup at Davis's Books, 1261 Smoke Tree Dr, La Habra, CA 90631.",
+            "Ready in 1-2 days",
+            LinkView::tracked(
+                "Change cart",
+                "/cart",
+                "checkout-link",
+                "checkout_change_cart_clicked",
+                "checkout.delivery",
+                "cart",
+                "current",
+            ),
+        ),
+        CheckoutSectionView::new(
+            "",
+            "2. Payment",
+            "Secure card payment",
+            "Stripe Checkout will collect card details in the next phase. No card data is stored by Davis's Books.",
+            "Not charged yet",
+            LinkView::tracked(
+                "Use gift card, voucher, or store credit",
+                "/cart",
+                "checkout-link",
+                "checkout_payment_option_clicked",
+                "checkout.payment",
+                "payment",
+                "store-credit",
+            ),
+        ),
+    ]
+}
+
+pub fn checkout_lines(lines: Vec<CartLine>) -> Vec<CheckoutLineView> {
+    lines.into_iter().map(CheckoutLineView::from_line).collect()
+}
+
+pub fn order_summary(
+    cart: &crate::models::CartView,
+    source: impl Into<String>,
+) -> OrderSummaryView {
+    OrderSummaryView {
+        subtotal_label: format!("${:.2}", cart.subtotal),
+        shipping_label: if cart.free_shipping {
+            "Free".to_string()
+        } else {
+            format!("${:.2}", cart.shipping)
+        },
+        tax_label: "Calculated at payment".to_string(),
+        total_label: format!("${:.2}", cart.total),
+        place_order_button: ButtonView::checkout_place_order(source),
+    }
+}
+
+pub fn checkout_start_button(source: impl Into<String>, disabled: bool) -> ButtonView {
+    let mut button = ButtonView::tracked(
+        "Checkout",
+        "primary-button checkout-button",
+        "submit",
+        "checkout",
+        "Checkout",
+        "checkout_started",
+        source,
+        "checkout",
+        "current",
+    );
+    button.disabled = disabled;
+    button
+}
+
+pub fn browse_books_link(source: impl Into<String>, class_name: impl Into<String>) -> LinkView {
+    LinkView::tracked(
+        "Browse used books",
+        "/#catalog",
+        class_name,
+        "browse_books_clicked",
+        source,
+        "catalog",
+        "used-books",
+    )
 }
 
 impl ProductCardView {
