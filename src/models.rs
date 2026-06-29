@@ -51,7 +51,7 @@ pub struct CatalogFilters {
     pub result_text: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize, Default)]
 pub struct CartItem {
     pub copy_id: i64,
     pub quantity: i32,

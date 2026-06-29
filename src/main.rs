@@ -3,11 +3,12 @@ use std::net::SocketAddr;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod app;
-mod models;
+mod cart;
 mod errors;
-mod templates;
-mod store;
 mod handlers;
+mod models;
+mod store;
+mod templates;
 mod ui;
 
 #[tokio::main]
@@ -27,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Database connection setup
     let db_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "sqlite://data/bookstore.db?mode=rwc".to_string());
-    
+
     // Ensure parent directory for database exists
     if let Some(path) = std::path::Path::new(&db_url.trim_start_matches("sqlite://")).parent() {
         if !path.as_os_str().is_empty() {
@@ -46,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Bind and start the server
     let addr_str = std::env::var("ADDR").unwrap_or_else(|_| "127.0.0.1:8080".to_string());
     let addr: SocketAddr = addr_str.parse()?;
-    
+
     tracing::info!("Davis's Books listening on http://{}", addr);
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;

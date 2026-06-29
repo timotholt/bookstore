@@ -28,9 +28,18 @@ pub fn build_router(state: AppState) -> Router {
         .route("/books/:book_id", get(handlers::book_detail))
         .route("/cart", get(handlers::cart_page))
         .route("/cart/items", post(handlers::add_cart_item))
-        .route("/cart/items/:copy_id/increase", post(handlers::increase_cart_item))
-        .route("/cart/items/:copy_id/decrease", post(handlers::decrease_cart_item))
-        .route("/cart/items/:copy_id/remove", post(handlers::remove_cart_item))
+        .route(
+            "/cart/items/:copy_id/increase",
+            post(handlers::increase_cart_item),
+        )
+        .route(
+            "/cart/items/:copy_id/decrease",
+            post(handlers::decrease_cart_item),
+        )
+        .route(
+            "/cart/items/:copy_id/remove",
+            post(handlers::remove_cart_item),
+        )
         .route("/checkout", post(handlers::checkout))
         .nest_service("/assets", ServeDir::new("assets"))
         .route_service("/app.js", ServeFile::new("app.js"))
@@ -73,12 +82,27 @@ mod tests {
         String::from_utf8(body.to_vec()).unwrap()
     }
 
+    fn session_cookie(response: &axum::response::Response) -> String {
+        response
+            .headers()
+            .get(header::SET_COOKIE)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.split(';').next())
+            .expect("set-cookie header")
+            .to_string()
+    }
+
     #[tokio::test]
     async fn healthz_returns_ok() {
         let app = test_app().await;
 
         let response = app
-            .oneshot(Request::builder().uri("/healthz").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/healthz")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
@@ -92,7 +116,12 @@ mod tests {
         let app = test_app().await;
 
         let response = app
-            .oneshot(Request::builder().uri("/readyz").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/readyz")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
@@ -156,13 +185,21 @@ mod tests {
         let app = test_app().await;
 
         let response = app
-            .oneshot(Request::builder().uri("/catalog").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/catalog")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::SEE_OTHER);
         assert_eq!(
-            response.headers().get(header::LOCATION).and_then(|v| v.to_str().ok()),
+            response
+                .headers()
+                .get(header::LOCATION)
+                .and_then(|v| v.to_str().ok()),
             Some("/#catalog")
         );
     }
@@ -172,7 +209,12 @@ mod tests {
         let app = test_app().await;
 
         let response = app
-            .oneshot(Request::builder().uri("/books/b003").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/books/b003")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
@@ -189,6 +231,182 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn add_cart_item_persists_anonymous_cart_in_database() {
+        let (app, db) = test_app_with_db().await;
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/cart/items")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from("copy_id=3"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let cookie = session_cookie(&response);
+        let body = response_body(response).await;
+        assert!(body.contains("Dune"));
+
+        let row = sqlx::query_as::<_, (String, Option<String>, String, i64, i32)>(
+            r#"
+            SELECT c.session_key, c.user_id, c.status, ci.copy_id, ci.quantity
+            FROM carts c
+            JOIN cart_items ci ON ci.cart_id = c.id
+            LIMIT 1
+            "#,
+        )
+        .fetch_one(&db)
+        .await
+        .unwrap();
+
+        assert!(!cookie.is_empty());
+        assert!(!row.0.is_empty());
+        assert_eq!(row.1, None);
+        assert_eq!(row.2, "active");
+        assert_eq!(row.3, 3);
+        assert_eq!(row.4, 1);
+    }
+
+    #[tokio::test]
+    async fn cart_page_reads_persisted_anonymous_cart_by_session_cookie() {
+        let (app, _db) = test_app_with_db().await;
+        let add_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/cart/items")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from("copy_id=3"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let cookie = session_cookie(&add_response);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/cart")
+                    .header(header::COOKIE, cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_body(response).await;
+        assert!(body.contains("Dune"));
+        assert!(body.contains("Your Stack"));
+    }
+
+    #[tokio::test]
+    async fn cart_quantity_routes_update_persisted_rows() {
+        let (app, db) = test_app_with_db().await;
+        let add_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/cart/items")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from("copy_id=3"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let cookie = session_cookie(&add_response);
+
+        let increase_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/cart/items/3/increase")
+                    .header(header::COOKIE, cookie.clone())
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(increase_response.status(), StatusCode::OK);
+
+        let quantity =
+            sqlx::query_scalar::<_, i32>("SELECT quantity FROM cart_items WHERE copy_id = 3")
+                .fetch_one(&db)
+                .await
+                .unwrap();
+        assert_eq!(quantity, 2);
+
+        for _ in 0..2 {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/cart/items/3/decrease")
+                        .header(header::COOKIE, cookie.clone())
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+
+        let remaining =
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM cart_items WHERE copy_id = 3")
+                .fetch_one(&db)
+                .await
+                .unwrap();
+        assert_eq!(remaining, 0);
+    }
+
+    #[tokio::test]
+    async fn cart_add_caps_quantity_at_available_stock() {
+        let (app, db) = test_app_with_db().await;
+        let first_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/cart/items")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from("copy_id=9"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let cookie = session_cookie(&first_response);
+
+        let second_response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/cart/items")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .header(header::COOKIE, cookie)
+                    .body(Body::from("copy_id=9"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(second_response.status(), StatusCode::OK);
+
+        let quantity =
+            sqlx::query_scalar::<_, i32>("SELECT quantity FROM cart_items WHERE copy_id = 9")
+                .fetch_one(&db)
+                .await
+                .unwrap();
+        assert_eq!(quantity, 1);
     }
 
     #[tokio::test]

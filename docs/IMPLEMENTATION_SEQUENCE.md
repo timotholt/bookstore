@@ -94,6 +94,14 @@ Initial progress:
 - Preserve anonymous cart behavior.
 - Merge anonymous carts into user carts on login.
 
+Initial progress:
+
+- Anonymous carts are stored in SQLite through `carts` and `cart_items`.
+- Cart rows are keyed by session today and include nullable `user_id` for future auth merge.
+- Cart rules live in `src/cart.rs` instead of `handlers.rs`.
+- Add, increase, decrease, remove, cart page, checkout, and cart drawer rendering use the DB-backed cart.
+- Route tests prove anonymous cart persistence, later reads by session cookie, quantity updates, and stock caps.
+
 ### 8. Auth
 
 - Add email/password auth first.
