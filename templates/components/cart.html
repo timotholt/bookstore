@@ -18,26 +18,8 @@
       </div>
     </div>
     <div class="cart-items" id="cartItems">
-      {% for line in cart.lines %}
-      <div class="cart-item" style="--cover-color: {{ line.book.cover_color }}">
-        <div class="cart-cover" aria-hidden="true">
-          <img src="/assets/covers/{{ line.book.id }}.jpg" alt="{{ line.book.title }} cover" onerror="this.src='/assets/covers/placeholder.jpg';">
-        </div>
-        <div class="cart-item-main">
-          <strong>{{ line.book.title }}</strong>
-          <span>{% if !line.book.condition.is_empty() %}{{ line.book.condition }} · {% endif %}{{ line.book.format }}</span>
-          <span>{{ self.money(line.book.price) }} each</span>
-          <div class="quantity-stepper">
-            <button type="button" aria-label="Decrease quantity" hx-post="/cart/items/{{ line.book.copy_id }}/decrease" hx-target="#cartDrawer" hx-swap="outerHTML">-</button>
-            <span>{{ line.quantity }}</span>
-            <button type="button" aria-label="Increase quantity" hx-post="/cart/items/{{ line.book.copy_id }}/increase" hx-target="#cartDrawer" hx-swap="outerHTML">+</button>
-          </div>
-        </div>
-        <div class="cart-item-side">
-          <strong>{{ self.money_dec(line.line_total) }}</strong>
-          <button class="remove-button" type="button" hx-post="/cart/items/{{ line.book.copy_id }}/remove" hx-target="#cartDrawer" hx-swap="outerHTML">Remove</button>
-        </div>
-      </div>
+      {% for cart_line in cart_lines %}
+      {% include "components/ui/cart_line.html" %}
       {% else %}
       <div class="empty-cart-message">
         <p>Your stack is empty.</p>

@@ -191,6 +191,7 @@ pub async fn home(
     let deals = store::collection_books(&db, "used-deals", 6).await?;
     let staff_picks = store::collection_books(&db, "staff-picks", 3).await?;
     let cart = cart_view(&db, &session).await?;
+    let cart_lines = ui::cart_lines(cart.lines.clone(), "#cartDrawer");
 
     let featured = all_books.iter()
         .find(|b| b.id == "b005")
@@ -266,6 +267,7 @@ pub async fn home(
         catalog_cards: ui::product_cards(books.clone(), "catalog.results"),
         staff_picks,
         cart,
+        cart_lines,
         filters: result_filters(filters, books.len(), all_books.len()),
     };
 
@@ -314,6 +316,7 @@ pub async fn book_detail(
 
     let all_books = store::list_books(&db, &CatalogFilters::default()).await?;
     let cart = cart_view(&db, &session).await?;
+    let cart_lines = ui::cart_lines(cart.lines.clone(), "#cartDrawer");
 
     let related: Vec<BookCard> = all_books.iter()
         .filter(|b| b.genre == book.genre && b.id != book.id)
@@ -346,6 +349,7 @@ pub async fn book_detail(
         add_button,
         buy_now_button,
         cart,
+        cart_lines,
     };
 
     Ok(template)
@@ -465,6 +469,7 @@ async fn render_cart(
     session: Session,
 ) -> Result<Response, AppError> {
     let cart = cart_view(&db, &session).await?;
-    let template = CartDrawerTemplate { cart };
+    let cart_lines = ui::cart_lines(cart.lines.clone(), "#cartDrawer");
+    let template = CartDrawerTemplate { cart, cart_lines };
     Ok(template.into_response())
 }

@@ -54,11 +54,22 @@ Initial progress:
 - Convert cart controls, catalog filters, search inputs, and account/auth forms as they are touched.
 - Keep HTMX attributes in shared view objects instead of repeating them in templates.
 
+Initial progress:
+
+- Cart drawer line controls use `CartLineView` and shared `ButtonView`.
+- Full cart page controls still need a dedicated page-fragment response before they can safely share drawer HTMX behavior.
+- Full cart page static layout and typography styles moved from inline attributes into `styles.css`.
+- Remaining cart inline styles are runtime values for cover color and progress width.
+
 ### 5. CSS cleanup
 
 - Move inline styles from active templates into `styles.css`.
 - Add `.ui-*` class families for shared controls and components.
 - Use CSS custom properties for repeated design values.
+
+Initial progress:
+
+- Full cart page static styles moved into reusable cart page classes.
 
 ### 6. Server foundation
 

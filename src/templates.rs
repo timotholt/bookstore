@@ -2,7 +2,7 @@ use askama::Template;
 use rust_decimal::Decimal;
 use std::collections::HashMap;
 use crate::models::{BookCard, CartView, CatalogFilters, VariantAttribute};
-use crate::ui::{ButtonView, ProductCardView, ProductSectionView};
+use crate::ui::{ButtonView, CartLineView, ProductCardView, ProductSectionView};
 
 pub fn format_money(val: &f64) -> String {
     format!("${:.2}", val)
@@ -62,6 +62,7 @@ pub struct HomeTemplate {
     pub catalog_cards: Vec<ProductCardView>,
     pub staff_picks: Vec<BookCard>,
     pub cart: CartView,
+    pub cart_lines: Vec<CartLineView>,
     pub filters: CatalogFilters,
 }
 impl TemplateHelpers for HomeTemplate {}
@@ -89,6 +90,7 @@ pub struct BookDetailTemplate {
     pub add_button: ButtonView,
     pub buy_now_button: ButtonView,
     pub cart: CartView,
+    pub cart_lines: Vec<CartLineView>,
 }
 impl TemplateHelpers for BookDetailTemplate {}
 
@@ -138,6 +140,7 @@ impl axum::response::IntoResponse for CartPageTemplate {
 #[template(path = "components/cart.html")]
 pub struct CartDrawerTemplate {
     pub cart: CartView,
+    pub cart_lines: Vec<CartLineView>,
 }
 impl TemplateHelpers for CartDrawerTemplate {}
 

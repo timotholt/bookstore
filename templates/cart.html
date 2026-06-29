@@ -14,76 +14,72 @@
   <body>
     {% include "components/header.html" %}
     
-    <main class="cart-page-main container" style="max-width: 1000px; margin: 40px auto; padding: 0 20px; min-height: 60vh;">
-      <h1 style="font-family: var(--font-serif); margin-bottom: 24px; font-size: 2.2rem; color: var(--ink);">Your Stack</h1>
+    <main class="cart-page-main container">
+      <h1 class="cart-page-title">Your Stack</h1>
       
-      <div class="cart-page-layout" style="display: grid; grid-template-columns: 2fr 1fr; gap: 40px;">
-        <!-- Left: Cart items -->
+      <div class="cart-page-layout">
         <div class="cart-items-section">
           {% for line in cart.lines %}
-          <div class="cart-item" style="--cover-color: {{ line.book.cover_color }}; display: grid; grid-template-columns: 80px 1fr 120px; gap: 20px; padding: 20px 0; border-bottom: 1px solid var(--line);">
-            <div class="cart-cover" style="position: relative; overflow: hidden; width: 80px; height: 115px; border-radius: 4px; box-shadow: 2px 2px 8px rgba(0,0,0,0.15);">
-              <img src="/assets/covers/{{ line.book.id }}.jpg" alt="{{ line.book.title }} cover" onerror="this.src='/assets/covers/placeholder.jpg';" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;">
+          <div class="cart-item cart-item--page" style="--cover-color: {{ line.book.cover_color }}">
+            <div class="cart-cover cart-cover--page">
+              <img src="/assets/covers/{{ line.book.id }}.jpg" alt="{{ line.book.title }} cover" onerror="this.src='/assets/covers/placeholder.jpg';">
             </div>
-            <div class="cart-item-details" style="display: flex; flex-direction: column; justify-content: center; gap: 4px;">
-              <strong style="font-size: 1.15rem; color: var(--ink);">{{ line.book.title }}</strong>
-              {% if !line.book.author.is_empty() %}<span style="color: var(--muted); font-size: 0.92rem;">by {{ line.book.author }}</span>{% endif %}
-              <span style="color: var(--muted); font-size: 0.92rem;">{% if !line.book.condition.is_empty() %}{{ line.book.condition }} · {% endif %}{{ line.book.format }}</span>
+            <div class="cart-item-details">
+              <strong>{{ line.book.title }}</strong>
+              {% if !line.book.author.is_empty() %}<span>by {{ line.book.author }}</span>{% endif %}
+              <span>{% if !line.book.condition.is_empty() %}{{ line.book.condition }} · {% endif %}{{ line.book.format }}</span>
               
-              <!-- Quantity Stepper -->
-              <div class="quantity-stepper" style="margin-top: 12px; display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 4px; width: fit-content; background: #faf8f3; overflow: hidden;">
-                <button type="button" aria-label="Decrease quantity" hx-post="/cart/items/{{ line.book.copy_id }}/decrease" hx-target="body" hx-swap="outerHTML" style="border: none; background: none; padding: 6px 12px; cursor: pointer; font-weight: 700; color: var(--sage-dark); font-size: 1.1rem; outline: none;">-</button>
-                <span style="font-family: var(--font-sans); font-size: 0.95rem; font-weight: 700; min-width: 20px; text-align: center; color: var(--ink);">{{ line.quantity }}</span>
-                <button type="button" aria-label="Increase quantity" hx-post="/cart/items/{{ line.book.copy_id }}/increase" hx-target="body" hx-swap="outerHTML" style="border: none; background: none; padding: 6px 12px; cursor: pointer; font-weight: 700; color: var(--sage-dark); font-size: 1.1rem; outline: none;">+</button>
+              <div class="stepper cart-page-stepper">
+                <button type="button" aria-label="Decrease quantity" hx-post="/cart/items/{{ line.book.copy_id }}/decrease" hx-target="body" hx-swap="outerHTML">-</button>
+                <span>{{ line.quantity }}</span>
+                <button type="button" aria-label="Increase quantity" hx-post="/cart/items/{{ line.book.copy_id }}/increase" hx-target="body" hx-swap="outerHTML">+</button>
               </div>
             </div>
-            <div class="cart-item-price-side" style="display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 12px;">
-              <strong style="font-size: 1.2rem; color: var(--ink);">{{ self.money_dec(line.line_total) }}</strong>
-              <button class="remove-button" type="button" hx-post="/cart/items/{{ line.book.copy_id }}/remove" hx-target="body" hx-swap="outerHTML" style="color: #b91c1c; background: none; border: none; cursor: pointer; font-size: 0.9rem; font-weight: 500; padding: 0;">Remove</button>
+            <div class="cart-item-price-side">
+              <strong>{{ self.money_dec(line.line_total) }}</strong>
+              <button class="remove-button" type="button" hx-post="/cart/items/{{ line.book.copy_id }}/remove" hx-target="body" hx-swap="outerHTML">Remove</button>
             </div>
           </div>
           {% else %}
-          <div class="empty-cart-message" style="text-align: center; padding: 60px 0; background: #faf8f3; border-radius: var(--radius); border: 1px dashed var(--line);">
-            <p style="font-size: 1.25rem; color: var(--muted); margin-bottom: 20px;">Your stack is empty.</p>
-            <a class="primary-button" href="/#catalog" style="display: inline-block; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: 600;">Browse used books</a>
+          <div class="empty-cart-message cart-page-empty">
+            <p>Your stack is empty.</p>
+            <a class="primary-button" href="/#catalog">Browse used books</a>
           </div>
           {% endfor %}
         </div>
         
-        <!-- Right: Summary Card -->
         <div class="cart-summary-section">
-          <div class="cart-summary-card" style="background: #faf8f3; border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; position: sticky; top: 20px; box-shadow: var(--shadow-sm);">
-            <h2 style="font-family: var(--font-serif); font-size: 1.4rem; margin-bottom: 20px; color: var(--ink);">Order Summary</h2>
+          <div class="cart-summary-card">
+            <h2>Order Summary</h2>
             
-            <div class="shipping-progress-container" style="margin-bottom: 24px;">
-              <span class="shipping-progress-text" id="shippingProgressText" style="font-size: 0.85rem; color: var(--muted);">{{ cart.progress_text }}</span>
-              <div class="shipping-progress-bar" style="background: var(--line); height: 6px; border-radius: 3px; margin-top: 8px; overflow: hidden;">
-                <div class="shipping-progress-fill" style="background: var(--gold); height: 100%; transition: width 0.3s ease; width: {{ cart.progress_ratio }}%"></div>
+            <div class="shipping-progress-container cart-summary-progress">
+              <span class="shipping-progress-text" id="shippingProgressText">{{ cart.progress_text }}</span>
+              <div class="shipping-progress-bar">
+                <div class="shipping-progress-fill cart-summary-progress-fill" style="width: {{ cart.progress_ratio }}%"></div>
               </div>
             </div>
 
-            <div style="display: flex; justify-content: space-between; margin-bottom: 14px; font-size: 0.98rem; color: var(--ink);">
+            <div class="cart-row">
               <span>Subtotal</span>
               <strong>{{ self.money_dec(cart.subtotal) }}</strong>
             </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 14px; font-size: 0.98rem; color: var(--ink);">
+            <div class="cart-row">
               <span>Shipping</span>
               <strong>{% if cart.free_shipping %}Free{% else %}{{ self.money_dec(cart.shipping) }}{% endif %}</strong>
             </div>
-            <hr style="border: 0; border-top: 1px solid var(--line); margin: 18px 0;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 24px; font-size: 1.25rem; color: var(--ink);">
+            <div class="cart-row total">
               <span>Total</span>
               <strong>{{ self.money_dec(cart.total) }}</strong>
             </div>
             
             <form action="/checkout" method="post">
-              <button class="primary-button checkout-button" type="submit" style="width: 100%; padding: 14px; font-size: 1.05rem; border-radius: 4px; font-weight: 700;" {% if cart.item_count == 0 %}disabled{% endif %}>Proceed to Checkout</button>
+              <button class="primary-button checkout-button checkout-button--page" type="submit" {% if cart.item_count == 0 %}disabled{% endif %}>Proceed to Checkout</button>
             </form>
             
-            <div style="margin-top: 24px; font-size: 0.85rem; color: var(--muted); display: grid; gap: 10px; text-align: center; border-top: 1px solid var(--line); padding-top: 16px;">
-              <span>✓ Hand-inspected copies</span>
-              <span>✓ Ships in 1-2 days</span>
-              <span>✓ Secure checkout</span>
+            <div class="cart-page-trust-badges">
+              <span>Hand-inspected copies</span>
+              <span>Ships in 1-2 days</span>
+              <span>Secure checkout</span>
             </div>
           </div>
         </div>

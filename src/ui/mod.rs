@@ -1,4 +1,4 @@
-use crate::models::BookCard;
+use crate::models::{BookCard, CartLine};
 
 #[derive(Debug, Clone)]
 pub struct AnalyticsAttrs {
@@ -91,6 +91,7 @@ pub struct ButtonView {
     pub disabled: bool,
     pub data_action: String,
     pub target_id: String,
+    pub aria_label: String,
     pub analytics: AnalyticsAttrs,
     pub htmx: HtmxAttrs,
 }
@@ -111,6 +112,7 @@ impl ButtonView {
             disabled: false,
             data_action: data_action.into(),
             target_id: book.id.clone(),
+            aria_label: String::new(),
             analytics: AnalyticsAttrs::click(click_event, source, "book", book.id.clone()),
             htmx: HtmxAttrs::post(
                 "/cart/items",
@@ -118,6 +120,28 @@ impl ButtonView {
                 "#cartDrawer",
                 "outerHTML",
             ),
+        }
+    }
+
+    pub fn cart_line_action(
+        label: impl Into<String>,
+        class_name: impl Into<String>,
+        aria_label: impl Into<String>,
+        click_event: &'static str,
+        copy_id: i64,
+        url: impl Into<String>,
+        target: impl Into<String>,
+    ) -> Self {
+        Self {
+            label: label.into(),
+            class_name: class_name.into(),
+            button_type: "button",
+            disabled: false,
+            data_action: String::new(),
+            target_id: copy_id.to_string(),
+            aria_label: aria_label.into(),
+            analytics: AnalyticsAttrs::click(click_event, "cart.line", "copy", copy_id.to_string()),
+            htmx: HtmxAttrs::post(url, "", target, "outerHTML"),
         }
     }
 }
@@ -132,6 +156,71 @@ pub struct ProductCardView {
     pub title_link: LinkView,
     pub add_button: ButtonView,
     pub buy_now_button: ButtonView,
+}
+
+#[derive(Debug, Clone)]
+pub struct CartLineView {
+    pub line: CartLine,
+    pub unit_price_label: String,
+    pub line_total_label: String,
+    pub option_label: String,
+    pub decrease_button: ButtonView,
+    pub increase_button: ButtonView,
+    pub remove_button: ButtonView,
+}
+
+impl CartLineView {
+    pub fn from_line(line: CartLine, htmx_target: impl Into<String>) -> Self {
+        let htmx_target = htmx_target.into();
+        let copy_id = line.book.copy_id;
+        let option_label = if line.book.condition.is_empty() {
+            line.book.format.clone()
+        } else {
+            format!("{} · {}", line.book.condition, line.book.format)
+        };
+
+        Self {
+            unit_price_label: format!("${:.2} each", line.book.price),
+            line_total_label: format!("${:.2}", line.line_total),
+            option_label,
+            decrease_button: ButtonView::cart_line_action(
+                "-",
+                "stepper-button",
+                "Decrease quantity",
+                "cart_quantity_decreased",
+                copy_id,
+                format!("/cart/items/{}/decrease", copy_id),
+                htmx_target.clone(),
+            ),
+            increase_button: ButtonView::cart_line_action(
+                "+",
+                "stepper-button",
+                "Increase quantity",
+                "cart_quantity_increased",
+                copy_id,
+                format!("/cart/items/{}/increase", copy_id),
+                htmx_target.clone(),
+            ),
+            remove_button: ButtonView::cart_line_action(
+                "Remove",
+                "remove-button",
+                "Remove item",
+                "cart_item_removed",
+                copy_id,
+                format!("/cart/items/{}/remove", copy_id),
+                htmx_target,
+            ),
+            line,
+        }
+    }
+}
+
+pub fn cart_lines(lines: Vec<CartLine>, htmx_target: impl Into<String>) -> Vec<CartLineView> {
+    let htmx_target = htmx_target.into();
+    lines
+        .into_iter()
+        .map(|line| CartLineView::from_line(line, htmx_target.clone()))
+        .collect()
 }
 
 impl ProductCardView {
