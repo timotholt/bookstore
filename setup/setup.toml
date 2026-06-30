@@ -1,0 +1,94 @@
+[project]
+name = "davis-books"
+owner_email = "timotholt@gmail.com"
+github_repo = "timotholt/bookstore"
+
+[environment.local]
+app_env = "local"
+public_base_url = "http://127.0.0.1:8080"
+database_url = "sqlite://data/bookstore.db?mode=rwc"
+
+[environment.demo]
+app_env = "production"
+public_base_url = ""
+
+[[providers]]
+id = "local"
+adapter = "local"
+required = true
+
+[[providers]]
+id = "github"
+adapter = "cli"
+required = true
+repo = "timotholt/bookstore"
+
+[[providers]]
+id = "neon"
+adapter = "api"
+required = false
+project = "davis-books"
+database = "davis_books"
+roles = ["davis_books_app", "davis_books_migrator"]
+branches = ["main"]
+
+[[providers]]
+id = "railway"
+adapter = "api"
+required = false
+project = "davis-books"
+service = "web"
+environment = "production"
+
+[[providers]]
+id = "stripe"
+adapter = "cli"
+required = false
+mode = "test"
+webhook_path = "/webhooks/stripe"
+
+[[required_env]]
+name = "DATABASE_URL"
+scope = "runtime"
+secret = true
+local_fallback = "sqlite://data/bookstore.db?mode=rwc"
+
+[[required_env]]
+name = "SESSION_SECRET"
+scope = "runtime"
+secret = true
+
+[[required_env]]
+name = "APP_ENV"
+scope = "runtime"
+secret = false
+local_fallback = "local"
+
+[[required_env]]
+name = "PUBLIC_BASE_URL"
+scope = "runtime"
+secret = false
+local_fallback = "http://127.0.0.1:8080"
+
+[[checks]]
+id = "local.repo"
+kind = "git"
+required = true
+
+[[checks]]
+id = "local.toolchain"
+kind = "commands"
+required = true
+commands = ["cargo", "rustc", "git"]
+
+[[checks]]
+id = "database.migrations"
+kind = "sqlx_migrations"
+required = true
+path = "migrations"
+
+[[checks]]
+id = "app.healthz.local"
+kind = "http"
+required = false
+url = "http://127.0.0.1:8080/healthz"

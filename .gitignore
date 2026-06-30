@@ -3,3 +3,9 @@ data/*.db
 data/*.db-*
 /target/
 .env
+.env.*
+!.env.example
+setup/.state/
+setup/.secrets*.env
+setup/artifacts/
+setup/reports/

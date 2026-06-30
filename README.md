@@ -27,6 +27,19 @@ cargo check
 cargo test
 ```
 
+## External World Bootstrap
+
+The project includes an `xtask` scaffold for rebuilding and validating deploy-time external dependencies.
+
+```bash
+cargo xtask external doctor
+cargo xtask external validate --local-only
+cargo xtask external install-deps
+cargo xtask external setup --install-deps
+```
+
+`doctor` and `validate` are read-only. `install-deps` is dry-run by default and runs supported installers only with `--yes`. See [docs/EXTERNAL_WORLD_BOOTSTRAP_SPEC.md](docs/EXTERNAL_WORLD_BOOTSTRAP_SPEC.md) for the desired-state, setup, validation, and provider adapter plan.
+
 ## Current MVP
 
 - Rust `axum` router and Askama server-rendered templates.
