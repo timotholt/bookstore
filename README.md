@@ -61,6 +61,8 @@ See [AGENTS.md](AGENTS.md) before making structural changes. It captures the rep
 
 See [docs/INFRASTRUCTURE_SPEC.md](docs/INFRASTRUCTURE_SPEC.md) for deployment, account ownership, secrets recovery, and production migration planning.
 
+See [docs/EXTERNAL_WORLD_BOOTSTRAP_SPEC.md](docs/EXTERNAL_WORLD_BOOTSTRAP_SPEC.md) for the planned setup/validation system that rebuilds and verifies provider accounts, database resources, deploy settings, auth callbacks, secrets, and other external dependencies.
+
 ## Deprecated Docs
 
 [MIGRATION_PLAN.md](MIGRATION_PLAN.md) is deprecated and remains only as a historical pointer after the Rust migration.

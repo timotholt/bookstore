@@ -8,6 +8,8 @@ This document defines how Davis's Books should be deployed as a credible full-st
 
 The goal is not PCI-grade production commerce. The goal is a professional interview-ready stack that demonstrates real backend engineering: Rust/Axum server rendering, PostgreSQL persistence, migrations, sessions, Stripe Checkout handoff, staff auth, CMS inventory workflows, and a repeatable infrastructure story.
 
+The external setup and validation automation model is defined in [EXTERNAL_WORLD_BOOTSTRAP_SPEC.md](EXTERNAL_WORLD_BOOTSTRAP_SPEC.md). That spec is the source of truth for `cargo xtask external doctor/setup/validate`, provider adapter policy, validation reports, and reproducible third-party configuration.
+
 ## Operating Principles
 
 1. The repository must contain the full system shape: application code, migrations, examples, bootstrap scripts, smoke tests, and runbooks.
