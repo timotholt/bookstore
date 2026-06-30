@@ -1,5 +1,6 @@
 use crate::env_loader::EnvStore;
 use crate::report::{Finding, Report};
+use sqlx::migrate::Migrator;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::sqlite::SqlitePoolOptions;
 use std::collections::BTreeSet;
@@ -62,6 +63,73 @@ pub fn validate_database(root: &Path, env_store: &EnvStore) -> Report {
     report
 }
 
+pub fn repair_database_migrations(root: &Path, env_store: &EnvStore, apply: bool) -> Report {
+    let mut report = Report::new("database.repair_migrations");
+    let Some(database_url) = env_store.get("DATABASE_URL") else {
+        report.findings.push(Finding::fail(
+            "database.migrations.repair",
+            "database",
+            "blocked",
+            "Cannot repair database migrations because DATABASE_URL is missing.",
+            "",
+            "required_env_missing",
+            "Add DATABASE_URL to a recognized env source.",
+        ));
+        return report;
+    };
+
+    let (driver, source) = if database_url.value.starts_with("sqlite:") {
+        ("sqlite", "migrations")
+    } else if database_url.value.starts_with("postgres:")
+        || database_url.value.starts_with("postgresql:")
+    {
+        ("postgres", "migrations_postgres")
+    } else {
+        report.findings.push(Finding::fail(
+            "database.migrations.repair",
+            "database",
+            "unsupported",
+            "Cannot repair migrations for unsupported DATABASE_URL driver.",
+            "Connection string redacted.",
+            "database_url_unsupported",
+            "Use sqlite:// or postgres:// DATABASE_URL.",
+        ));
+        return report;
+    };
+
+    if !apply {
+        report.findings.push(Finding::warn(
+            "database.migrations.repair",
+            "database",
+            "dry_run",
+            &format!("Would run {driver} migrations from {source}."),
+            "Re-run with `cargo xtask external repair --only database.migrations --yes` to apply migrations.",
+        ));
+        return report;
+    }
+
+    match run_migrations(root, &database_url.value, source) {
+        Ok(()) => report.findings.push(Finding::ok(
+            "database.migrations.repair",
+            "database",
+            "applied",
+            &format!("Applied {driver} migrations from {source}."),
+            "Connection string redacted.",
+        )),
+        Err(err) => report.findings.push(Finding::fail(
+            "database.migrations.repair",
+            "database",
+            "failed",
+            "Could not apply database migrations.",
+            &err,
+            "migration_apply_failed",
+            "Inspect the migration error, fix the migration set, then rerun repair.",
+        )),
+    }
+
+    report
+}
+
 fn run_sqlite_validation(root: &Path, database_url: &str) -> Result<Vec<Finding>, String> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -76,6 +144,57 @@ fn run_postgres_validation(root: &Path, database_url: &str) -> Result<Vec<Findin
         .build()
         .map_err(|err| format!("failed to create tokio runtime: {err}"))?;
     runtime.block_on(validate_postgres_async(root, database_url))
+}
+
+fn run_migrations(root: &Path, database_url: &str, source: &str) -> Result<(), String> {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|err| format!("failed to create tokio runtime: {err}"))?;
+
+    if database_url.starts_with("sqlite:") {
+        runtime.block_on(run_sqlite_migrations(root, database_url, source))
+    } else {
+        runtime.block_on(run_postgres_migrations(root, database_url, source))
+    }
+}
+
+async fn run_sqlite_migrations(
+    root: &Path,
+    database_url: &str,
+    source: &str,
+) -> Result<(), String> {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect(database_url)
+        .await
+        .map_err(|err| format!("connect failed: {err}"))?;
+    let migrator = Migrator::new(root.join(source).as_path())
+        .await
+        .map_err(|err| format!("could not load migrations from {source}: {err}"))?;
+    migrator
+        .run(&pool)
+        .await
+        .map_err(|err| format!("migration failed: {err}"))
+}
+
+async fn run_postgres_migrations(
+    root: &Path,
+    database_url: &str,
+    source: &str,
+) -> Result<(), String> {
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(database_url)
+        .await
+        .map_err(|err| format!("connect failed: {err}"))?;
+    let migrator = Migrator::new(root.join(source).as_path())
+        .await
+        .map_err(|err| format!("could not load migrations from {source}: {err}"))?;
+    migrator
+        .run(&pool)
+        .await
+        .map_err(|err| format!("migration failed: {err}"))
 }
 
 async fn validate_sqlite_async(root: &Path, database_url: &str) -> Result<Vec<Finding>, String> {
@@ -265,6 +384,24 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn repair_migrations_dry_run_selects_postgres_source() {
+        let store = EnvStore::from_values(std::collections::BTreeMap::from([(
+            "DATABASE_URL".to_string(),
+            crate::env_loader::EnvValue {
+                value: "postgresql://example/db".to_string(),
+                source: crate::env_loader::EnvSource::Process,
+            },
+        )]));
+
+        let report = repair_database_migrations(Path::new("."), &store, false);
+
+        assert!(report.findings.iter().any(|finding| {
+            finding.id == "database.migrations.repair"
+                && finding.summary.contains("migrations_postgres")
+        }));
     }
 
     fn temp_dir(name: &str) -> std::path::PathBuf {

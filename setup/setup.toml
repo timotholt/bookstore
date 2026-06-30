@@ -28,8 +28,8 @@ id = "neon"
 adapter = "api"
 required = false
 project = "davis-books"
-database = "davis_books"
-roles = ["davis_books_app", "davis_books_migrator"]
+database = "neondb"
+roles = ["neondb_owner"]
 branches = ["main"]
 
 [[providers]]

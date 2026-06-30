@@ -1,4 +1,4 @@
-use crate::env_loader::EnvStore;
+use crate::env_loader::{EnvStore, EnvValue};
 use crate::manifest::SetupManifest;
 use crate::report::Finding;
 use serde_json::Value;
@@ -62,7 +62,7 @@ pub fn plan_neon_setup(
         ),
     ));
 
-    if env_store.get("NEON_API_KEY").is_some() {
+    if usable_env_value(env_store, "NEON_API_KEY").is_some() {
         findings.push(Finding::manual(
             "neon.api.inspect",
             "neon",
@@ -130,7 +130,7 @@ pub fn plan_neon_setup(
 
 fn validate_neon_api(manifest: &SetupManifest, env_store: &EnvStore) -> Vec<Finding> {
     let mut findings = Vec::new();
-    let Some(api_key) = env_store.get("NEON_API_KEY") else {
+    let Some(api_key) = usable_env_value(env_store, "NEON_API_KEY") else {
         findings.push(Finding::skipped(
             "neon.api.account",
             "neon",
@@ -400,10 +400,25 @@ fn command_exists(command: &str) -> bool {
         .unwrap_or(false)
 }
 
+fn usable_env_value<'a>(env_store: &'a EnvStore, key: &str) -> Option<&'a EnvValue> {
+    env_store
+        .get(key)
+        .filter(|value| !is_placeholder_secret(&value.value))
+}
+
+fn is_placeholder_secret(value: &str) -> bool {
+    let value = value.trim();
+    value.is_empty()
+        || value.eq_ignore_ascii_case("replace-me")
+        || value.starts_with("replace-with-")
+        || value.ends_with("_replace_me")
+        || value.contains("_replace_")
+}
+
 fn validate_neon_readiness(env_store: &EnvStore) -> Vec<Finding> {
     let mut findings = Vec::new();
 
-    if env_store.get("NEON_API_KEY").is_some() {
+    if usable_env_value(env_store, "NEON_API_KEY").is_some() {
         findings.push(Finding::ok(
             "neon.credentials",
             "neon",
@@ -480,7 +495,7 @@ fn validate_neon_readiness(env_store: &EnvStore) -> Vec<Finding> {
 
 fn validate_railway_readiness(env_store: &EnvStore) -> Vec<Finding> {
     let mut findings = Vec::new();
-    if env_store.get("RAILWAY_TOKEN").is_some() {
+    if usable_env_value(env_store, "RAILWAY_TOKEN").is_some() {
         findings.push(Finding::ok(
             "railway.credentials",
             "railway",
@@ -521,7 +536,7 @@ fn validate_railway_readiness(env_store: &EnvStore) -> Vec<Finding> {
 
 fn validate_stripe_readiness(env_store: &EnvStore) -> Vec<Finding> {
     let mut findings = Vec::new();
-    if env_store.get("STRIPE_SECRET_KEY").is_some() {
+    if usable_env_value(env_store, "STRIPE_SECRET_KEY").is_some() {
         findings.push(Finding::ok(
             "stripe.credentials",
             "stripe",
@@ -611,6 +626,13 @@ mod tests {
     #[test]
     fn url_encode_handles_spaces_and_symbols() {
         assert_eq!(url_encode("davis books/test"), "davis%20books%2Ftest");
+    }
+
+    #[test]
+    fn placeholder_values_are_not_usable_credentials() {
+        let store = store_with([("NEON_API_KEY", "replace-with-neon-key")]);
+
+        assert!(usable_env_value(&store, "NEON_API_KEY").is_none());
     }
 
     fn store_with<const N: usize>(pairs: [(&str, &str); N]) -> EnvStore {

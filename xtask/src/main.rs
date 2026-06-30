@@ -5,7 +5,7 @@ mod providers;
 mod report;
 mod secrets;
 
-use database::validate_database;
+use database::{repair_database_migrations, validate_database};
 use env_loader::EnvStore;
 use manifest::SetupManifest;
 use providers::{plan_neon_setup, validate_provider_readiness};
@@ -164,8 +164,13 @@ fn run_external(root: &Path, args: &[String]) -> Result<(), String> {
                     "Repair requires an explicit --only selector.",
                     "",
                     "repair_target_missing",
-                    "Run `cargo xtask external repair --only <finding-or-provider>` after reviewing validation output.",
+                        "Run `cargo xtask external repair --only <finding-or-provider>` after reviewing validation output.",
                 ));
+            } else if options.only.iter().any(|selector| {
+                selector == "database" || selector.starts_with("database.migrations")
+            }) {
+                let env_store = EnvStore::load(root);
+                report.extend(repair_database_migrations(root, &env_store, options.yes));
             } else {
                 report.findings.push(Finding::manual(
                     "repair.adapters",
