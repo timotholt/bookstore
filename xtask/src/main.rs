@@ -1,7 +1,9 @@
+mod database;
 mod env_loader;
 mod report;
 mod secrets;
 
+use database::validate_database;
 use env_loader::EnvStore;
 use report::{render_human_report, render_json_report, Finding, Report};
 use secrets::import_email;
@@ -292,6 +294,7 @@ fn build_validation_report(root: &Path, local_only: bool) -> Report {
     );
 
     if local_only {
+        report.extend(validate_database(root, &env_store));
         report.findings.push(Finding::info(
             "validate.scope",
             "external",

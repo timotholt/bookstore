@@ -36,6 +36,7 @@ cargo xtask external doctor
 cargo xtask external plan --local-only
 cargo xtask external validate --local-only
 cargo xtask external validate --local-only --json --write-report
+cargo xtask external validate --local-only --only database --json
 cargo xtask external install-deps
 cargo xtask external setup --install-deps
 cargo xtask external repair --only database.migrations

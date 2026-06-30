@@ -3010,6 +3010,10 @@ dependencies = [
 [[package]]
 name = "xtask"
 version = "0.1.0"
+dependencies = [
+ "sqlx",
+ "tokio",
+]
 
 [[package]]
 name = "yoke"
