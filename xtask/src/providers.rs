@@ -361,13 +361,24 @@ fn find_named_object_id(json: &Value, collection: &str, expected: &str) -> Optio
         .as_array()?
         .iter()
         .find(|item| object_matches_name_or_id(item, expected))
-        .and_then(|item| {
-            item.get("id")
-                .or_else(|| item.get("project_id"))
-                .or_else(|| item.get("branch_id"))
-        })
-        .and_then(Value::as_str)
-        .map(str::to_string)
+        .map(|item| object_identifier(item, expected))
+}
+
+fn object_identifier(item: &Value, fallback: &str) -> String {
+    for key in ["id", "project_id", "branch_id", "name"] {
+        if let Some(value) = item.get(key) {
+            if let Some(value) = value.as_str() {
+                return value.to_string();
+            }
+            if let Some(value) = value.as_i64() {
+                return value.to_string();
+            }
+            if let Some(value) = value.as_u64() {
+                return value.to_string();
+            }
+        }
+    }
+    fallback.to_string()
 }
 
 fn object_matches_name_or_id(item: &Value, expected: &str) -> bool {
@@ -620,6 +631,20 @@ mod tests {
         assert_eq!(
             find_named_object_id(&json, "projects", "davis-books"),
             Some("project-id".to_string())
+        );
+    }
+
+    #[test]
+    fn neon_resource_lookup_handles_numeric_ids() {
+        let json: Value = serde_json::json!({
+            "databases": [
+                {"id": 22264968, "name": "neondb"}
+            ]
+        });
+
+        assert_eq!(
+            find_named_object_id(&json, "databases", "neondb"),
+            Some("22264968".to_string())
         );
     }
 

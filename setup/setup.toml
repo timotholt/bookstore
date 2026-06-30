@@ -27,10 +27,10 @@ repo = "timotholt/bookstore"
 id = "neon"
 adapter = "api"
 required = false
-project = "davis-books"
+project = "bookstore"
 database = "neondb"
 roles = ["neondb_owner"]
-branches = ["main"]
+branches = ["production"]
 
 [[providers]]
 id = "railway"
