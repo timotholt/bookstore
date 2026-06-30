@@ -1,0 +1,80 @@
+<main class="cart-page-main container" id="cartPageMain" data-cart-count="{{ cart.item_count }}">
+  <h1 class="cart-page-title">Your Stack</h1>
+
+  <div class="cart-page-layout">
+    <div class="cart-items-section">
+      <section class="cart-items-card" aria-labelledby="cartItemsTitle">
+        <div class="cart-items-heading">
+          <h2 id="cartItemsTitle">Items in your cart</h2>
+          <span>{{ cart.item_count }} item{% if cart.item_count != 1 %}s{% endif %}</span>
+        </div>
+
+        <div class="cart-items-list">
+          {% if let Some(notice) = removed_notice %}
+          {% include "components/ui/cart_removed_notice.html" %}
+          {% endif %}
+          {% for cart_line in cart_lines %}
+          {% include "components/ui/cart_page_line.html" %}
+          {% else %}
+          <div class="empty-cart-message cart-page-empty">
+            <p>Your stack is empty.</p>
+            {% let link = browse_books_link.clone() %}
+            {% include "components/ui/link.html" %}
+          </div>
+          {% endfor %}
+        </div>
+      </section>
+
+      {% if !saved_lines.is_empty() %}
+      <section class="saved-for-later-section" aria-labelledby="savedForLaterTitle">
+        <div class="saved-for-later-heading">
+          <h2 id="savedForLaterTitle">Saved for later</h2>
+          <span>{{ saved_count_label }}</span>
+        </div>
+        <div class="saved-lines">
+          {% for saved_line in saved_lines %}
+          {% include "components/ui/saved_line.html" %}
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
+    </div>
+
+    <div class="cart-summary-section">
+      <div class="cart-summary-card">
+        <h2>Order Summary</h2>
+
+        <div class="shipping-progress-container cart-summary-progress">
+          <span class="shipping-progress-text" id="shippingProgressText">{{ cart.progress_text }}</span>
+          <div class="shipping-progress-bar">
+            <div class="shipping-progress-fill cart-summary-progress-fill" style="width: {{ cart.progress_ratio }}%"></div>
+          </div>
+        </div>
+
+        <div class="cart-row">
+          <span>Subtotal</span>
+          <strong>{{ self.money_dec(cart.subtotal) }}</strong>
+        </div>
+        <div class="cart-row">
+          <span>Shipping</span>
+          <strong>{% if cart.free_shipping %}Free{% else %}{{ self.money_dec(cart.shipping) }}{% endif %}</strong>
+        </div>
+        <div class="cart-row total">
+          <span>Total</span>
+          <strong>{{ self.money_dec(cart.total) }}</strong>
+        </div>
+
+        <form action="/checkout" method="get">
+          {% let button = checkout_button.clone() %}
+          {% include "components/ui/button.html" %}
+        </form>
+
+        <div class="cart-page-trust-badges">
+          <span>Hand-inspected copies</span>
+          <span>Ships in 1-2 days</span>
+          <span>Secure checkout</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>

@@ -57,6 +57,12 @@ pub struct CartItem {
     pub quantity: i32,
 }
 
+#[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize, Default)]
+pub struct SavedItem {
+    pub copy_id: i64,
+    pub quantity: i32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CartLine {
     pub book: BookCard,
@@ -74,6 +80,12 @@ pub struct CartView {
     pub free_shipping: bool,
     pub progress_text: String,
     pub progress_ratio: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SavedItemsView {
+    pub lines: Vec<CartLine>,
+    pub item_count: i32,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

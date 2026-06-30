@@ -174,7 +174,7 @@ impl ButtonView {
                 "/cart/items",
                 format!(r#"{{"copy_id":"{}"}}"#, book.copy_id),
                 "#cartDrawer",
-                "outerHTML",
+                "outerHTML show:none",
             ),
         }
     }
@@ -198,7 +198,7 @@ impl ButtonView {
             target_id: copy_id.to_string(),
             aria_label: aria_label.into(),
             analytics: AnalyticsAttrs::click(click_event, source, "copy", copy_id.to_string()),
-            htmx: HtmxAttrs::post(url, "", target, "outerHTML"),
+            htmx: HtmxAttrs::post(url, "", target, "outerHTML show:none"),
         }
     }
 
@@ -220,7 +220,6 @@ impl ButtonView {
 #[derive(Debug, Clone)]
 pub struct ProductCardView {
     pub book: BookCard,
-    pub price_label: String,
     pub rating_count: i32,
     pub extra_class: String,
     pub analytics: AnalyticsAttrs,
@@ -239,6 +238,7 @@ pub struct CartLineView {
     pub decrease_button: ButtonView,
     pub increase_button: ButtonView,
     pub remove_button: ButtonView,
+    pub save_for_later_button: ButtonView,
 }
 
 impl CartLineView {
@@ -247,7 +247,7 @@ impl CartLineView {
     }
 
     pub fn for_cart_page(line: CartLine) -> Self {
-        Self::from_line_with_context(line, "this", "cart.page", true)
+        Self::from_line_with_context(line, "#cartPageMain", "cart.page", true)
     }
 
     fn from_line_with_context(
@@ -281,7 +281,7 @@ impl CartLineView {
             source.clone(),
         );
         if page_redirect {
-            increase_button.htmx.swap = "none".to_string();
+            increase_button.htmx.swap = "outerHTML show:none".to_string();
             increase_button.htmx.headers = r#"{"X-Cart-View":"page"}"#.to_string();
         }
         increase_button.disabled = at_stock_limit;
@@ -302,14 +302,28 @@ impl CartLineView {
             "cart_item_removed",
             copy_id,
             format!("/cart/items/{}/remove", copy_id),
+            htmx_target.clone(),
+            source.clone(),
+        );
+        let mut save_for_later_button = ButtonView::cart_line_action(
+            "Save for later",
+            "cart-secondary-action",
+            "Save for later",
+            "cart_item_saved_for_later",
+            copy_id,
+            format!("/cart/items/{}/save-for-later", copy_id),
             htmx_target,
             source,
         );
         if page_redirect {
-            decrease_button.htmx.swap = "none".to_string();
+            decrease_button.htmx.swap = "outerHTML show:none".to_string();
             decrease_button.htmx.headers = r#"{"X-Cart-View":"page"}"#.to_string();
-            remove_button.htmx.swap = "none".to_string();
+            remove_button.htmx.swap = "outerHTML show:none".to_string();
             remove_button.htmx.headers = r#"{"X-Cart-View":"page"}"#.to_string();
+            save_for_later_button.htmx.swap = "outerHTML show:none".to_string();
+            save_for_later_button.htmx.headers = r#"{"X-Cart-View":"page"}"#.to_string();
+        } else {
+            save_for_later_button.htmx.target = "#cartDrawer".to_string();
         }
 
         Self {
@@ -319,6 +333,97 @@ impl CartLineView {
             stock_limit_label,
             decrease_button,
             increase_button,
+            remove_button,
+            save_for_later_button,
+            line,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SavedLineView {
+    pub line: CartLine,
+    pub line_total_label: String,
+    pub option_label: String,
+    pub quantity_label: String,
+    pub move_to_cart_button: ButtonView,
+    pub remove_button: ButtonView,
+}
+
+#[derive(Debug, Clone)]
+pub struct RemovedCartNoticeView {
+    pub title: String,
+    pub restore_button: ButtonView,
+}
+
+impl RemovedCartNoticeView {
+    pub fn from_line_with_context(
+        line: CartLine,
+        htmx_target: impl Into<String>,
+        source: impl Into<String>,
+        page_redirect: bool,
+    ) -> Self {
+        let copy_id = line.book.copy_id;
+        let mut restore_button = ButtonView::cart_line_action(
+            "Undo",
+            "cart-undo-link",
+            "Undo remove item",
+            "cart_item_remove_undone",
+            copy_id,
+            format!("/cart/items/{}/restore", copy_id),
+            htmx_target,
+            source,
+        );
+        if page_redirect {
+            restore_button.htmx.swap = "outerHTML show:none".to_string();
+            restore_button.htmx.headers = r#"{"X-Cart-View":"page"}"#.to_string();
+        }
+
+        Self {
+            title: line.book.title,
+            restore_button,
+        }
+    }
+}
+
+impl SavedLineView {
+    pub fn from_line(line: CartLine) -> Self {
+        let copy_id = line.book.copy_id;
+        let option_label = if line.book.condition.is_empty() {
+            line.book.format.clone()
+        } else {
+            format!("{} · {}", line.book.condition, line.book.format)
+        };
+        let mut move_to_cart_button = ButtonView::cart_line_action(
+            "Move to cart",
+            "cart-secondary-action saved-line-primary",
+            "Move to cart",
+            "saved_item_moved_to_cart",
+            copy_id,
+            format!("/saved-items/{}/move-to-cart", copy_id),
+            "#cartPageMain",
+            "cart.saved",
+        );
+        move_to_cart_button.htmx.swap = "outerHTML show:none".to_string();
+        move_to_cart_button.htmx.headers = r#"{"X-Cart-View":"page"}"#.to_string();
+        let mut remove_button = ButtonView::cart_line_action(
+            "Remove",
+            "remove-button",
+            "Remove saved item",
+            "saved_item_removed",
+            copy_id,
+            format!("/saved-items/{}/remove", copy_id),
+            "#cartPageMain",
+            "cart.saved",
+        );
+        remove_button.htmx.swap = "outerHTML show:none".to_string();
+        remove_button.htmx.headers = r#"{"X-Cart-View":"page"}"#.to_string();
+
+        Self {
+            line_total_label: format!("${:.2}", line.line_total),
+            quantity_label: format!("Saved quantity: {}", line.quantity),
+            option_label,
+            move_to_cart_button,
             remove_button,
             line,
         }
@@ -337,6 +442,24 @@ pub fn cart_page_lines(lines: Vec<CartLine>) -> Vec<CartLineView> {
     lines.into_iter().map(CartLineView::for_cart_page).collect()
 }
 
+pub fn saved_lines(lines: Vec<CartLine>) -> Vec<SavedLineView> {
+    lines.into_iter().map(SavedLineView::from_line).collect()
+}
+
+pub fn removed_notice(
+    line: Option<CartLine>,
+    htmx_target: impl Into<String>,
+    source: impl Into<String>,
+) -> Option<RemovedCartNoticeView> {
+    line.map(|line| RemovedCartNoticeView::from_line_with_context(line, htmx_target, source, false))
+}
+
+pub fn cart_page_removed_notice(line: Option<CartLine>) -> Option<RemovedCartNoticeView> {
+    line.map(|line| {
+        RemovedCartNoticeView::from_line_with_context(line, "#cartPageMain", "cart.page", true)
+    })
+}
+
 #[derive(Debug, Clone)]
 pub struct CheckoutSectionView {
     pub class_name: String,
@@ -344,17 +467,17 @@ pub struct CheckoutSectionView {
     pub title: String,
     pub body: String,
     pub status: String,
+    pub has_link: bool,
     pub link: LinkView,
 }
 
 impl CheckoutSectionView {
-    pub fn new(
+    pub fn informational(
         class_name: impl Into<String>,
         eyebrow: impl Into<String>,
         title: impl Into<String>,
         body: impl Into<String>,
         status: impl Into<String>,
-        link: LinkView,
     ) -> Self {
         Self {
             class_name: class_name.into(),
@@ -362,7 +485,16 @@ impl CheckoutSectionView {
             title: title.into(),
             body: body.into(),
             status: status.into(),
-            link,
+            has_link: false,
+            link: LinkView::tracked(
+                "",
+                "#checkout",
+                "",
+                "checkout_section_link_hidden",
+                "checkout.section",
+                "checkout",
+                "current",
+            ),
         }
     }
 }
@@ -404,37 +536,19 @@ pub struct OrderSummaryView {
 
 pub fn checkout_sections() -> Vec<CheckoutSectionView> {
     vec![
-        CheckoutSectionView::new(
+        CheckoutSectionView::informational(
             "checkout-address-section",
             "1. Delivery",
             "Delivering to La Habra, CA",
             "Store pickup at Davis's Books, 1261 Smoke Tree Dr, La Habra, CA 90631.",
             "Ready in 1-2 days",
-            LinkView::tracked(
-                "Change cart",
-                "/cart",
-                "checkout-link",
-                "checkout_change_cart_clicked",
-                "checkout.delivery",
-                "cart",
-                "current",
-            ),
         ),
-        CheckoutSectionView::new(
+        CheckoutSectionView::informational(
             "",
             "2. Payment",
             "Secure card payment",
             "Stripe Checkout will collect card details in the next phase. No card data is stored by Davis's Books.",
             "Not charged yet",
-            LinkView::tracked(
-                "Use gift card, voucher, or store credit",
-                "/cart",
-                "checkout-link",
-                "checkout_payment_option_clicked",
-                "checkout.payment",
-                "payment",
-                "store-credit",
-            ),
         ),
     ]
 }
@@ -510,7 +624,6 @@ impl ProductCardView {
         );
 
         Self {
-            price_label: format!("${:.2}", book.price),
             rating_count: 48,
             extra_class: String::new(),
             analytics: AnalyticsAttrs::product(source, book.id.clone()),

@@ -103,7 +103,12 @@
               </div>
               <div class="price-row">
                 <span class="discount-badge">-33%</span>
-                <span class="price"><span class="price-prefix">from </span><strong class="price-val">{{ self.money(featured.price) }}</strong></span>
+                <span class="ui-price ui-price--card">
+                  <span class="ui-price-prefix">from</span>
+                  <span class="ui-price-symbol">$</span>
+                  <strong class="ui-price-dollars">{{ self.price_dollars(featured.price) }}</strong>
+                  <span class="ui-price-cents">{{ self.price_cents(featured.price) }}</span>
+                </span>
               </div>
               <div class="condition-row">
                 <span class="pill condition">{{ featured.condition }}</span>

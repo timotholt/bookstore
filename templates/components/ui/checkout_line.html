@@ -4,10 +4,12 @@
     {% include "components/book_cover.html" %}
   </div>
   <div class="checkout-line-copy">
-    <h3>{{ checkout_line.line.book.title }}</h3>
+    <div class="checkout-line-title-row">
+      <h3>{{ checkout_line.line.book.title }}</h3>
+      <strong>{{ checkout_line.line_total_label }}</strong>
+    </div>
     {% if !checkout_line.line.book.author.is_empty() %}<p>by {{ checkout_line.line.book.author }}</p>{% endif %}
     <p>{{ checkout_line.option_label }}</p>
-    <strong>{{ checkout_line.line_total_label }}</strong>
     <p>{{ checkout_line.quantity_label }}</p>
   </div>
   <fieldset class="checkout-delivery-options">

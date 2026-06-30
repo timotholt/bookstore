@@ -3,8 +3,10 @@
     <p class="checkout-eyebrow">{{ section.eyebrow }}</p>
     <h2>{{ section.title }}</h2>
     <p>{{ section.body }}</p>
+    {% if section.has_link %}
     {% let link = section.link.clone() %}
     {% include "components/ui/link.html" %}
+    {% endif %}
   </div>
   <span class="checkout-status">{{ section.status }}</span>
 </section>

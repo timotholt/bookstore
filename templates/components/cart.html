@@ -18,6 +18,9 @@
       </div>
     </div>
     <div class="cart-items" id="cartItems">
+      {% if let Some(notice) = removed_notice %}
+      {% include "components/ui/cart_removed_notice.html" %}
+      {% endif %}
       {% for cart_line in cart_lines %}
       {% include "components/ui/cart_line.html" %}
       {% else %}

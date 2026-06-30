@@ -1,5 +1,8 @@
 (function () {
   let pendingCartOpen = false;
+  let cartWasOpenBeforeSwap = false;
+  let drawerItemsScrollTop = 0;
+  let cartPageScrollY = null;
 
   function sendEvent(payload) {
     const body = JSON.stringify(Object.assign({
@@ -76,18 +79,50 @@
     return element && element.closest && element.closest("#cartDrawer");
   }
 
+  function rememberDrawerScroll() {
+    const items = document.querySelector("#cartDrawer .cart-items");
+    drawerItemsScrollTop = items ? items.scrollTop : 0;
+  }
+
+  function restoreDrawerScroll() {
+    const items = document.querySelector("#cartDrawer .cart-items");
+    if (items && drawerItemsScrollTop > 0) {
+      items.scrollTop = drawerItemsScrollTop;
+    }
+  }
+
+  function rememberCartPageScroll(source) {
+    if (!source || !source.closest || !source.closest("#cartPageMain")) return;
+    cartPageScrollY = window.scrollY;
+  }
+
+  function restoreCartPageScroll() {
+    if (cartPageScrollY === null) return;
+    const cartMain = document.getElementById("cartPageMain");
+    const hasActiveCartLines = Boolean(document.querySelector("#cartPageMain [data-cart-line]"));
+    if (cartMain && !hasActiveCartLines) {
+      window.scrollTo(0, cartMain.offsetTop);
+    } else {
+      window.scrollTo(0, cartPageScrollY);
+    }
+    cartPageScrollY = null;
+  }
+
   function syncCartCount() {
     const drawer = cartDrawer();
-    const badge = document.querySelector("[data-cart-count]");
-    if (drawer && badge) {
-      const oldCount = badge.textContent || "0";
-      const newCount = drawer.dataset.cartCount || "0";
-      badge.textContent = newCount;
-      if (parseInt(newCount) > parseInt(oldCount)) {
-        badge.classList.remove("badge-pop");
-        void badge.offsetWidth; // Trigger reflow to restart animation
-        badge.classList.add("badge-pop");
-      }
+    const source = drawer || document.getElementById("cartPageMain");
+    const badges = Array.from(document.querySelectorAll("[data-cart-count-badge]"));
+    if (source && badges.length > 0) {
+      const newCount = source.dataset.cartCount || "0";
+      badges.forEach(function (badge) {
+        const oldCount = badge.textContent || "0";
+        badge.textContent = newCount;
+        if (parseInt(newCount) > parseInt(oldCount)) {
+          badge.classList.remove("badge-pop");
+          void badge.offsetWidth; // Trigger reflow to restart animation
+          badge.classList.add("badge-pop");
+        }
+      });
     }
   }
 
@@ -99,6 +134,19 @@
     document.body.classList.add("cart-open");
     const toggle = document.querySelector(".cart-toggle");
     if (toggle) toggle.setAttribute("aria-expanded", "true");
+  }
+
+  function openCartWithoutAnimation() {
+    const drawer = cartDrawer();
+    if (!drawer) return;
+    const panel = drawer.querySelector(".cart-panel");
+    if (panel) panel.classList.add("no-drawer-animation");
+    openCart();
+    if (panel) {
+      window.requestAnimationFrame(function () {
+        panel.classList.remove("no-drawer-animation");
+      });
+    }
   }
 
   function openCartSoon() {
@@ -231,21 +279,49 @@
     const source = event.detail && event.detail.elt;
     if (!source || !source.closest) return;
     if (isInsideCartDrawer(source)) {
-      pendingCartOpen = true;
+      rememberDrawerScroll();
+      if (document.body.classList.contains("cart-open")) {
+        document.body.classList.add("cart-drawer-updating");
+      }
     }
+    rememberCartPageScroll(source);
     const form = source.matches("#catalogFilters") ? source : source.closest("#catalogFilters");
     if (!form) return;
     trackSearch(form, "catalog.filters");
   });
 
-  document.body.addEventListener("htmx:afterSwap", function (event) {
-    syncCartCount();
-    if ((event.detail && event.detail.target && event.detail.target.id === "cartDrawer") || pendingCartOpen) {
-      openCart();
+  document.body.addEventListener("htmx:beforeSwap", function (event) {
+    const target = event.detail && event.detail.target;
+    cartWasOpenBeforeSwap = Boolean(target && target.id === "cartDrawer" && target.classList.contains("is-open"));
+    if (cartWasOpenBeforeSwap) {
+      rememberDrawerScroll();
+      document.body.classList.add("cart-drawer-updating");
     }
   });
 
-  document.body.addEventListener("htmx:afterRequest", openCartSoon);
+  document.body.addEventListener("htmx:afterSwap", function (event) {
+    syncCartCount();
+    if ((event.detail && event.detail.target && event.detail.target.id === "cartDrawer") || pendingCartOpen) {
+      if (cartWasOpenBeforeSwap) {
+        openCartWithoutAnimation();
+        window.requestAnimationFrame(restoreDrawerScroll);
+      } else {
+        openCart();
+      }
+    }
+    if (event.detail && event.detail.target && event.detail.target.id === "cartPageMain") {
+      window.requestAnimationFrame(restoreCartPageScroll);
+    }
+    cartWasOpenBeforeSwap = false;
+  });
+
+  document.body.addEventListener("htmx:afterSettle", function () {
+    document.body.classList.remove("cart-drawer-updating");
+  });
+
+  document.body.addEventListener("htmx:afterRequest", function () {
+    if (pendingCartOpen) openCartSoon();
+  });
 
   document.addEventListener("DOMContentLoaded", function () {
     syncCartCount();

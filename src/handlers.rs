@@ -1,6 +1,6 @@
 use axum::{
     extract::{Form, Json, Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
 use serde::Deserialize;
@@ -117,8 +117,10 @@ fn validate_analytics_event(payload: &AnalyticsEventPayload) -> Result<(), AppEr
 pub async fn home(
     State(state): State<AppState>,
     session: Session,
+    headers: HeaderMap,
     Query(filters): Query<CatalogFilters>,
 ) -> Result<impl IntoResponse, AppError> {
+    restore_cart_session(&headers, &session).await?;
     let db = &state.db;
     let books = store::list_books(db, &filters).await?;
     let all_books = store::list_books(db, &CatalogFilters::default()).await?;
@@ -127,6 +129,11 @@ pub async fn home(
     let staff_picks = store::collection_books(db, "staff-picks", 3).await?;
     let cart = cart::view(db, &session).await?;
     let cart_lines = ui::cart_lines(cart.lines.clone(), "#cartDrawer");
+    let removed_notice = ui::removed_notice(
+        cart::removed_item_view(db, &session).await?,
+        "#cartDrawer",
+        "cart.drawer",
+    );
 
     let featured = all_books
         .iter()
@@ -208,6 +215,7 @@ pub async fn home(
         drawer_browse_books_link: ui::browse_books_link("cart.drawer.empty", "secondary-button"),
         cart,
         cart_lines,
+        removed_notice,
         filters: result_filters(filters, books.len(), all_books.len()),
     };
 
@@ -239,8 +247,10 @@ pub async fn catalog(
 pub async fn book_detail(
     State(state): State<AppState>,
     session: Session,
+    headers: HeaderMap,
     Path(book_id): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
+    restore_cart_session(&headers, &session).await?;
     let db = &state.db;
     let book = match store::book_by_id(db, &book_id).await {
         Ok(b) => b,
@@ -262,6 +272,11 @@ pub async fn book_detail(
     let all_books = store::list_books(db, &CatalogFilters::default()).await?;
     let cart = cart::view(db, &session).await?;
     let cart_lines = ui::cart_lines(cart.lines.clone(), "#cartDrawer");
+    let removed_notice = ui::removed_notice(
+        cart::removed_item_view(db, &session).await?,
+        "#cartDrawer",
+        "cart.drawer",
+    );
 
     let related: Vec<BookCard> = all_books
         .iter()
@@ -298,6 +313,7 @@ pub async fn book_detail(
         drawer_browse_books_link: ui::browse_books_link("cart.drawer.empty", "secondary-button"),
         cart,
         cart_lines,
+        removed_notice,
     };
 
     Ok(template)
@@ -311,8 +327,10 @@ pub struct AddCartForm {
 pub async fn add_cart_item(
     State(state): State<AppState>,
     session: Session,
+    headers: HeaderMap,
     Form(form): Form<AddCartForm>,
 ) -> Result<impl IntoResponse, AppError> {
+    restore_cart_session(&headers, &session).await?;
     let db = &state.db;
     let copy_id = form
         .copy_id
@@ -333,9 +351,10 @@ pub async fn increase_cart_item(
     headers: HeaderMap,
     Path(copy_id): Path<i64>,
 ) -> Result<Response, AppError> {
+    restore_cart_session(&headers, &session).await?;
     cart::change_quantity(&state.db, &session, copy_id, 1).await?;
-    if wants_cart_page_redirect(&headers) {
-        return Ok(cart_page_redirect());
+    if wants_cart_page_fragment(&headers) {
+        return render_cart_page_content(&state.db, &session).await;
     }
     render_cart(&state.db, session).await
 }
@@ -346,9 +365,10 @@ pub async fn decrease_cart_item(
     headers: HeaderMap,
     Path(copy_id): Path<i64>,
 ) -> Result<Response, AppError> {
+    restore_cart_session(&headers, &session).await?;
     cart::change_quantity(&state.db, &session, copy_id, -1).await?;
-    if wants_cart_page_redirect(&headers) {
-        return Ok(cart_page_redirect());
+    if wants_cart_page_fragment(&headers) {
+        return render_cart_page_content(&state.db, &session).await;
     }
     render_cart(&state.db, session).await
 }
@@ -359,9 +379,66 @@ pub async fn remove_cart_item(
     headers: HeaderMap,
     Path(copy_id): Path<i64>,
 ) -> Result<Response, AppError> {
-    cart::set_quantity(&state.db, &session, copy_id, 0).await?;
-    if wants_cart_page_redirect(&headers) {
-        return Ok(cart_page_redirect());
+    restore_cart_session(&headers, &session).await?;
+    cart::remove_with_notice(&state.db, &session, copy_id).await?;
+    if wants_cart_page_fragment(&headers) {
+        return render_cart_page_content(&state.db, &session).await;
+    }
+    render_cart(&state.db, session).await
+}
+
+pub async fn restore_cart_item(
+    State(state): State<AppState>,
+    session: Session,
+    headers: HeaderMap,
+    Path(copy_id): Path<i64>,
+) -> Result<Response, AppError> {
+    restore_cart_session(&headers, &session).await?;
+    cart::restore_removed_item(&state.db, &session, copy_id).await?;
+    if wants_cart_page_fragment(&headers) {
+        return render_cart_page_content(&state.db, &session).await;
+    }
+    render_cart(&state.db, session).await
+}
+
+pub async fn save_cart_item_for_later(
+    State(state): State<AppState>,
+    session: Session,
+    headers: HeaderMap,
+    Path(copy_id): Path<i64>,
+) -> Result<Response, AppError> {
+    restore_cart_session(&headers, &session).await?;
+    cart::save_for_later(&state.db, &session, copy_id).await?;
+    if wants_cart_page_fragment(&headers) {
+        return render_cart_page_content(&state.db, &session).await;
+    }
+    render_cart(&state.db, session).await
+}
+
+pub async fn move_saved_item_to_cart(
+    State(state): State<AppState>,
+    session: Session,
+    headers: HeaderMap,
+    Path(copy_id): Path<i64>,
+) -> Result<Response, AppError> {
+    restore_cart_session(&headers, &session).await?;
+    cart::move_saved_to_cart(&state.db, &session, copy_id).await?;
+    if wants_cart_page_fragment(&headers) {
+        return render_cart_page_content(&state.db, &session).await;
+    }
+    render_cart(&state.db, session).await
+}
+
+pub async fn remove_saved_item(
+    State(state): State<AppState>,
+    session: Session,
+    headers: HeaderMap,
+    Path(copy_id): Path<i64>,
+) -> Result<Response, AppError> {
+    restore_cart_session(&headers, &session).await?;
+    cart::remove_saved_item(&state.db, &session, copy_id).await?;
+    if wants_cart_page_fragment(&headers) {
+        return render_cart_page_content(&state.db, &session).await;
     }
     render_cart(&state.db, session).await
 }
@@ -369,7 +446,9 @@ pub async fn remove_cart_item(
 pub async fn checkout(
     State(state): State<AppState>,
     session: Session,
-) -> Result<impl IntoResponse, AppError> {
+    headers: HeaderMap,
+) -> Result<Response, AppError> {
+    restore_cart_session(&headers, &session).await?;
     let db = &state.db;
     let cart = cart::view(db, &session).await?;
     if cart.item_count == 0 {
@@ -378,30 +457,52 @@ pub async fn checkout(
 
     let checkout_lines = ui::checkout_lines(cart.lines.clone());
     let summary = ui::order_summary(&cart, "checkout.summary");
-    Ok(CheckoutTemplate {
+    let response = CheckoutTemplate {
         sections: ui::checkout_sections(),
         checkout_lines,
         summary,
-        cart_link: ui::LinkView::tracked(
-            "Cart",
-            "/cart",
-            "checkout-cart-link",
-            "checkout_cart_clicked",
-            "checkout.header",
-            "cart",
-            "current",
-        ),
-    })
+    }
+    .into_response();
+    attach_cart_cookie(response, &session).await
 }
 
 pub async fn cart_page(
     State(state): State<AppState>,
     session: Session,
-) -> Result<impl IntoResponse, AppError> {
+    headers: HeaderMap,
+) -> Result<Response, AppError> {
+    restore_cart_session(&headers, &session).await?;
     let db = &state.db;
     let all_books = store::list_books(db, &CatalogFilters::default()).await?;
-    let cart = cart::view(db, &session).await?;
+    let content = cart_page_content_template(db, &session).await?;
+
+    let template = CartPageTemplate {
+        genres: unique_genres(&all_books),
+        cart: content.cart,
+        cart_lines: content.cart_lines,
+        removed_notice: content.removed_notice,
+        saved_lines: content.saved_lines,
+        saved_count_label: content.saved_count_label,
+        checkout_button: content.checkout_button,
+        browse_books_link: content.browse_books_link,
+    };
+
+    attach_cart_cookie(template.into_response(), &session).await
+}
+
+async fn cart_page_content_template(
+    db: &SqlitePool,
+    session: &Session,
+) -> Result<CartPageContentTemplate, AppError> {
+    let cart = cart::view(db, session).await?;
+    let saved = cart::saved_view(db, session).await?;
     let cart_lines = ui::cart_page_lines(cart.lines.clone());
+    let removed_notice = ui::cart_page_removed_notice(cart::removed_item_view(db, session).await?);
+    let saved_lines = ui::saved_lines(saved.lines);
+    let saved_count_label = match saved.item_count {
+        1 => String::from("1 saved item"),
+        count => format!("{} saved items", count),
+    };
 
     let mut checkout_button = ui::ButtonView::tracked(
         "Proceed to Checkout",
@@ -416,37 +517,90 @@ pub async fn cart_page(
     );
     checkout_button.disabled = cart.item_count == 0;
 
-    let template = CartPageTemplate {
-        genres: unique_genres(&all_books),
+    Ok(CartPageContentTemplate {
         cart,
         cart_lines,
+        removed_notice,
+        saved_lines,
+        saved_count_label,
         checkout_button,
         browse_books_link: ui::browse_books_link("cart.page.empty", "primary-button"),
-    };
+    })
+}
 
-    Ok(template)
+async fn render_cart_page_content(
+    db: &SqlitePool,
+    session: &Session,
+) -> Result<Response, AppError> {
+    let template = cart_page_content_template(db, session).await?;
+    attach_cart_cookie(template.into_response(), session).await
 }
 
 async fn render_cart(db: &SqlitePool, session: Session) -> Result<Response, AppError> {
     let cart = cart::view(db, &session).await?;
     let cart_lines = ui::cart_lines(cart.lines.clone(), "#cartDrawer");
+    let removed_notice = ui::removed_notice(
+        cart::removed_item_view(db, &session).await?,
+        "#cartDrawer",
+        "cart.drawer",
+    );
     let drawer_checkout_button = ui::checkout_start_button("cart.drawer", cart.item_count == 0);
     let template = CartDrawerTemplate {
         cart,
         cart_lines,
+        removed_notice,
         drawer_checkout_button,
         drawer_browse_books_link: ui::browse_books_link("cart.drawer.empty", "secondary-button"),
     };
-    Ok(template.into_response())
+    attach_cart_cookie(template.into_response(), &session).await
 }
 
-fn wants_cart_page_redirect(headers: &HeaderMap) -> bool {
+fn wants_cart_page_fragment(headers: &HeaderMap) -> bool {
     headers
         .get("X-Cart-View")
         .and_then(|value| value.to_str().ok())
         == Some("page")
 }
 
-fn cart_page_redirect() -> Response {
-    (StatusCode::NO_CONTENT, [("HX-Redirect", "/cart")]).into_response()
+async fn restore_cart_session(headers: &HeaderMap, session: &Session) -> Result<(), AppError> {
+    if cart::current_session_key(session).await?.is_some() {
+        return Ok(());
+    }
+    if let Some(session_key) = cart_cookie(headers) {
+        cart::adopt_session_key(session, &session_key).await?;
+    }
+    Ok(())
+}
+
+fn cart_cookie(headers: &HeaderMap) -> Option<String> {
+    let cookie = headers.get(header::COOKIE)?.to_str().ok()?;
+    cookie.split(';').find_map(|part| {
+        let (name, value) = part.trim().split_once('=')?;
+        if name == cart::BROWSER_CART_KEY_COOKIE && !value.is_empty() {
+            Some(value.to_string())
+        } else {
+            None
+        }
+    })
+}
+
+async fn attach_cart_cookie(
+    mut response: Response,
+    session: &Session,
+) -> Result<Response, AppError> {
+    let Some(session_key) = cart::current_session_key(session).await? else {
+        return Ok(response);
+    };
+    let mut cookie = format!(
+        "{}={}; Path=/; Max-Age=2592000; SameSite=Lax; HttpOnly",
+        cart::BROWSER_CART_KEY_COOKIE,
+        session_key
+    );
+    if std::env::var("APP_ENV").unwrap_or_default() == "production" {
+        cookie.push_str("; Secure");
+    }
+    if let Ok(value) = HeaderValue::from_str(&cookie) {
+        response.headers_mut().append(header::SET_COOKIE, value);
+    }
+    Ok(response)
 }

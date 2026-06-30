@@ -7,19 +7,19 @@
     <meta name="description" content="Review your Davis's Books order before secure payment.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap" rel="stylesheet">
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=optional">
+    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=optional" rel="stylesheet">
     <link rel="stylesheet" href="/styles.css">
     <script src="/assets/htmx.min.js" defer></script>
   </head>
   <body class="checkout-body">
     <header class="checkout-header">
-      <a class="brand checkout-brand" href="/#top" aria-label="Davis's Books home">
+      <a class="brand checkout-brand" href="/" aria-label="Davis's Books home">
         <span class="brand-mark" aria-hidden="true">DB</span>
         <span>Davis's Books</span>
       </a>
       <h1>Secure Checkout</h1>
-      {% let link = cart_link.clone() %}
-      {% include "components/ui/link.html" %}
+      <div class="checkout-header-assurance">Encrypted checkout</div>
     </header>
 
     <main class="checkout-main">
@@ -30,12 +30,20 @@
           {% endfor %}
 
           <section class="checkout-section checkout-delivery-section">
-            <p class="checkout-eyebrow">3. Review items and delivery</p>
-            <h2>Arriving for pickup in 1-2 days</h2>
+            <div class="checkout-section-heading">
+              <div>
+                <p class="checkout-eyebrow">3. Review items and delivery</p>
+                <h2>Items in this order</h2>
+                <p>Arriving for pickup in 1-2 days</p>
+              </div>
+              <span class="checkout-status">Ready soon</span>
+            </div>
 
-            {% for checkout_line in checkout_lines %}
-            {% include "components/ui/checkout_line.html" %}
-            {% endfor %}
+            <div class="checkout-items-list" aria-label="Items in this order">
+              {% for checkout_line in checkout_lines %}
+              {% include "components/ui/checkout_line.html" %}
+              {% endfor %}
+            </div>
           </section>
 
           <section class="checkout-place-order-band">

@@ -1,0 +1,5 @@
+<div class="cart-removed-notice" role="status">
+  <span><strong>{{ notice.title }}</strong> was removed from your cart.</span>
+  {% let button = notice.restore_button.clone() %}
+  {% include "components/ui/button.html" %}
+</div>

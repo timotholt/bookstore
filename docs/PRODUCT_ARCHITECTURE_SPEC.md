@@ -15,6 +15,7 @@ Build Davis's Books as a durable small-commerce storefront:
 - Account identity through email/password first, Google OAuth second.
 - Persistent carts stored in the database.
 - Product reviews with verified-purchase support.
+- Review storage and aggregation follow `docs/REVIEWS_SPEC.md`.
 - No paid dependency required for local development.
 - No legacy Go server path.
 

@@ -1,5 +1,5 @@
-use sqlx::{SqlitePool, QueryBuilder};
 use crate::models::{AnalyticsEventPayload, BookCard, CatalogFilters, VariantAttribute};
+use sqlx::{QueryBuilder, SqlitePool};
 
 const BASE_SELECT: &str = r#"
     SELECT
@@ -32,11 +32,15 @@ const BASE_SELECT: &str = r#"
     WHERE c.is_sold = 0
 "#;
 
-pub async fn list_books(db: &SqlitePool, filters: &CatalogFilters) -> Result<Vec<BookCard>, sqlx::Error> {
+pub async fn list_books(
+    db: &SqlitePool,
+    filters: &CatalogFilters,
+) -> Result<Vec<BookCard>, sqlx::Error> {
     let mut query_builder = QueryBuilder::new(BASE_SELECT);
 
     // Filter out duplicate copies of same book by returning the cheapest copy
-    query_builder.push(r#"
+    query_builder.push(
+        r#"
         AND c.id = (
             SELECT c2.id 
             FROM book_copies c2 
@@ -44,7 +48,8 @@ pub async fn list_books(db: &SqlitePool, filters: &CatalogFilters) -> Result<Vec
             ORDER BY c2.price ASC 
             LIMIT 1
         )
-    "#);
+    "#,
+    );
 
     if let Some(ref q) = filters.q {
         let q_trimmed = q.trim();
@@ -118,15 +123,24 @@ pub async fn list_books(db: &SqlitePool, filters: &CatalogFilters) -> Result<Vec
             query_builder.push(" ORDER BY b.year DESC, b.title ASC");
         }
         _ => {
-            query_builder.push(" ORDER BY c.is_staff_pick DESC, b.is_new_arrival DESC, b.title ASC");
+            query_builder
+                .push(" ORDER BY c.is_staff_pick DESC, b.is_new_arrival DESC, b.title ASC");
         }
     }
 
-    query_builder.build_query_as::<BookCard>().fetch_all(db).await
+    query_builder
+        .build_query_as::<BookCard>()
+        .fetch_all(db)
+        .await
 }
 
-pub async fn collection_books(db: &SqlitePool, slug: &str, limit: i64) -> Result<Vec<BookCard>, sqlx::Error> {
-    let query = format!(r#"
+pub async fn collection_books(
+    db: &SqlitePool,
+    slug: &str,
+    limit: i64,
+) -> Result<Vec<BookCard>, sqlx::Error> {
+    let query = format!(
+        r#"
         SELECT
             b.id as id,
             b.title as title,
@@ -165,7 +179,8 @@ pub async fn collection_books(db: &SqlitePool, slug: &str, limit: i64) -> Result
           )
         ORDER BY i.position ASC, c.is_staff_pick DESC, c.price ASC
         LIMIT ?
-    "#);
+    "#
+    );
 
     sqlx::query_as::<_, BookCard>(&query)
         .bind(slug)
@@ -174,7 +189,10 @@ pub async fn collection_books(db: &SqlitePool, slug: &str, limit: i64) -> Result
         .await
 }
 
-pub async fn books_by_copy_ids(db: &SqlitePool, copy_ids: &[i64]) -> Result<Vec<BookCard>, sqlx::Error> {
+pub async fn books_by_copy_ids(
+    db: &SqlitePool,
+    copy_ids: &[i64],
+) -> Result<Vec<BookCard>, sqlx::Error> {
     if copy_ids.is_empty() {
         return Ok(Vec::new());
     }
@@ -185,15 +203,21 @@ pub async fn books_by_copy_ids(db: &SqlitePool, copy_ids: &[i64]) -> Result<Vec<
         separated.push_bind(id);
     }
     separated.push_unseparated(")");
-    query_builder.build_query_as::<BookCard>().fetch_all(db).await
+    query_builder
+        .build_query_as::<BookCard>()
+        .fetch_all(db)
+        .await
 }
 
 pub async fn book_by_id(db: &SqlitePool, book_id: &str) -> Result<BookCard, sqlx::Error> {
-    let query = format!(r#"
+    let query = format!(
+        r#"
         {} AND b.id = ?
         ORDER BY c.is_staff_pick DESC, c.price ASC
         LIMIT 1
-    "#, BASE_SELECT);
+    "#,
+        BASE_SELECT
+    );
 
     sqlx::query_as::<_, BookCard>(&query)
         .bind(book_id)
@@ -208,11 +232,17 @@ pub async fn copy_stock(db: &SqlitePool, copy_id: i64) -> Result<i32, sqlx::Erro
         .await
 }
 
-pub async fn copies_by_product_id(db: &SqlitePool, product_id: &str) -> Result<Vec<BookCard>, sqlx::Error> {
-    let query = format!(r#"
+pub async fn copies_by_product_id(
+    db: &SqlitePool,
+    product_id: &str,
+) -> Result<Vec<BookCard>, sqlx::Error> {
+    let query = format!(
+        r#"
         {} AND b.id = ?
         ORDER BY c.price ASC
-    "#, BASE_SELECT);
+    "#,
+        BASE_SELECT
+    );
 
     sqlx::query_as::<_, BookCard>(&query)
         .bind(product_id)
@@ -220,13 +250,18 @@ pub async fn copies_by_product_id(db: &SqlitePool, product_id: &str) -> Result<V
         .await
 }
 
-pub async fn variant_attributes(db: &SqlitePool, book_id: &str) -> Result<Vec<VariantAttribute>, sqlx::Error> {
-    sqlx::query_as::<_, VariantAttribute>(r#"
+pub async fn variant_attributes(
+    db: &SqlitePool,
+    book_id: &str,
+) -> Result<Vec<VariantAttribute>, sqlx::Error> {
+    sqlx::query_as::<_, VariantAttribute>(
+        r#"
         SELECT a.variant_id, a.name, a.value
         FROM variant_attributes a
         JOIN book_copies c ON c.id = a.variant_id
         WHERE c.book_id = ?
-    "#)
+    "#,
+    )
     .bind(book_id)
     .fetch_all(db)
     .await

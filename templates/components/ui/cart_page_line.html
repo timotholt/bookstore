@@ -1,4 +1,4 @@
-<div class="cart-item cart-item--page">
+<div class="cart-item cart-item--page" data-cart-line>
   <div class="cart-cover-slot cart-cover-slot--page">
     {% let book = cart_line.line.book.clone() %}
     {% include "components/book_cover.html" %}
@@ -21,9 +21,13 @@
       {% endif %}
     </div>
   </div>
-  <div class="cart-item-price-side">
+  <div class="cart-item-actions">
     <strong>{{ cart_line.line_total_label }}</strong>
-    {% let button = cart_line.remove_button.clone() %}
-    {% include "components/ui/button.html" %}
+    <div class="cart-line-actions cart-line-actions--page">
+      {% let button = cart_line.save_for_later_button.clone() %}
+      {% include "components/ui/button.html" %}
+      {% let button = cart_line.remove_button.clone() %}
+      {% include "components/ui/button.html" %}
+    </div>
   </div>
 </div>

@@ -49,6 +49,8 @@ cargo test
 
 See [docs/PRODUCT_ARCHITECTURE_SPEC.md](docs/PRODUCT_ARCHITECTURE_SPEC.md) for the canonical product architecture, feature order, auth/cart/review plan, styling rules, and implementation standards.
 
+See [docs/REVIEWS_SPEC.md](docs/REVIEWS_SPEC.md) for the review storage, aggregation, moderation, and verified-purchase design.
+
 See [docs/IMPLEMENTATION_SEQUENCE.md](docs/IMPLEMENTATION_SEQUENCE.md) for the current execution order.
 
 ## Agent Guidance

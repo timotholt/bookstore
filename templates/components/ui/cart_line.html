@@ -24,8 +24,12 @@
       <span class="cart-line-limit">{{ cart_line.stock_limit_label }}</span>
       {% endif %}
       </div>
-      {% let button = cart_line.remove_button.clone() %}
-      {% include "components/ui/button.html" %}
+      <div class="cart-line-actions">
+        {% let button = cart_line.save_for_later_button.clone() %}
+        {% include "components/ui/button.html" %}
+        {% let button = cart_line.remove_button.clone() %}
+        {% include "components/ui/button.html" %}
+      </div>
     </div>
   </div>
 </div>

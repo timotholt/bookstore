@@ -41,7 +41,7 @@
         {% endif %}
         <h1 class="details-title" id="bookDetailTitle">{{ book.title }}</h1>
         {% if !book.author.is_empty() %}
-        <p class="details-author">by <span class="author-name">{{ book.author }}</span></p>
+        <p class="details-author">by <span>{{ book.author }}</span></p>
         {% endif %}
 
         <div class="details-rating">
@@ -51,9 +51,11 @@
 
         <div class="details-price-row">
           <span class="discount-badge">-33%</span>
-          <span class="price-symbol">$</span>
-          <span class="price-val-large" id="mainPriceDollars">{{ self.price_dollars(book.price) }}</span>
-          <span class="price-cents-large" id="mainPriceCents">{{ self.price_cents(book.price) }}</span>
+          <span class="ui-price ui-price--detail">
+            <span class="ui-price-symbol">$</span>
+            <strong class="ui-price-dollars" id="mainPriceDollars">{{ self.price_dollars(book.price) }}</strong>
+            <span class="ui-price-cents" id="mainPriceCents">{{ self.price_cents(book.price) }}</span>
+          </span>
         </div>
         <div class="list-price-row">
           List Price: <span class="list-price-strike" id="mainListPrice">{{ self.money_val(self.list_price(book.price)) }}</span>
@@ -73,15 +75,14 @@
       </section>
 
       <section class="detail-info-card details-options-section" aria-labelledby="optionSelectorTitle">
-        <h2 id="optionSelectorTitle" style="font-size: 1.15rem; font-weight: 700; margin-bottom: 12px; color: var(--ink);">Select Format / Option</h2>
-        <div class="swatches-container" style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <h2 id="optionSelectorTitle" class="details-option-title">Select Format / Option</h2>
+        <div class="swatches-container">
           {% for copy in copies %}
           <button class="swatch-btn {% if loop.first %}is-active{% endif %}"
                   type="button"
                   data-copy-id="{{ copy.copy_id }}"
                   data-price-dollars="{{ self.price_dollars(copy.price) }}"
                   data-price-cents="{{ self.price_cents(copy.price) }}"
-                  data-price-formatted="{{ self.money(copy.price) }}"
                   data-list-price="{{ self.money_val(self.list_price(copy.price)) }}"
                   data-stock="{{ copy.stock }}"
                   data-notes="{{ copy.notes.as_deref().unwrap_or("") }}"
@@ -89,8 +90,8 @@
                   data-format="{{ copy.format }}"
                   data-attributes="{{ self.json_attributes(copy.copy_id) }}"
                   onclick="selectVariant(this)">
-            <span style="display: block; font-size: 0.95rem; font-weight: 700;">{{ copy.format }}</span>
-            <span style="display: block; font-size: 0.8rem; color: var(--muted); margin-top: 2px;">{{ self.money(copy.price) }}</span>
+            <span class="swatch-format">{{ copy.format }}</span>
+            <span class="swatch-price">{{ self.money(copy.price) }}</span>
           </button>
           {% endfor %}
         </div>
@@ -127,7 +128,11 @@
     <div class="details-right-buybox">
       <div class="buybox-card">
         <div class="buybox-price-line">
-          <span class="buybox-price">{{ self.money(book.price) }}</span>
+          <span class="ui-price ui-price--buybox">
+            <span class="ui-price-symbol">$</span>
+            <strong class="ui-price-dollars" id="buyboxPriceDollars">{{ self.price_dollars(book.price) }}</strong>
+            <span class="ui-price-cents" id="buyboxPriceCents">{{ self.price_cents(book.price) }}</span>
+          </span>
           <span class="prime-badge-icon">pickup</span>
         </div>
         <div class="buybox-delivery">
@@ -138,8 +143,8 @@
           <span class="in-stock">In Stock.</span>
         </div>
         <div class="buybox-condition-wrapper">
-          <label style="display: block; font-size: 0.82rem; font-weight: 700; color: var(--muted); margin-bottom: 4px;">Selected Option</label>
-          <div id="buyboxOptionText" style="font-size: 0.95rem; font-weight: 600; color: var(--ink);">
+          <label>Selected Option</label>
+          <div id="buyboxOptionText" class="buybox-option-text">
             {{ book.format }} · {% if !book.condition.is_empty() %}{{ book.condition }}{% else %}New{% endif %}
           </div>
         </div>
@@ -216,7 +221,6 @@
       const copyId = btn.getAttribute('data-copy-id');
       const dollars = btn.getAttribute('data-price-dollars');
       const cents = btn.getAttribute('data-price-cents');
-      const formatted = btn.getAttribute('data-price-formatted');
       const listPrice = btn.getAttribute('data-list-price');
       const stock = btn.getAttribute('data-stock');
       const condition = btn.getAttribute('data-condition');
@@ -232,8 +236,10 @@
       if (listPriceEl) listPriceEl.innerText = listPrice;
 
       // 4. Update right column buybox price
-      const buyboxPriceEl = document.querySelector('.buybox-price');
-      if (buyboxPriceEl) buyboxPriceEl.innerText = formatted;
+      const buyboxDollarsEl = document.getElementById('buyboxPriceDollars');
+      if (buyboxDollarsEl) buyboxDollarsEl.innerText = dollars;
+      const buyboxCentsEl = document.getElementById('buyboxPriceCents');
+      if (buyboxCentsEl) buyboxCentsEl.innerText = cents;
 
       // 5. Update selected option text
       const optionTextEl = document.getElementById('buyboxOptionText');

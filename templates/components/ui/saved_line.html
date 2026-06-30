@@ -1,0 +1,21 @@
+<article class="saved-line">
+  <div class="cart-cover-slot cart-cover-slot--saved">
+    {% let book = saved_line.line.book.clone() %}
+    {% include "components/book_cover.html" %}
+  </div>
+  <div class="saved-line-copy">
+    <strong>{{ saved_line.line.book.title }}</strong>
+    {% if !saved_line.line.book.author.is_empty() %}<span>by {{ saved_line.line.book.author }}</span>{% endif %}
+    <span>{{ saved_line.option_label }}</span>
+    <span>{{ saved_line.quantity_label }}</span>
+  </div>
+  <div class="saved-line-actions">
+    <strong>{{ saved_line.line_total_label }}</strong>
+    <div class="saved-line-action-group">
+    {% let button = saved_line.move_to_cart_button.clone() %}
+    {% include "components/ui/button.html" %}
+    {% let button = saved_line.remove_button.clone() %}
+    {% include "components/ui/button.html" %}
+    </div>
+  </div>
+</article>

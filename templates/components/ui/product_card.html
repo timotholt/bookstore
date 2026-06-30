@@ -18,7 +18,12 @@
       <span class="rating-count">{{ card.rating_count }}</span>
     </div>
     <div class="price-row">
-      <span class="price"><span class="price-prefix">from </span><strong class="price-val">{{ card.price_label }}</strong></span>
+      <span class="ui-price ui-price--card">
+        <span class="ui-price-prefix">from</span>
+        <span class="ui-price-symbol">$</span>
+        <strong class="ui-price-dollars">{{ self.price_dollars(card.book.price) }}</strong>
+        <span class="ui-price-cents">{{ self.price_cents(card.book.price) }}</span>
+      </span>
     </div>
     {% if !card.book.condition.is_empty() %}
     <div class="condition-row">
