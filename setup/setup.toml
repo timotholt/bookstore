@@ -53,7 +53,6 @@ webhook_path = "/webhooks/stripe"
 name = "DATABASE_URL"
 scope = "runtime"
 secret = true
-local_fallback = "sqlite://data/bookstore.db?mode=rwc"
 
 [[required_env]]
 name = "SESSION_SECRET"

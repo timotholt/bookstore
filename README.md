@@ -1,22 +1,23 @@
 # Davis's Books
 
-Server-rendered Rust/Axum storefront for Davis's Books, backed locally by SQLite.
+Server-rendered Rust/Axum storefront for Davis's Books, backed by an explicit SQLite or Postgres `DATABASE_URL`.
 
 The live application entrypoint is `src/main.rs`. The old Go server has been retired; Rust is the only supported backend path. The original static HTML/JS prototype remains archived in `legacy-demo/` for visual reference only and is not served by the Rust app.
 
 ## Run Locally
 
 ```bash
-cargo run
+DATABASE_URL='sqlite://data/bookstore.db?mode=rwc' cargo run
 ```
 
-The app listens on `http://127.0.0.1:8080` by default and creates `data/bookstore.db` automatically.
+The app listens on `http://127.0.0.1:8080` by default. `DATABASE_URL` is required; the runtime never falls back to a different database if the configured one is missing or unreachable.
 
 Optional environment variables:
 
 ```bash
 ADDR=127.0.0.1:8081
 DATABASE_URL='sqlite://data/bookstore.db?mode=rwc'
+DATABASE_URL='postgresql://...'
 APP_ENV=production
 ```
 
@@ -52,7 +53,7 @@ cargo xtask external secrets import-email --from setup/recovery-email.example.tx
 ## Current MVP
 
 - Rust `axum` router and Askama server-rendered templates.
-- Local SQLite schema and seed catalog through `sqlx` migrations.
+- SQLite and Postgres schema and seed catalog through explicit `sqlx` migrations.
 - Server-rendered homepage shelves and catalog cards.
 - Include-based Askama component templates for covers, product tiles, catalog cards, and catalog results.
 - HTMX catalog search/filter fragments.
@@ -64,7 +65,6 @@ cargo xtask external secrets import-email --from setup/recovery-email.example.tx
 
 - Replace checkout placeholder with Stripe Checkout session creation and webhook handling.
 - Add staff auth and CMS inventory screens.
-- Decide whether production persistence should use PostgreSQL or SQLite for the hosted demo.
 - Move session persistence out of memory before production deployment.
 
 ## Product Architecture

@@ -18,7 +18,7 @@ The external setup and validation automation model is defined in [EXTERNAL_WORLD
 4. Account ownership belongs to `timotholt@gmail.com`.
 5. Recovery material must be simple enough to use under pressure. If Railway or Neon needs to be replaced, the repo plus the recovery packet should be enough to rebuild.
 6. The demo should be reproducible in under 10 minutes after accounts and CLI authentication already exist.
-7. The local developer workflow must remain easy. Postgres is the production target, but SQLite can remain as a zero-config local fallback until the PostgreSQL migration is complete.
+7. The local developer workflow must remain easy. Postgres is the production target, and SQLite may remain as an explicit local option, but the app must not silently fall back to SQLite when Postgres is missing or unreachable.
 
 ## Target Providers
 
@@ -225,7 +225,7 @@ Application changes:
 
 - Add a PostgreSQL driver, preferably `pgx`.
 - Support `DATABASE_URL` for Postgres.
-- Keep SQLite support behind `DATABASE_DRIVER=sqlite` or local fallback.
+- Keep SQLite support as an explicit local `DATABASE_URL`; do not silently switch databases when the configured database is missing or unreachable.
 - Move schema setup out of embedded `db/schema.sql` and into ordered migrations.
 - Add a migration runner command or script.
 - Replace SQLite-specific SQL syntax where needed.
