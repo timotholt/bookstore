@@ -316,6 +316,7 @@ fn build_validation_report(root: &Path, local_only: bool) -> Report {
     check_git_tracking(root, &mut report);
     let env_store = EnvStore::load(root);
     check_env_contract(root, &env_store, &mut report);
+    let manifest = SetupManifest::load(root).ok();
     report.skip_if_failed(
         "env.runtime",
         "validate.providers.blocked",
@@ -336,7 +337,7 @@ fn build_validation_report(root: &Path, local_only: bool) -> Report {
         report.extend(validate_database(root, &env_store));
         report
             .findings
-            .extend(validate_provider_readiness(&env_store));
+            .extend(validate_provider_readiness(manifest.as_ref(), &env_store));
     }
 
     report
