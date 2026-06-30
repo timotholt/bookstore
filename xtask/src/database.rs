@@ -1,5 +1,6 @@
 use crate::env_loader::EnvStore;
 use crate::report::{Finding, Report};
+use sqlx::postgres::PgPoolOptions;
 use sqlx::sqlite::SqlitePoolOptions;
 use std::collections::BTreeSet;
 use std::fs;
@@ -18,28 +19,44 @@ pub fn validate_database(root: &Path, env_store: &EnvStore) -> Report {
         return report;
     };
 
-    if !database_url.value.starts_with("sqlite:") {
-        report.findings.push(Finding::manual(
+    if database_url.value.starts_with("sqlite:") {
+        match run_sqlite_validation(root, &database_url.value) {
+            Ok(findings) => report.findings.extend(findings),
+            Err(err) => report.findings.push(Finding::fail(
+                "database.connection",
+                "database",
+                "failed",
+                "Could not validate the SQLite database.",
+                &err,
+                "database_validation_failed",
+                "Check DATABASE_URL, create the local DB with cargo run, or run app migrations.",
+            )),
+        }
+    } else if database_url.value.starts_with("postgres:")
+        || database_url.value.starts_with("postgresql:")
+    {
+        match run_postgres_validation(root, &database_url.value) {
+            Ok(findings) => report.findings.extend(findings),
+            Err(err) => report.findings.push(Finding::fail(
+                "database.connection",
+                "database",
+                "failed",
+                "Could not validate the Postgres database.",
+                &err,
+                "database_validation_failed",
+                "Check the Neon DATABASE_URL, network access, and database credentials.",
+            )),
+        }
+    } else {
+        report.findings.push(Finding::fail(
             "database.connection",
             "database",
             "unsupported",
-            "Only SQLite database validation is implemented in this slice.",
-            "Postgres/Neon validation should reuse this adapter shape and add a Postgres connection path.",
+            "DATABASE_URL does not use a supported database driver.",
+            "Connection string redacted.",
+            "database_url_unsupported",
+            "Use sqlite:// for local validation or postgres:// for Neon/Postgres validation.",
         ));
-        return report;
-    }
-
-    match run_sqlite_validation(root, &database_url.value) {
-        Ok(findings) => report.findings.extend(findings),
-        Err(err) => report.findings.push(Finding::fail(
-            "database.connection",
-            "database",
-            "failed",
-            "Could not validate the SQLite database.",
-            &err,
-            "database_validation_failed",
-            "Check DATABASE_URL, create the local DB with cargo run, or run app migrations.",
-        )),
     }
 
     report
@@ -51,6 +68,14 @@ fn run_sqlite_validation(root: &Path, database_url: &str) -> Result<Vec<Finding>
         .build()
         .map_err(|err| format!("failed to create tokio runtime: {err}"))?;
     runtime.block_on(validate_sqlite_async(root, database_url))
+}
+
+fn run_postgres_validation(root: &Path, database_url: &str) -> Result<Vec<Finding>, String> {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|err| format!("failed to create tokio runtime: {err}"))?;
+    runtime.block_on(validate_postgres_async(root, database_url))
 }
 
 async fn validate_sqlite_async(root: &Path, database_url: &str) -> Result<Vec<Finding>, String> {
@@ -66,7 +91,7 @@ async fn validate_sqlite_async(root: &Path, database_url: &str) -> Result<Vec<Fi
             .await
             .map_err(|err| format!("could not query _sqlx_migrations: {err}"))?;
 
-    let expected = migration_versions(root)?;
+    let expected = migration_versions(root, "migrations")?;
     let applied_set: BTreeSet<i64> = applied.into_iter().collect();
     let missing: Vec<i64> = expected
         .iter()
@@ -106,10 +131,78 @@ async fn validate_sqlite_async(root: &Path, database_url: &str) -> Result<Vec<Fi
     Ok(findings)
 }
 
-fn migration_versions(root: &Path) -> Result<Vec<i64>, String> {
+async fn validate_postgres_async(root: &Path, database_url: &str) -> Result<Vec<Finding>, String> {
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(database_url)
+        .await
+        .map_err(|err| format!("connect failed: {err}"))?;
+
+    let mut findings = Vec::new();
+    findings.push(Finding::ok(
+        "database.connection",
+        "database",
+        "reachable",
+        "Connected to Postgres DATABASE_URL.",
+        "Connection string redacted.",
+    ));
+
+    let applied: Vec<i64> = match sqlx::query_scalar(
+        "SELECT version FROM _sqlx_migrations ORDER BY version",
+    )
+    .fetch_all(&pool)
+    .await
+    {
+        Ok(applied) => applied,
+        Err(err) => {
+            findings.push(Finding::fail(
+                    "database.migrations.applied",
+                    "database",
+                    "missing",
+                    "Could not query Postgres _sqlx_migrations.",
+                    &err.to_string(),
+                    "migrations_table_missing",
+                    "Run `sqlx migrate run --source migrations_postgres` against the Neon DATABASE_URL.",
+                ));
+            return Ok(findings);
+        }
+    };
+
+    let expected = migration_versions(root, "migrations_postgres")?;
+    let applied_set: BTreeSet<i64> = applied.into_iter().collect();
+    let missing: Vec<i64> = expected
+        .iter()
+        .copied()
+        .filter(|version| !applied_set.contains(version))
+        .collect();
+
+    if missing.is_empty() {
+        findings.push(Finding::ok(
+            "database.migrations.applied",
+            "database",
+            "current",
+            &format!("All {} Postgres migrations are applied.", expected.len()),
+            "Compared migrations_postgres/ filenames against _sqlx_migrations.",
+        ));
+    } else {
+        findings.push(Finding::fail(
+            "database.migrations.applied",
+            "database",
+            "missing",
+            "The Postgres database is missing one or more migrations.",
+            &format!("Missing versions: {:?}", missing),
+            "migrations_not_applied",
+            "Run `sqlx migrate run --source migrations_postgres` against the Neon DATABASE_URL.",
+        ));
+    }
+
+    Ok(findings)
+}
+
+fn migration_versions(root: &Path, relative_dir: &str) -> Result<Vec<i64>, String> {
     let mut versions = Vec::new();
-    for entry in fs::read_dir(root.join("migrations"))
-        .map_err(|err| format!("could not read migrations directory: {err}"))?
+    for entry in fs::read_dir(root.join(relative_dir))
+        .map_err(|err| format!("could not read {relative_dir} directory: {err}"))?
     {
         let entry = entry.map_err(|err| format!("could not read migration entry: {err}"))?;
         let name = entry.file_name();
@@ -144,8 +237,31 @@ mod tests {
         fs::write(dir.join("migrations/not-a-migration.txt"), "").unwrap();
 
         assert_eq!(
-            migration_versions(&dir).unwrap(),
+            migration_versions(&dir, "migrations").unwrap(),
             vec![20260629000000, 20260629001000]
+        );
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn migration_versions_can_read_postgres_directory() {
+        let dir = temp_dir("postgres_migration_versions");
+        fs::create_dir_all(dir.join("migrations_postgres")).unwrap();
+        fs::write(
+            dir.join("migrations_postgres/20260629000000_schema.sql"),
+            "",
+        )
+        .unwrap();
+        fs::write(
+            dir.join("migrations_postgres/20260629005000_reviews.sql"),
+            "",
+        )
+        .unwrap();
+
+        assert_eq!(
+            migration_versions(&dir, "migrations_postgres").unwrap(),
+            vec![20260629000000, 20260629005000]
         );
 
         let _ = fs::remove_dir_all(dir);

@@ -1,12 +1,14 @@
 mod database;
 mod env_loader;
+mod manifest;
 mod providers;
 mod report;
 mod secrets;
 
 use database::validate_database;
 use env_loader::EnvStore;
-use providers::validate_provider_readiness;
+use manifest::SetupManifest;
+use providers::{plan_neon_setup, validate_provider_readiness};
 use report::{render_human_report, render_json_report, Finding, Report};
 use secrets::import_email;
 
@@ -14,6 +16,7 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 fn main() {
     let code = match run() {
@@ -101,6 +104,8 @@ fn run_external(root: &Path, args: &[String]) -> Result<(), String> {
             ));
 
             report.extend(build_doctor_report(root));
+            let env_store = EnvStore::load(root);
+            let manifest = SetupManifest::load(root).ok();
 
             if options.yes || options.install_deps {
                 report.extend(build_install_report(root, true)?);
@@ -115,13 +120,36 @@ fn run_external(root: &Path, args: &[String]) -> Result<(), String> {
             }
 
             report.extend(build_validation_report(root, options.local_only));
-            report.findings.push(Finding::manual(
-                "setup.providers",
-                "external",
-                "not_implemented",
-                "Provider setup adapters are not implemented in this first slice.",
-                "Next adapters should be Neon database validation/setup, then Railway variables/deploy validation.",
-            ));
+            if options.local_only {
+                report.findings.push(Finding::info(
+                    "setup.providers",
+                    "external",
+                    "local_only",
+                    "Provider setup skipped by --local-only.",
+                    "Run without --local-only to inspect provider setup plans.",
+                ));
+            } else if let Some(manifest) = manifest {
+                report
+                    .findings
+                    .extend(plan_neon_setup(&manifest, &env_store, options.yes));
+                report.findings.push(Finding::manual(
+                    "setup.providers.remaining",
+                    "external",
+                    "not_implemented",
+                    "Railway and Stripe setup adapters are not implemented yet.",
+                    "After Neon database validation is real, implement Railway environment/deploy validation, then Stripe webhook setup.",
+                ));
+            } else {
+                report.findings.push(Finding::fail(
+                    "setup.manifest",
+                    "manifest",
+                    "missing",
+                    "Provider setup cannot run because setup/setup.toml could not be loaded.",
+                    "",
+                    "manifest_missing",
+                    "Create or restore setup/setup.toml.",
+                ));
+            }
 
             finish_report(root, report, &options)
         }
@@ -473,7 +501,7 @@ fn tool_dependencies() -> Vec<ToolDependency> {
                     "sqlx-cli",
                     "--no-default-features",
                     "--features",
-                    "sqlite,rustls",
+                    "sqlite,postgres,rustls",
                 ],
             )),
         },
@@ -656,18 +684,33 @@ fn check_env_files(root: &Path, report: &mut Report) {
 }
 
 fn check_migrations(root: &Path, report: &mut Report) {
-    let dir = root.join("migrations");
+    check_migration_dir(root, report, "migrations", "database.migrations");
+    check_migration_dir(
+        root,
+        report,
+        "migrations_postgres",
+        "database.migrations.postgres",
+    );
+}
+
+fn check_migration_dir(
+    root: &Path,
+    report: &mut Report,
+    relative_dir: &'static str,
+    id: &'static str,
+) {
+    let dir = root.join(relative_dir);
     let entries = match fs::read_dir(&dir) {
         Ok(entries) => entries,
         Err(err) => {
             report.findings.push(Finding::fail(
-                "database.migrations",
+                id,
                 "database",
                 "missing",
-                "migrations directory cannot be read.",
+                &format!("{relative_dir} directory cannot be read."),
                 &err.to_string(),
                 "migrations_missing",
-                "Restore the migrations directory.",
+                &format!("Restore the {relative_dir} directory."),
             ));
             return;
         }
@@ -682,39 +725,49 @@ fn check_migrations(root: &Path, report: &mut Report) {
 
     if names.is_empty() {
         report.findings.push(Finding::fail(
-            "database.migrations",
+            id,
             "database",
             "missing",
-            "No SQL migrations found.",
+            &format!("No SQL migrations found in {relative_dir}."),
             "",
             "migrations_missing",
-            "Add sqlx migration files under migrations/.",
+            &format!("Add sqlx migration files under {relative_dir}."),
         ));
         return;
     }
 
     report.findings.push(Finding::ok(
-        "database.migrations",
+        id,
         "database",
         "present",
-        &format!("Found {} SQL migrations.", names.len()),
+        &format!("Found {} SQL migrations in {relative_dir}.", names.len()),
         &names.join(", "),
     ));
 
     if names.iter().any(|name| name.contains("reviews")) {
+        let reviews_id = if relative_dir == "migrations_postgres" {
+            "database.migrations.postgres.reviews"
+        } else {
+            "database.migrations.reviews"
+        };
         report.findings.push(Finding::ok(
-            "database.migrations.reviews",
+            reviews_id,
             "database",
             "present",
-            "Reviews migration is present.",
+            &format!("Reviews migration is present in {relative_dir}."),
             "Review schema can be validated once a database adapter is connected.",
         ));
     } else {
+        let reviews_id = if relative_dir == "migrations_postgres" {
+            "database.migrations.postgres.reviews"
+        } else {
+            "database.migrations.reviews"
+        };
         report.findings.push(Finding::warn(
-            "database.migrations.reviews",
+            reviews_id,
             "database",
             "missing",
-            "Reviews migration was not found.",
+            &format!("Reviews migration was not found in {relative_dir}."),
             "Add or restore the reviews migration before enabling review setup.",
         ));
     }
@@ -1016,9 +1069,29 @@ fn write_report_artifact(root: &Path, report: &Report) -> Result<(), String> {
             reports_dir.display()
         )
     })?;
-    let path = reports_dir.join("latest.json");
-    fs::write(&path, render_json_report(report))
-        .map_err(|err| format!("failed to write report {}: {err}", path.display()))
+    let rendered = render_json_report(report);
+    let latest_path = reports_dir.join("latest.json");
+    fs::write(&latest_path, &rendered)
+        .map_err(|err| format!("failed to write report {}: {err}", latest_path.display()))?;
+
+    let timestamped_path = reports_dir.join(format!(
+        "{}-{}.json",
+        report.command.replace('.', "-"),
+        unix_timestamp()
+    ));
+    fs::write(&timestamped_path, rendered).map_err(|err| {
+        format!(
+            "failed to write report {}: {err}",
+            timestamped_path.display()
+        )
+    })
+}
+
+fn unix_timestamp() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
 }
 
 fn exit_if_failed(report: &Report, allow_fail: bool) -> Result<(), String> {

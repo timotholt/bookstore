@@ -88,6 +88,12 @@ required = true
 path = "migrations"
 
 [[checks]]
+id = "database.migrations.postgres"
+kind = "sqlx_migrations"
+required = true
+path = "migrations_postgres"
+
+[[checks]]
 id = "app.healthz.local"
 kind = "http"
 required = false
