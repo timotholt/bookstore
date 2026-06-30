@@ -100,22 +100,22 @@ fn run_external(root: &Path, args: &[String]) -> Result<(), String> {
                 "external",
                 "planned",
                 "Running first-slice setup orchestration.",
-                "This setup pass installs supported local dependencies only with --yes or --install-deps, then validates local bootstrap state. Provider mutation adapters are intentionally not enabled yet.",
+                "This setup pass includes supported dependency checks with --install-deps and applies installers only with --yes. Provider mutation adapters are intentionally not enabled yet.",
             ));
 
             report.extend(build_doctor_report(root));
             let env_store = EnvStore::load(root);
             let manifest = SetupManifest::load(root).ok();
 
-            if options.yes || options.install_deps {
-                report.extend(build_install_report(root, true)?);
+            if options.install_deps {
+                report.extend(build_install_report(root, options.yes)?);
             } else {
                 report.findings.push(Finding::warn(
                     "setup.install_deps",
                     "local",
                     "skipped",
                     "Dependency installation skipped.",
-                    "Use `cargo xtask external setup --install-deps` or `cargo xtask external install-deps --yes`.",
+                    "Use `cargo xtask external setup --install-deps` to include dependency checks, then add --yes to install supported missing tools.",
                 ));
             }
 
@@ -1121,6 +1121,6 @@ fn print_help() {
 
 fn print_external_help() {
     println!(
-        "External world commands:\n  doctor        Read-only local bootstrap readiness check\n  plan          Read-only action planning scaffold\n  validate      Read-only local/provider validation report\n  setup         First-slice setup orchestration\n  repair        Targeted repair scaffold; requires --only\n  install-deps  Install supported local dependencies when passed --yes\n  secrets import-email --from <path>\n                Parse a pasted recovery email/note into setup/.secrets.demo.env with --yes\n\nFlags:\n  --json                 Emit machine-readable JSON\n  --local-only           Skip provider checks\n  --only <selector>      Show matching finding IDs/providers only\n  --from <path>          Read a local input file\n  --write-report         Write setup/reports/latest.json\n  --install-deps         Let setup install supported local dependencies\n  --yes, -y              Apply supported installers/writes\n"
+        "External world commands:\n  doctor        Read-only local bootstrap readiness check\n  plan          Read-only action planning scaffold\n  validate      Read-only local/provider validation report\n  setup         First-slice setup orchestration\n  repair        Targeted repair scaffold; requires --only\n  install-deps  Install supported local dependencies when passed --yes\n  secrets import-email --from <path>\n                Parse a pasted recovery email/note into setup/.secrets.demo.env with --yes\n\nFlags:\n  --json                 Emit machine-readable JSON\n  --local-only           Skip provider checks\n  --only <selector>      Show matching finding IDs/providers only\n  --from <path>          Read a local input file\n  --write-report         Write setup/reports/latest.json\n  --install-deps         Include dependency checks in setup; combine with --yes to install\n  --yes, -y              Apply supported installers/writes\n"
     );
 }

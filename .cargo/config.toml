@@ -1,2 +1,6 @@
 [alias]
 xtask = "run -p xtask --"
+setup-everything = "xtask external setup --install-deps --write-report"
+validate-everything = "xtask external validate --write-report"
+setupEverything = "xtask external setup --install-deps --write-report"
+validateEverything = "xtask external validate --write-report"
