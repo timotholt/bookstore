@@ -19,6 +19,7 @@
   --radius: 12px;
   --radius-sm: 6px;
   --header-height: 98px;
+  --anchor-offset: calc(var(--header-height) + 28px);
   
   /* Sage & Rust Custom Button Palette variables */
   --btn-add-bg: var(--sage);
@@ -71,6 +72,7 @@
 
 html {
   scroll-behavior: smooth;
+  scroll-padding-top: var(--anchor-offset);
 }
 
 body {
