@@ -4,12 +4,12 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::Deserialize;
-use sqlx::SqlitePool;
 use std::collections::HashMap;
 use tower_sessions::Session;
 
 use crate::app::AppState;
 use crate::cart;
+use crate::db::DbPool;
 use crate::errors::AppError;
 use crate::models::*;
 use crate::store;
@@ -62,9 +62,7 @@ pub async fn healthz() -> &'static str {
 }
 
 pub async fn readyz(State(state): State<AppState>) -> Result<&'static str, AppError> {
-    sqlx::query_scalar::<_, i64>("SELECT 1")
-        .fetch_one(&state.db)
-        .await?;
+    sqlx::query("SELECT 1").execute(&state.db).await?;
     Ok("ready")
 }
 
@@ -166,7 +164,7 @@ pub async fn home(
 
     let new_arrivals: Vec<BookCard> = all_books
         .iter()
-        .filter(|b| b.is_new_arrival)
+        .filter(|b| b.is_new_arrival())
         .take(6)
         .cloned()
         .collect();
@@ -491,7 +489,7 @@ pub async fn cart_page(
 }
 
 async fn cart_page_content_template(
-    db: &SqlitePool,
+    db: &DbPool,
     session: &Session,
 ) -> Result<CartPageContentTemplate, AppError> {
     let cart = cart::view(db, session).await?;
@@ -528,15 +526,12 @@ async fn cart_page_content_template(
     })
 }
 
-async fn render_cart_page_content(
-    db: &SqlitePool,
-    session: &Session,
-) -> Result<Response, AppError> {
+async fn render_cart_page_content(db: &DbPool, session: &Session) -> Result<Response, AppError> {
     let template = cart_page_content_template(db, session).await?;
     attach_cart_cookie(template.into_response(), session).await
 }
 
-async fn render_cart(db: &SqlitePool, session: Session) -> Result<Response, AppError> {
+async fn render_cart(db: &DbPool, session: Session) -> Result<Response, AppError> {
     let cart = cart::view(db, &session).await?;
     let cart_lines = ui::cart_lines(cart.lines.clone(), "#cartDrawer");
     let removed_notice = ui::removed_notice(

@@ -1,9 +1,9 @@
-use sqlx::sqlite::SqlitePool;
 use std::net::SocketAddr;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod app;
 mod cart;
+mod db;
 mod errors;
 mod handlers;
 mod models;
@@ -25,21 +25,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    // Database connection setup
-    let db_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "sqlite://data/bookstore.db?mode=rwc".to_string());
-
-    // Ensure parent directory for database exists
-    if let Some(path) = std::path::Path::new(&db_url.trim_start_matches("sqlite://")).parent() {
-        if !path.as_os_str().is_empty() {
-            std::fs::create_dir_all(path)?;
-        }
-    }
-
-    let db = SqlitePool::connect(&db_url).await?;
+    db::install_drivers();
+    let db_url = db::default_database_url();
+    db::ensure_sqlite_parent(&db_url)?;
+    let db = db::connect(&db_url).await?;
 
     // Run pending database migrations
-    sqlx::migrate!("./migrations").run(&db).await?;
+    if db::is_postgres_url(&db_url) {
+        sqlx::migrate!("./migrations_postgres").run(&db).await?;
+    } else {
+        sqlx::migrate!("./migrations").run(&db).await?;
+    }
     tracing::info!("Database migrations executed successfully");
 
     let app = app::build_router(app::AppState { db });

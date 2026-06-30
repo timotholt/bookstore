@@ -1,5 +1,6 @@
+use crate::db::{Db, DbPool};
 use crate::models::{AnalyticsEventPayload, BookCard, CatalogFilters, VariantAttribute};
-use sqlx::{QueryBuilder, SqlitePool};
+use sqlx::QueryBuilder;
 
 const BASE_SELECT: &str = r#"
     SELECT
@@ -14,14 +15,14 @@ const BASE_SELECT: &str = r#"
         b.cover_color as cover_color,
         b.aspect_ratio as aspect_ratio,
         b.tags as tags,
-        b.is_new_arrival as is_new_arrival,
+        CAST(CASE WHEN b.is_new_arrival THEN 1 ELSE 0 END AS BIGINT) as is_new_arrival,
         c.id as copy_id,
         COALESCE(c.condition, '') as condition,
         c.price as price,
         COALESCE(c.notes, '') as notes,
         COALESCE(c.format, 'Standard') as format,
         c.stock as stock,
-        c.is_staff_pick as is_staff_pick,
+        CAST(CASE WHEN c.is_staff_pick THEN 1 ELSE 0 END AS BIGINT) as is_staff_pick,
         COALESCE(c.staff_quote, '') as staff_quote,
         c.seal_style as seal_style,
         c.seal_text as seal_text
@@ -29,14 +30,14 @@ const BASE_SELECT: &str = r#"
     LEFT JOIN authors a ON a.id = b.primary_author_id
     LEFT JOIN genres g ON g.id = b.primary_genre_id
     JOIN book_copies c ON c.book_id = b.id
-    WHERE c.is_sold = 0
+    WHERE c.is_sold = false
 "#;
 
 pub async fn list_books(
-    db: &SqlitePool,
+    db: &DbPool,
     filters: &CatalogFilters,
 ) -> Result<Vec<BookCard>, sqlx::Error> {
-    let mut query_builder = QueryBuilder::new(BASE_SELECT);
+    let mut query_builder: QueryBuilder<Db> = QueryBuilder::new(BASE_SELECT);
 
     // Filter out duplicate copies of same book by returning the cheapest copy
     query_builder.push(
@@ -44,7 +45,7 @@ pub async fn list_books(
         AND c.id = (
             SELECT c2.id 
             FROM book_copies c2 
-            WHERE c2.book_id = b.id AND c2.is_sold = 0 
+            WHERE c2.book_id = b.id AND c2.is_sold = false 
             ORDER BY c2.price ASC 
             LIMIT 1
         )
@@ -135,7 +136,7 @@ pub async fn list_books(
 }
 
 pub async fn collection_books(
-    db: &SqlitePool,
+    db: &DbPool,
     slug: &str,
     limit: i64,
 ) -> Result<Vec<BookCard>, sqlx::Error> {
@@ -153,14 +154,14 @@ pub async fn collection_books(
             b.cover_color as cover_color,
             b.aspect_ratio as aspect_ratio,
             b.tags as tags,
-            b.is_new_arrival as is_new_arrival,
+            CAST(CASE WHEN b.is_new_arrival THEN 1 ELSE 0 END AS BIGINT) as is_new_arrival,
             c.id as copy_id,
             COALESCE(c.condition, '') as condition,
             c.price as price,
             COALESCE(c.notes, '') as notes,
             COALESCE(c.format, 'Standard') as format,
             c.stock as stock,
-            c.is_staff_pick as is_staff_pick,
+            CAST(CASE WHEN c.is_staff_pick THEN 1 ELSE 0 END AS BIGINT) as is_staff_pick,
             COALESCE(c.staff_quote, '') as staff_quote,
             c.seal_style as seal_style,
             c.seal_text as seal_text
@@ -169,11 +170,11 @@ pub async fn collection_books(
         LEFT JOIN authors a ON a.id = b.primary_author_id
         LEFT JOIN genres g ON g.id = b.primary_genre_id
         JOIN book_copies c ON c.book_id = b.id
-        WHERE i.collection_slug = ? AND i.is_active = 1 AND c.is_sold = 0
+        WHERE i.collection_slug = ? AND i.is_active = true AND c.is_sold = false
           AND c.id = (
             SELECT c2.id 
             FROM book_copies c2 
-            WHERE c2.book_id = b.id AND c2.is_sold = 0 
+            WHERE c2.book_id = b.id AND c2.is_sold = false 
             ORDER BY c2.price ASC 
             LIMIT 1
           )
@@ -190,13 +191,13 @@ pub async fn collection_books(
 }
 
 pub async fn books_by_copy_ids(
-    db: &SqlitePool,
+    db: &DbPool,
     copy_ids: &[i64],
 ) -> Result<Vec<BookCard>, sqlx::Error> {
     if copy_ids.is_empty() {
         return Ok(Vec::new());
     }
-    let mut query_builder = QueryBuilder::new(BASE_SELECT);
+    let mut query_builder: QueryBuilder<Db> = QueryBuilder::new(BASE_SELECT);
     query_builder.push(" AND c.id IN (");
     let mut separated = query_builder.separated(", ");
     for &id in copy_ids {
@@ -209,7 +210,7 @@ pub async fn books_by_copy_ids(
         .await
 }
 
-pub async fn book_by_id(db: &SqlitePool, book_id: &str) -> Result<BookCard, sqlx::Error> {
+pub async fn book_by_id(db: &DbPool, book_id: &str) -> Result<BookCard, sqlx::Error> {
     let query = format!(
         r#"
         {} AND b.id = ?
@@ -225,15 +226,15 @@ pub async fn book_by_id(db: &SqlitePool, book_id: &str) -> Result<BookCard, sqlx
         .await
 }
 
-pub async fn copy_stock(db: &SqlitePool, copy_id: i64) -> Result<i32, sqlx::Error> {
-    sqlx::query_scalar::<_, i32>("SELECT stock FROM book_copies WHERE id = ? AND is_sold = 0")
+pub async fn copy_stock(db: &DbPool, copy_id: i64) -> Result<i32, sqlx::Error> {
+    sqlx::query_scalar::<_, i32>("SELECT stock FROM book_copies WHERE id = ? AND is_sold = false")
         .bind(copy_id)
         .fetch_one(db)
         .await
 }
 
 pub async fn copies_by_product_id(
-    db: &SqlitePool,
+    db: &DbPool,
     product_id: &str,
 ) -> Result<Vec<BookCard>, sqlx::Error> {
     let query = format!(
@@ -251,7 +252,7 @@ pub async fn copies_by_product_id(
 }
 
 pub async fn variant_attributes(
-    db: &SqlitePool,
+    db: &DbPool,
     book_id: &str,
 ) -> Result<Vec<VariantAttribute>, sqlx::Error> {
     sqlx::query_as::<_, VariantAttribute>(
@@ -268,7 +269,7 @@ pub async fn variant_attributes(
 }
 
 pub async fn record_analytics_event(
-    db: &SqlitePool,
+    db: &DbPool,
     session_key: &str,
     payload: &AnalyticsEventPayload,
 ) -> Result<i64, sqlx::Error> {
@@ -278,7 +279,7 @@ pub async fn record_analytics_event(
         .map(|value| value.to_string())
         .unwrap_or_else(|| "{}".to_string());
 
-    let result = sqlx::query(
+    sqlx::query_scalar::<_, i64>(
         r#"
         INSERT INTO analytics_events (
             session_key,
@@ -290,6 +291,7 @@ pub async fn record_analytics_event(
             metadata_json
         )
         VALUES (?, ?, ?, ?, ?, ?, ?)
+        RETURNING id
         "#,
     )
     .bind(session_key)
@@ -299,8 +301,6 @@ pub async fn record_analytics_event(
     .bind(payload.target_id.as_deref().unwrap_or("").trim())
     .bind(payload.page_path.as_deref().unwrap_or("").trim())
     .bind(metadata_json)
-    .execute(db)
-    .await?;
-
-    Ok(result.last_insert_rowid())
+    .fetch_one(db)
+    .await
 }

@@ -2,15 +2,15 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use sqlx::SqlitePool;
 use tower_http::services::{ServeDir, ServeFile};
 use tower_sessions::{cookie::SameSite, MemoryStore, SessionManagerLayer};
 
+use crate::db::DbPool;
 use crate::handlers;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub db: SqlitePool,
+    pub db: DbPool,
 }
 
 pub fn build_router(state: AppState) -> Router {
@@ -76,15 +76,15 @@ mod tests {
         http::{header, Request, StatusCode},
     };
     use serde_json::json;
-    use sqlx::sqlite::SqlitePoolOptions;
     use tower::ServiceExt;
 
     async fn test_app() -> Router {
         test_app_with_db().await.0
     }
 
-    async fn test_app_with_db() -> (Router, SqlitePool) {
-        let db = SqlitePoolOptions::new()
+    async fn test_app_with_db() -> (Router, DbPool) {
+        crate::db::install_drivers();
+        let db = sqlx::any::AnyPoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")
             .await

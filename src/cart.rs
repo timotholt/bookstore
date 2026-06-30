@@ -1,10 +1,10 @@
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
 use rust_decimal::Decimal;
-use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::str::FromStr;
 use tower_sessions::Session;
 
+use crate::db::DbPool;
 use crate::errors::AppError;
 use crate::models::{CartItem, CartLine, CartView, SavedItem, SavedItemsView};
 use crate::store;
@@ -13,7 +13,7 @@ const CART_SESSION_KEY: &str = "cart_session_key";
 const LEGACY_CART_KEY: &str = "cart";
 pub const BROWSER_CART_KEY_COOKIE: &str = "davis_cart_key";
 
-pub async fn view(db: &SqlitePool, session: &Session) -> Result<CartView, AppError> {
+pub async fn view(db: &DbPool, session: &Session) -> Result<CartView, AppError> {
     import_legacy_session_cart(db, session).await?;
 
     let Some(session_key) = session.get::<String>(CART_SESSION_KEY).await? else {
@@ -27,7 +27,7 @@ pub async fn view(db: &SqlitePool, session: &Session) -> Result<CartView, AppErr
     build_cart_view(db, Some(cart_id), items).await
 }
 
-pub async fn saved_view(db: &SqlitePool, session: &Session) -> Result<SavedItemsView, AppError> {
+pub async fn saved_view(db: &DbPool, session: &Session) -> Result<SavedItemsView, AppError> {
     import_legacy_session_cart(db, session).await?;
 
     let Some(session_key) = session.get::<String>(CART_SESSION_KEY).await? else {
@@ -38,7 +38,7 @@ pub async fn saved_view(db: &SqlitePool, session: &Session) -> Result<SavedItems
     build_saved_items_view(db, &session_key, items).await
 }
 
-pub async fn add_one(db: &SqlitePool, session: &Session, copy_id: i64) -> Result<(), AppError> {
+pub async fn add_one(db: &DbPool, session: &Session, copy_id: i64) -> Result<(), AppError> {
     let current_qty = quantity(db, session, copy_id).await?;
     let stock = match store::copy_stock(db, copy_id).await {
         Ok(stock) => stock,
@@ -50,11 +50,7 @@ pub async fn add_one(db: &SqlitePool, session: &Session, copy_id: i64) -> Result
     set_quantity(db, session, copy_id, next_qty).await
 }
 
-pub async fn save_for_later(
-    db: &SqlitePool,
-    session: &Session,
-    copy_id: i64,
-) -> Result<(), AppError> {
+pub async fn save_for_later(db: &DbPool, session: &Session, copy_id: i64) -> Result<(), AppError> {
     if copy_id < 1 {
         return Err(AppError::Validation("invalid copy".into()));
     }
@@ -72,7 +68,7 @@ pub async fn save_for_later(
 }
 
 pub async fn remove_with_notice(
-    db: &SqlitePool,
+    db: &DbPool,
     session: &Session,
     copy_id: i64,
 ) -> Result<(), AppError> {
@@ -93,7 +89,7 @@ pub async fn remove_with_notice(
 }
 
 pub async fn restore_removed_item(
-    db: &SqlitePool,
+    db: &DbPool,
     session: &Session,
     copy_id: i64,
 ) -> Result<(), AppError> {
@@ -112,7 +108,7 @@ pub async fn restore_removed_item(
 }
 
 pub async fn removed_item_view(
-    db: &SqlitePool,
+    db: &DbPool,
     session: &Session,
 ) -> Result<Option<CartLine>, AppError> {
     let Some(session_key) = session.get::<String>(CART_SESSION_KEY).await? else {
@@ -145,7 +141,7 @@ pub async fn removed_item_view(
 }
 
 pub async fn move_saved_to_cart(
-    db: &SqlitePool,
+    db: &DbPool,
     session: &Session,
     copy_id: i64,
 ) -> Result<(), AppError> {
@@ -163,7 +159,7 @@ pub async fn move_saved_to_cart(
 }
 
 pub async fn remove_saved_item(
-    db: &SqlitePool,
+    db: &DbPool,
     session: &Session,
     copy_id: i64,
 ) -> Result<(), AppError> {
@@ -179,7 +175,7 @@ pub async fn remove_saved_item(
 }
 
 pub async fn change_quantity(
-    db: &SqlitePool,
+    db: &DbPool,
     session: &Session,
     copy_id: i64,
     delta: i32,
@@ -195,7 +191,7 @@ pub async fn change_quantity(
 }
 
 pub async fn set_quantity(
-    db: &SqlitePool,
+    db: &DbPool,
     session: &Session,
     copy_id: i64,
     quantity: i32,
@@ -229,7 +225,7 @@ pub async fn set_quantity(
     Ok(())
 }
 
-pub async fn quantity(db: &SqlitePool, session: &Session, copy_id: i64) -> Result<i32, AppError> {
+pub async fn quantity(db: &DbPool, session: &Session, copy_id: i64) -> Result<i32, AppError> {
     let Some(cart_id) = optional_cart_id(db, session).await? else {
         return Ok(0);
     };
@@ -256,7 +252,7 @@ pub async fn current_session_key(session: &Session) -> Result<Option<String>, Ap
         .map_err(AppError::from)
 }
 
-async fn writable_cart_id(db: &SqlitePool, session: &Session) -> Result<i64, AppError> {
+async fn writable_cart_id(db: &DbPool, session: &Session) -> Result<i64, AppError> {
     import_legacy_session_cart(db, session).await?;
     let session_key = cart_session_key(session).await?;
     ensure_active_cart(db, &session_key)
@@ -264,7 +260,7 @@ async fn writable_cart_id(db: &SqlitePool, session: &Session) -> Result<i64, App
         .map_err(AppError::from)
 }
 
-async fn optional_cart_id(db: &SqlitePool, session: &Session) -> Result<Option<i64>, AppError> {
+async fn optional_cart_id(db: &DbPool, session: &Session) -> Result<Option<i64>, AppError> {
     import_legacy_session_cart(db, session).await?;
     let Some(session_key) = session.get::<String>(CART_SESSION_KEY).await? else {
         return Ok(None);
@@ -284,7 +280,7 @@ async fn cart_session_key(session: &Session) -> Result<String, AppError> {
     Ok(session_key)
 }
 
-async fn active_cart_id(db: &SqlitePool, session_key: &str) -> Result<Option<i64>, sqlx::Error> {
+async fn active_cart_id(db: &DbPool, session_key: &str) -> Result<Option<i64>, sqlx::Error> {
     sqlx::query_scalar::<_, i64>(
         r#"
         SELECT id
@@ -298,11 +294,12 @@ async fn active_cart_id(db: &SqlitePool, session_key: &str) -> Result<Option<i64
     .await
 }
 
-async fn ensure_active_cart(db: &SqlitePool, session_key: &str) -> Result<i64, sqlx::Error> {
+async fn ensure_active_cart(db: &DbPool, session_key: &str) -> Result<i64, sqlx::Error> {
     sqlx::query(
         r#"
-        INSERT OR IGNORE INTO carts (session_key, status)
+        INSERT INTO carts (session_key, status)
         VALUES (?, 'active')
+        ON CONFLICT DO NOTHING
         "#,
     )
     .bind(session_key)
@@ -314,7 +311,7 @@ async fn ensure_active_cart(db: &SqlitePool, session_key: &str) -> Result<i64, s
         .ok_or(sqlx::Error::RowNotFound)
 }
 
-async fn import_legacy_session_cart(db: &SqlitePool, session: &Session) -> Result<(), AppError> {
+async fn import_legacy_session_cart(db: &DbPool, session: &Session) -> Result<(), AppError> {
     let Some(items) = session.remove::<Vec<CartItem>>(LEGACY_CART_KEY).await? else {
         return Ok(());
     };
@@ -337,7 +334,7 @@ async fn import_legacy_session_cart(db: &SqlitePool, session: &Session) -> Resul
     Ok(())
 }
 
-async fn cart_items(db: &SqlitePool, cart_id: i64) -> Result<Vec<CartItem>, sqlx::Error> {
+async fn cart_items(db: &DbPool, cart_id: i64) -> Result<Vec<CartItem>, sqlx::Error> {
     sqlx::query_as::<_, CartItem>(
         r#"
         SELECT copy_id, quantity
@@ -352,7 +349,7 @@ async fn cart_items(db: &SqlitePool, cart_id: i64) -> Result<Vec<CartItem>, sqlx
 }
 
 async fn cart_item_quantity(
-    db: &SqlitePool,
+    db: &DbPool,
     cart_id: i64,
     copy_id: i64,
 ) -> Result<Option<i32>, sqlx::Error> {
@@ -365,7 +362,7 @@ async fn cart_item_quantity(
     .await
 }
 
-async fn saved_items(db: &SqlitePool, session_key: &str) -> Result<Vec<SavedItem>, sqlx::Error> {
+async fn saved_items(db: &DbPool, session_key: &str) -> Result<Vec<SavedItem>, sqlx::Error> {
     sqlx::query_as::<_, SavedItem>(
         r#"
         SELECT copy_id, quantity
@@ -380,7 +377,7 @@ async fn saved_items(db: &SqlitePool, session_key: &str) -> Result<Vec<SavedItem
 }
 
 async fn saved_item_quantity(
-    db: &SqlitePool,
+    db: &DbPool,
     session_key: &str,
     copy_id: i64,
 ) -> Result<Option<i32>, sqlx::Error> {
@@ -394,7 +391,7 @@ async fn saved_item_quantity(
 }
 
 async fn removed_cart_item(
-    db: &SqlitePool,
+    db: &DbPool,
     session_key: &str,
 ) -> Result<Option<CartItem>, sqlx::Error> {
     sqlx::query_as::<_, CartItem>(
@@ -412,7 +409,7 @@ async fn removed_cart_item(
 }
 
 async fn removed_item_quantity(
-    db: &SqlitePool,
+    db: &DbPool,
     session_key: &str,
     copy_id: i64,
 ) -> Result<Option<i32>, sqlx::Error> {
@@ -426,7 +423,7 @@ async fn removed_item_quantity(
 }
 
 async fn upsert_cart_item(
-    db: &SqlitePool,
+    db: &DbPool,
     cart_id: i64,
     copy_id: i64,
     quantity: i32,
@@ -450,7 +447,7 @@ async fn upsert_cart_item(
 }
 
 async fn upsert_saved_item(
-    db: &SqlitePool,
+    db: &DbPool,
     session_key: &str,
     copy_id: i64,
     quantity: i32,
@@ -471,7 +468,7 @@ async fn upsert_saved_item(
 }
 
 async fn upsert_removed_cart_item(
-    db: &SqlitePool,
+    db: &DbPool,
     session_key: &str,
     copy_id: i64,
     quantity: i32,
@@ -491,7 +488,7 @@ async fn upsert_removed_cart_item(
     Ok(())
 }
 
-async fn delete_cart_item(db: &SqlitePool, cart_id: i64, copy_id: i64) -> Result<(), sqlx::Error> {
+async fn delete_cart_item(db: &DbPool, cart_id: i64, copy_id: i64) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM cart_items WHERE cart_id = ? AND copy_id = ?")
         .bind(cart_id)
         .bind(copy_id)
@@ -502,7 +499,7 @@ async fn delete_cart_item(db: &SqlitePool, cart_id: i64, copy_id: i64) -> Result
 }
 
 async fn delete_saved_item(
-    db: &SqlitePool,
+    db: &DbPool,
     session_key: &str,
     copy_id: i64,
 ) -> Result<(), sqlx::Error> {
@@ -517,7 +514,7 @@ async fn delete_saved_item(
 }
 
 async fn delete_removed_cart_item(
-    db: &SqlitePool,
+    db: &DbPool,
     session_key: &str,
     copy_id: i64,
 ) -> Result<(), sqlx::Error> {
@@ -531,7 +528,7 @@ async fn delete_removed_cart_item(
     Ok(())
 }
 
-async fn touch_cart(db: &SqlitePool, cart_id: i64) -> Result<(), sqlx::Error> {
+async fn touch_cart(db: &DbPool, cart_id: i64) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE carts SET updated_at = CURRENT_TIMESTAMP WHERE id = ?")
         .bind(cart_id)
         .execute(db)
@@ -540,7 +537,7 @@ async fn touch_cart(db: &SqlitePool, cart_id: i64) -> Result<(), sqlx::Error> {
 }
 
 async fn build_cart_view(
-    db: &SqlitePool,
+    db: &DbPool,
     cart_id: Option<i64>,
     items: Vec<CartItem>,
 ) -> Result<CartView, AppError> {
@@ -602,7 +599,7 @@ fn empty_cart_view() -> CartView {
 }
 
 async fn build_saved_items_view(
-    db: &SqlitePool,
+    db: &DbPool,
     session_key: &str,
     items: Vec<SavedItem>,
 ) -> Result<SavedItemsView, AppError> {

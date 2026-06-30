@@ -838,14 +838,12 @@ fn validate_neon_readiness(env_store: &EnvStore) -> Vec<Finding> {
                 "DATABASE_URL is Postgres-compatible.",
                 "Value redacted.",
             ));
-            findings.push(Finding::fail(
+            findings.push(Finding::ok(
                 "neon.app_runtime",
                 "neon",
-                "pending",
-                "Neon database validation can run, but the app runtime still uses SqlitePool.",
-                "src/main.rs and src/app.rs are SQLite-specific.",
-                "postgres_runtime_missing",
-                "Port the app runtime and SQL query modules before treating Neon as deploy-ready.",
+                "postgres",
+                "The app runtime can select Postgres from DATABASE_URL.",
+                "src/main.rs uses sqlx AnyPool and migrations_postgres for Postgres URLs.",
             ));
         }
         Some(value) if value.value.starts_with("sqlite:") => {
@@ -953,15 +951,25 @@ mod tests {
     use super::*;
     use crate::env_loader::{EnvSource, EnvStore, EnvValue};
     use crate::manifest::{ProviderManifest, SetupManifest};
+    use crate::report::Severity;
     use std::collections::BTreeMap;
 
     #[test]
-    fn neon_reports_sqlite_runtime_blocker() {
+    fn neon_reports_sqlite_url_blocker() {
         let store = store_with([("DATABASE_URL", "sqlite://data/bookstore.db?mode=rwc")]);
         let findings = validate_neon_readiness(&store);
         assert!(findings
             .iter()
             .any(|finding| finding.id == "neon.app_runtime"));
+    }
+
+    #[test]
+    fn neon_reports_postgres_runtime_ready() {
+        let store = store_with([("DATABASE_URL", "postgres://redacted")]);
+        let findings = validate_neon_readiness(&store);
+        assert!(findings.iter().any(|finding| {
+            finding.id == "neon.app_runtime" && finding.severity == Severity::Ok
+        }));
     }
 
     #[test]

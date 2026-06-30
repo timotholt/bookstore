@@ -16,7 +16,7 @@ pub struct BookCard {
     pub cover_color: String,
     pub aspect_ratio: f64,
     pub tags: String,
-    pub is_new_arrival: bool,
+    pub is_new_arrival: i64,
     #[sqlx(rename = "copy_id")]
     pub copy_id: i64,
     pub condition: String,
@@ -24,10 +24,16 @@ pub struct BookCard {
     pub notes: Option<String>,
     pub format: String,
     pub stock: i32,
-    pub is_staff_pick: bool,
+    pub is_staff_pick: i64,
     pub staff_quote: String,
     pub seal_style: String,
     pub seal_text: String,
+}
+
+impl BookCard {
+    pub fn is_new_arrival(&self) -> bool {
+        self.is_new_arrival != 0
+    }
 }
 
 #[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
