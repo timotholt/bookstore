@@ -1,10 +1,12 @@
 mod database;
 mod env_loader;
+mod providers;
 mod report;
 mod secrets;
 
 use database::validate_database;
 use env_loader::EnvStore;
+use providers::validate_provider_readiness;
 use report::{render_human_report, render_json_report, Finding, Report};
 use secrets::import_email;
 
@@ -303,13 +305,10 @@ fn build_validation_report(root: &Path, local_only: bool) -> Report {
             "Run without --local-only after provider adapters are implemented.",
         ));
     } else {
-        report.findings.push(Finding::manual(
-            "validate.providers",
-            "external",
-            "not_implemented",
-            "Provider inspection adapters are not implemented yet.",
-            "The first provider adapter should inspect Neon account/project/database/migration state.",
-        ));
+        report.extend(validate_database(root, &env_store));
+        report
+            .findings
+            .extend(validate_provider_readiness(&env_store));
     }
 
     report

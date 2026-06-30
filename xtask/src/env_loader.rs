@@ -63,6 +63,11 @@ impl EnvStore {
     pub fn get(&self, name: &str) -> Option<&EnvValue> {
         self.values.get(name)
     }
+
+    #[cfg(test)]
+    pub fn from_values(values: BTreeMap<String, EnvValue>) -> Self {
+        Self { values }
+    }
 }
 
 fn load_file(path: &Path, source: EnvSource, values: &mut BTreeMap<String, EnvValue>) {
