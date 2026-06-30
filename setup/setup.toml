@@ -6,7 +6,7 @@ github_repo = "timotholt/bookstore"
 [environment.local]
 app_env = "local"
 public_base_url = "http://127.0.0.1:8080"
-database_url = "sqlite://data/bookstore.db?mode=rwc"
+database_url = "postgresql://user:password@localhost/davis_books"
 
 [environment.demo]
 app_env = "production"
@@ -81,12 +81,6 @@ id = "local.toolchain"
 kind = "commands"
 required = true
 commands = ["cargo", "rustc", "git"]
-
-[[checks]]
-id = "database.migrations"
-kind = "sqlx_migrations"
-required = true
-path = "migrations"
 
 [[checks]]
 id = "database.migrations.postgres"

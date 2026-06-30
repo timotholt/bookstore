@@ -78,22 +78,82 @@ mod tests {
     use serde_json::json;
     use tower::ServiceExt;
 
-    async fn test_app() -> Router {
-        test_app_with_db().await.0
+    static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations_postgres");
+    static TEST_DB_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+    struct PostgresTestDb {
+        pool: DbPool,
+        _guard: tokio::sync::MutexGuard<'static, ()>,
     }
 
-    async fn test_app_with_db() -> (Router, DbPool) {
-        crate::db::install_drivers();
-        let db = sqlx::any::AnyPoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .expect("connect test sqlite");
-        sqlx::migrate!("./migrations")
-            .run(&db)
-            .await
-            .expect("run test migrations");
+    impl PostgresTestDb {
+        fn pool(&self) -> DbPool {
+            self.pool.clone()
+        }
+    }
 
+    async fn postgres_test_db() -> PostgresTestDb {
+        dotenvy::dotenv().ok();
+        let database_url =
+            std::env::var("DATABASE_URL").expect("DATABASE_URL must be set for Postgres tests");
+        crate::db::require_postgres_url(&database_url)
+            .expect("DATABASE_URL must be postgres:// or postgresql:// for Postgres tests");
+        let database_url = direct_postgres_url(&database_url);
+
+        let guard = TEST_DB_LOCK.lock().await;
+        let schema = format!("test_runtime_{}", std::process::id());
+        let quoted_schema = quote_ident(&schema);
+        let admin = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .connect(&database_url)
+            .await
+            .expect("connect admin Postgres test database");
+
+        sqlx::query(&format!("DROP SCHEMA IF EXISTS {quoted_schema} CASCADE"))
+            .execute(&admin)
+            .await
+            .expect("drop Postgres test schema");
+        sqlx::query(&format!("CREATE SCHEMA {quoted_schema}"))
+            .execute(&admin)
+            .await
+            .expect("create Postgres test schema");
+        admin.close().await;
+
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(5)
+            .connect(&database_url_with_search_path(&database_url, &schema))
+            .await
+            .expect("connect schema-scoped Postgres test database");
+
+        MIGRATOR
+            .run(&pool)
+            .await
+            .expect("run Postgres test migrations");
+
+        PostgresTestDb {
+            pool,
+            _guard: guard,
+        }
+    }
+
+    fn database_url_with_search_path(database_url: &str, schema: &str) -> String {
+        let separator = if database_url.contains('?') { '&' } else { '?' };
+        format!("{database_url}{separator}options=-csearch_path%3D{schema}")
+    }
+
+    fn direct_postgres_url(database_url: &str) -> String {
+        database_url.replace("-pooler.", ".")
+    }
+
+    fn quote_ident(ident: &str) -> String {
+        format!("\"{}\"", ident.replace('"', "\"\""))
+    }
+
+    fn test_app(db: DbPool) -> Router {
+        build_router(AppState { db })
+    }
+
+    fn test_app_with_db(db: DbPool) -> (Router, DbPool) {
         (build_router(AppState { db: db.clone() }), db)
     }
 
@@ -126,7 +186,9 @@ mod tests {
 
     #[tokio::test]
     async fn healthz_returns_ok() {
-        let app = test_app().await;
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let app = test_app(db);
 
         let response = app
             .oneshot(
@@ -145,7 +207,9 @@ mod tests {
 
     #[tokio::test]
     async fn readyz_checks_database() {
-        let app = test_app().await;
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let app = test_app(db);
 
         let response = app
             .oneshot(
@@ -164,7 +228,9 @@ mod tests {
 
     #[tokio::test]
     async fn home_route_renders() {
-        let app = test_app().await;
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let app = test_app(db);
 
         let response = app
             .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
@@ -176,7 +242,9 @@ mod tests {
 
     #[tokio::test]
     async fn home_route_renders_product_tracking_contract() {
-        let app = test_app().await;
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let app = test_app(db);
 
         let response = app
             .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
@@ -196,7 +264,9 @@ mod tests {
 
     #[tokio::test]
     async fn catalog_htmx_route_renders_results() {
-        let app = test_app().await;
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let app = test_app(db);
 
         let response = app
             .oneshot(
@@ -214,7 +284,9 @@ mod tests {
 
     #[tokio::test]
     async fn catalog_without_htmx_redirects_to_home_catalog() {
-        let app = test_app().await;
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let app = test_app(db);
 
         let response = app
             .oneshot(
@@ -238,7 +310,9 @@ mod tests {
 
     #[tokio::test]
     async fn book_detail_route_renders() {
-        let app = test_app().await;
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let app = test_app(db);
 
         let response = app
             .oneshot(
@@ -255,7 +329,9 @@ mod tests {
 
     #[tokio::test]
     async fn cart_page_route_renders() {
-        let app = test_app().await;
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let app = test_app(db);
 
         let response = app
             .oneshot(Request::builder().uri("/cart").body(Body::empty()).unwrap())
@@ -267,7 +343,9 @@ mod tests {
 
     #[tokio::test]
     async fn add_cart_item_persists_anonymous_cart_in_database() {
-        let (app, db) = test_app_with_db().await;
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let (app, db) = test_app_with_db(db);
 
         let response = app
             .oneshot(
@@ -308,7 +386,9 @@ mod tests {
 
     #[tokio::test]
     async fn cart_page_reads_persisted_anonymous_cart_by_session_cookie() {
-        let (app, _db) = test_app_with_db().await;
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let (app, _db) = test_app_with_db(db);
         let add_response = app
             .clone()
             .oneshot(
@@ -345,7 +425,9 @@ mod tests {
 
     #[tokio::test]
     async fn cart_page_reads_persisted_cart_by_browser_cart_cookie_after_session_store_loss() {
-        let (app, db) = test_app_with_db().await;
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let (app, db) = test_app_with_db(db);
         let add_response = app
             .oneshot(
                 Request::builder()
@@ -379,7 +461,9 @@ mod tests {
 
     #[tokio::test]
     async fn cart_quantity_routes_update_persisted_rows() {
-        let (app, db) = test_app_with_db().await;
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let (app, db) = test_app_with_db(db);
         let add_response = app
             .clone()
             .oneshot(
@@ -441,7 +525,9 @@ mod tests {
 
     #[tokio::test]
     async fn cart_page_remove_returns_page_fragment_instead_of_redirecting() {
-        let (app, db) = test_app_with_db().await;
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let (app, db) = test_app_with_db(db);
         let add_response = app
             .clone()
             .oneshot(
@@ -486,7 +572,9 @@ mod tests {
 
     #[tokio::test]
     async fn cart_remove_shows_undo_notice_and_restore_recovers_quantity() {
-        let (app, db) = test_app_with_db().await;
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let (app, db) = test_app_with_db(db);
         let add_response = app
             .clone()
             .oneshot(
@@ -574,7 +662,9 @@ mod tests {
 
     #[tokio::test]
     async fn cart_save_for_later_moves_item_out_of_cart_and_into_saved_items() {
-        let (app, db) = test_app_with_db().await;
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let (app, db) = test_app_with_db(db);
         let add_response = app
             .clone()
             .oneshot(
@@ -643,7 +733,9 @@ mod tests {
 
     #[tokio::test]
     async fn saved_item_move_to_cart_restores_cart_and_removes_saved_row() {
-        let (app, db) = test_app_with_db().await;
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let (app, db) = test_app_with_db(db);
         let add_response = app
             .clone()
             .oneshot(
@@ -707,7 +799,9 @@ mod tests {
 
     #[tokio::test]
     async fn saved_item_move_to_cart_works_after_session_store_loss() {
-        let (app, db) = test_app_with_db().await;
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let (app, db) = test_app_with_db(db);
         let add_response = app
             .clone()
             .oneshot(
@@ -768,7 +862,9 @@ mod tests {
 
     #[tokio::test]
     async fn cart_add_caps_quantity_at_available_stock() {
-        let (app, db) = test_app_with_db().await;
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let (app, db) = test_app_with_db(db);
         let first_response = app
             .clone()
             .oneshot(
@@ -810,7 +906,9 @@ mod tests {
 
     #[tokio::test]
     async fn cart_page_marks_stock_capped_lines() {
-        let (app, _db) = test_app_with_db().await;
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let (app, _db) = test_app_with_db(db);
         let add_response = app
             .clone()
             .oneshot(
@@ -844,7 +942,9 @@ mod tests {
 
     #[tokio::test]
     async fn checkout_route_renders_review_page_from_cart() {
-        let (app, _db) = test_app_with_db().await;
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let (app, _db) = test_app_with_db(db);
         let add_response = app
             .clone()
             .oneshot(
@@ -888,7 +988,9 @@ mod tests {
 
     #[tokio::test]
     async fn review_foundation_tables_migrate() {
-        let (_app, db) = test_app_with_db().await;
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let (_app, db) = test_app_with_db(db);
 
         sqlx::query(
             r#"
@@ -901,7 +1003,7 @@ mod tests {
                 status,
                 verified_purchase
             )
-            VALUES ('b003', 'user-1', 5, 'Loved it', 'A classic for a reason.', 'published', 1)
+            VALUES ('b003', 'user-1', 5, 'Loved it', 'A classic for a reason.', 'published', true)
             "#,
         )
         .execute(&db)
@@ -927,7 +1029,11 @@ mod tests {
 
         let aggregate = sqlx::query_as::<_, (i64, i64, f64, i64)>(
             r#"
-            SELECT published_count, rating_sum, average_rating, verified_count
+            SELECT
+                published_count::int8,
+                rating_sum::int8,
+                average_rating::float8,
+                verified_count::int8
             FROM review_aggregates
             WHERE book_id = 'b003'
             "#,
@@ -941,7 +1047,9 @@ mod tests {
 
     #[tokio::test]
     async fn events_endpoint_persists_analytics_payload() {
-        let (app, db) = test_app_with_db().await;
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let (app, db) = test_app_with_db(db);
         let payload = json!({
             "event_name": "product_clicked",
             "source": "home.best_sellers",
@@ -997,7 +1105,9 @@ mod tests {
 
     #[tokio::test]
     async fn events_endpoint_rejects_empty_event_name() {
-        let app = test_app().await;
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let app = test_app(db);
         let payload = json!({
             "event_name": "",
             "source": "home.best_sellers"

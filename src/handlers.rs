@@ -164,7 +164,7 @@ pub async fn home(
 
     let new_arrivals: Vec<BookCard> = all_books
         .iter()
-        .filter(|b| b.is_new_arrival())
+        .filter(|b| b.is_new_arrival)
         .take(6)
         .cloned()
         .collect();

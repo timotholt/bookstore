@@ -18,7 +18,7 @@ The external setup and validation automation model is defined in [EXTERNAL_WORLD
 4. Account ownership belongs to `timotholt@gmail.com`.
 5. Recovery material must be simple enough to use under pressure. If Railway or Neon needs to be replaced, the repo plus the recovery packet should be enough to rebuild.
 6. The demo should be reproducible in under 10 minutes after accounts and CLI authentication already exist.
-7. The local developer workflow must remain easy. Postgres is the production target, and SQLite may remain as an explicit local option, but the app must not silently fall back to SQLite when Postgres is missing or unreachable.
+7. The local developer workflow must remain easy, but the app runtime is Postgres-only. Local development may use Neon or a local PostgreSQL instance, and the app must not silently fall back to another database when Postgres is missing or unreachable.
 
 ## Target Providers
 
@@ -181,8 +181,6 @@ PASSWORD_PEPPER=...
 Optional:
 
 ```text
-DATABASE_DRIVER=postgres
-SQLITE_DATABASE_URL=file:data/bookstore.db?cache=shared&mode=rwc&_pragma=foreign_keys(1)
 LOG_LEVEL=info
 BOOK_METADATA_PROVIDER=google_books
 GOOGLE_BOOKS_API_KEY=...
@@ -207,28 +205,25 @@ infra/
     configure-railway.sh
     migrate.sh
     smoke-test.sh
-db/
-  migrations/
-    001_create_catalog.sql
-    002_seed_demo_catalog.sql
-    003_create_sessions.sql
-    004_create_staff_users.sql
+migrations_postgres/
+  20260629000000_catalog.sql
+  20260629010000_reviews.sql
 ```
 
 Scripts should be idempotent where practical. If a script cannot safely create a provider resource automatically, it should print the exact manual command or dashboard step that remains.
 
 ## PostgreSQL Migration Requirements
 
-Railway plus Neon requires PostgreSQL as the production database. SQLite can remain for local demos, but production should not depend on SQLite.
+Railway plus Neon requires PostgreSQL as the application database. SQLite is deprecated and is not a supported runtime path.
 
 Application changes:
 
-- Add a PostgreSQL driver, preferably `pgx`.
-- Support `DATABASE_URL` for Postgres.
-- Keep SQLite support as an explicit local `DATABASE_URL`; do not silently switch databases when the configured database is missing or unreachable.
+- Use the `sqlx` PostgreSQL driver through `PgPool`.
+- Require `DATABASE_URL` to use `postgres://` or `postgresql://`.
+- Do not silently switch databases when the configured database is missing or unreachable.
 - Move schema setup out of embedded `db/schema.sql` and into ordered migrations.
 - Add a migration runner command or script.
-- Replace SQLite-specific SQL syntax where needed.
+- Replace legacy SQLite-specific SQL syntax where needed.
 - Add integration smoke tests against a Postgres database URL.
 
 Schema changes:
@@ -466,7 +461,7 @@ Accepted demo simplifications:
 ### Phase B: PostgreSQL Runtime
 
 - Add Postgres driver.
-- Add database driver selection.
+- Remove database driver selection from the app runtime.
 - Convert schema to ordered migrations.
 - Add migration script.
 - Verify local app against Postgres.
@@ -497,7 +492,6 @@ Accepted demo simplifications:
 
 ## Open Decisions
 
-- Whether to keep dual SQLite/Postgres support long term or make Postgres the only supported database after Railway/Neon deployment.
 - Whether to keep using embedded `sqlx` migrations, adopt Atlas, or add a small custom migration runner.
 - Whether the recovery packet should use plaintext email, encrypted local file, or both.
 - Whether Railway deploys should run migrations automatically or require an explicit migration command before deploy.

@@ -530,7 +530,7 @@ fn tool_dependencies() -> Vec<ToolDependency> {
                     "sqlx-cli",
                     "--no-default-features",
                     "--features",
-                    "sqlite,postgres,rustls",
+                    "postgres,rustls",
                 ],
             )),
         },
@@ -713,7 +713,6 @@ fn check_env_files(root: &Path, report: &mut Report) {
 }
 
 fn check_migrations(root: &Path, report: &mut Report) {
-    check_migration_dir(root, report, "migrations", "database.migrations");
     check_migration_dir(
         root,
         report,
@@ -774,26 +773,16 @@ fn check_migration_dir(
     ));
 
     if names.iter().any(|name| name.contains("reviews")) {
-        let reviews_id = if relative_dir == "migrations_postgres" {
-            "database.migrations.postgres.reviews"
-        } else {
-            "database.migrations.reviews"
-        };
         report.findings.push(Finding::ok(
-            reviews_id,
+            "database.migrations.postgres.reviews",
             "database",
             "present",
             &format!("Reviews migration is present in {relative_dir}."),
             "Review schema can be validated once a database adapter is connected.",
         ));
     } else {
-        let reviews_id = if relative_dir == "migrations_postgres" {
-            "database.migrations.postgres.reviews"
-        } else {
-            "database.migrations.reviews"
-        };
         report.findings.push(Finding::warn(
-            reviews_id,
+            "database.migrations.postgres.reviews",
             "database",
             "missing",
             &format!("Reviews migration was not found in {relative_dir}."),

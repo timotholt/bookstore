@@ -48,7 +48,7 @@ Initial progress:
 - Featured deal and book-detail buy box purchase buttons use `ButtonView`.
 - Product cards render click and impression metadata from shared view objects.
 - Route tests assert that the rendered home page keeps the product tracking contract.
-- `/events` persists first-party analytics events to SQLite.
+- `/events` persists first-party analytics events to Postgres.
 - `app.js` captures shared click attributes plus catalog/header search events.
 
 ### 4. Buttons and form controls
@@ -96,7 +96,7 @@ Initial progress:
 
 Initial progress:
 
-- Anonymous carts are stored in SQLite through `carts` and `cart_items`.
+- Anonymous carts are stored in Postgres through `carts` and `cart_items`.
 - Cart rows are keyed by session today and include nullable `user_id` for future auth merge.
 - Cart rules live in `src/cart.rs` instead of `handlers.rs`.
 - Add, increase, decrease, remove, cart page, checkout, and cart drawer rendering use the DB-backed cart.

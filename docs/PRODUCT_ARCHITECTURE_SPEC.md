@@ -10,13 +10,13 @@ Build Davis's Books as a durable small-commerce storefront:
 
 - Server-rendered Rust/Axum application.
 - Askama templates with reusable include components.
-- SQLite-first persistence through `sqlx`.
+- PostgreSQL persistence through `sqlx`, with Neon as the deployed demo database.
 - HTMX for targeted swaps, not a separate client app.
 - Account identity through email/password first, Google OAuth second.
 - Persistent carts stored in the database.
 - Product reviews with verified-purchase support.
 - Review storage and aggregation follow `docs/REVIEWS_SPEC.md`.
-- No paid dependency required for local development.
+- Local development can use Neon or any explicitly configured local PostgreSQL instance.
 - No legacy Go server path.
 
 The product should feel inspired by proven commerce patterns from large retailers, but scoped to a used bookstore. Copy the useful primitives, not the entire platform.
@@ -26,7 +26,7 @@ The product should feel inspired by proven commerce patterns from large retailer
 - Do not rebuild Amazon.
 - Do not add a JavaScript SPA.
 - Do not add Apple login until the account and paid developer requirements are worth it.
-- Do not introduce paid infrastructure to make local development work.
+- Do not introduce a second database runtime to make local development work.
 - Do not introduce a new web framework while Axum, Askama, HTMX, and `sqlx` are serving the job.
 - Do not create parallel implementations when an existing module can be extended cleanly.
 
@@ -36,7 +36,7 @@ The product should feel inspired by proven commerce patterns from large retailer
 - Axum for routing and request handling
 - Askama for templates
 - HTMX for server-rendered interactivity
-- SQLite with `sqlx` migrations
+- PostgreSQL with `sqlx` migrations
 - `tower-sessions` for session management
 - `tower-http` for static assets and middleware
 - `argon2` for password hashing

@@ -25,17 +25,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    db::install_drivers();
     let db_url = db::require_database_url()?;
-    let db_kind = db::database_kind(&db_url)?;
-    db::ensure_sqlite_parent(&db_url)?;
+    db::require_postgres_url(&db_url)?;
     let db = db::connect(&db_url).await?;
 
     // Run pending database migrations
-    match db_kind {
-        db::DatabaseKind::Postgres => sqlx::migrate!("./migrations_postgres").run(&db).await?,
-        db::DatabaseKind::Sqlite => sqlx::migrate!("./migrations").run(&db).await?,
-    }
+    sqlx::migrate!("./migrations_postgres").run(&db).await?;
     tracing::info!("Database migrations executed successfully");
 
     let app = app::build_router(app::AppState { db });

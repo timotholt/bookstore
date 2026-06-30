@@ -103,10 +103,8 @@ fn parse_line_value(line: &str, key: &str) -> Option<String> {
     let rest = rest.trim_start();
     let value = if let Some(value) = rest.strip_prefix('=') {
         value
-    } else if let Some(value) = rest.strip_prefix(':') {
-        value
     } else {
-        return None;
+        rest.strip_prefix(':')?
     };
 
     let value = value.trim().trim_matches('"').trim_matches('\'');

@@ -13,16 +13,16 @@ const BASE_SELECT: &str = r#"
         COALESCE(b.year, 0) as year,
         COALESCE(b.isbn, '') as isbn,
         b.cover_color as cover_color,
-        b.aspect_ratio as aspect_ratio,
+        b.aspect_ratio::float8 as aspect_ratio,
         b.tags as tags,
-        CAST(CASE WHEN b.is_new_arrival THEN 1 ELSE 0 END AS BIGINT) as is_new_arrival,
+        b.is_new_arrival as is_new_arrival,
         c.id as copy_id,
         COALESCE(c.condition, '') as condition,
-        c.price as price,
+        c.price::float8 as price,
         COALESCE(c.notes, '') as notes,
         COALESCE(c.format, 'Standard') as format,
         c.stock as stock,
-        CAST(CASE WHEN c.is_staff_pick THEN 1 ELSE 0 END AS BIGINT) as is_staff_pick,
+        c.is_staff_pick as is_staff_pick,
         COALESCE(c.staff_quote, '') as staff_quote,
         c.seal_style as seal_style,
         c.seal_text as seal_text
@@ -140,8 +140,7 @@ pub async fn collection_books(
     slug: &str,
     limit: i64,
 ) -> Result<Vec<BookCard>, sqlx::Error> {
-    let query = format!(
-        r#"
+    let query = r#"
         SELECT
             b.id as id,
             b.title as title,
@@ -152,16 +151,16 @@ pub async fn collection_books(
             COALESCE(b.year, 0) as year,
             COALESCE(b.isbn, '') as isbn,
             b.cover_color as cover_color,
-            b.aspect_ratio as aspect_ratio,
+            b.aspect_ratio::float8 as aspect_ratio,
             b.tags as tags,
-            CAST(CASE WHEN b.is_new_arrival THEN 1 ELSE 0 END AS BIGINT) as is_new_arrival,
+            b.is_new_arrival as is_new_arrival,
             c.id as copy_id,
             COALESCE(c.condition, '') as condition,
-            c.price as price,
+            c.price::float8 as price,
             COALESCE(c.notes, '') as notes,
             COALESCE(c.format, 'Standard') as format,
             c.stock as stock,
-            CAST(CASE WHEN c.is_staff_pick THEN 1 ELSE 0 END AS BIGINT) as is_staff_pick,
+            c.is_staff_pick as is_staff_pick,
             COALESCE(c.staff_quote, '') as staff_quote,
             c.seal_style as seal_style,
             c.seal_text as seal_text
@@ -170,7 +169,7 @@ pub async fn collection_books(
         LEFT JOIN authors a ON a.id = b.primary_author_id
         LEFT JOIN genres g ON g.id = b.primary_genre_id
         JOIN book_copies c ON c.book_id = b.id
-        WHERE i.collection_slug = ? AND i.is_active = true AND c.is_sold = false
+        WHERE i.collection_slug = $1 AND i.is_active = true AND c.is_sold = false
           AND c.id = (
             SELECT c2.id 
             FROM book_copies c2 
@@ -179,11 +178,10 @@ pub async fn collection_books(
             LIMIT 1
           )
         ORDER BY i.position ASC, c.is_staff_pick DESC, c.price ASC
-        LIMIT ?
-    "#
-    );
+        LIMIT $2
+    "#;
 
-    sqlx::query_as::<_, BookCard>(&query)
+    sqlx::query_as::<_, BookCard>(query)
         .bind(slug)
         .bind(limit)
         .fetch_all(db)
@@ -213,7 +211,7 @@ pub async fn books_by_copy_ids(
 pub async fn book_by_id(db: &DbPool, book_id: &str) -> Result<BookCard, sqlx::Error> {
     let query = format!(
         r#"
-        {} AND b.id = ?
+        {} AND b.id = $1
         ORDER BY c.is_staff_pick DESC, c.price ASC
         LIMIT 1
     "#,
@@ -227,7 +225,7 @@ pub async fn book_by_id(db: &DbPool, book_id: &str) -> Result<BookCard, sqlx::Er
 }
 
 pub async fn copy_stock(db: &DbPool, copy_id: i64) -> Result<i32, sqlx::Error> {
-    sqlx::query_scalar::<_, i32>("SELECT stock FROM book_copies WHERE id = ? AND is_sold = false")
+    sqlx::query_scalar::<_, i32>("SELECT stock FROM book_copies WHERE id = $1 AND is_sold = false")
         .bind(copy_id)
         .fetch_one(db)
         .await
@@ -239,7 +237,7 @@ pub async fn copies_by_product_id(
 ) -> Result<Vec<BookCard>, sqlx::Error> {
     let query = format!(
         r#"
-        {} AND b.id = ?
+        {} AND b.id = $1
         ORDER BY c.price ASC
     "#,
         BASE_SELECT
@@ -260,7 +258,7 @@ pub async fn variant_attributes(
         SELECT a.variant_id, a.name, a.value
         FROM variant_attributes a
         JOIN book_copies c ON c.id = a.variant_id
-        WHERE c.book_id = ?
+        WHERE c.book_id = $1
     "#,
     )
     .bind(book_id)
@@ -290,7 +288,7 @@ pub async fn record_analytics_event(
             page_path,
             metadata_json
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING id
         "#,
     )

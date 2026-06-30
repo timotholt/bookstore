@@ -128,6 +128,7 @@ pub struct ButtonView {
 }
 
 impl ButtonView {
+    #[allow(clippy::too_many_arguments)]
     pub fn tracked(
         label: impl Into<String>,
         class_name: impl Into<String>,
@@ -179,6 +180,7 @@ impl ButtonView {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn cart_line_action(
         label: impl Into<String>,
         class_name: impl Into<String>,

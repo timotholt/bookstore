@@ -285,7 +285,7 @@ async fn active_cart_id(db: &DbPool, session_key: &str) -> Result<Option<i64>, s
         r#"
         SELECT id
         FROM carts
-        WHERE session_key = ? AND user_id IS NULL AND status = 'active'
+        WHERE session_key = $1 AND user_id IS NULL AND status = 'active'
         LIMIT 1
         "#,
     )
@@ -298,7 +298,7 @@ async fn ensure_active_cart(db: &DbPool, session_key: &str) -> Result<i64, sqlx:
     sqlx::query(
         r#"
         INSERT INTO carts (session_key, status)
-        VALUES (?, 'active')
+        VALUES ($1, 'active')
         ON CONFLICT DO NOTHING
         "#,
     )
@@ -339,7 +339,7 @@ async fn cart_items(db: &DbPool, cart_id: i64) -> Result<Vec<CartItem>, sqlx::Er
         r#"
         SELECT copy_id, quantity
         FROM cart_items
-        WHERE cart_id = ?
+        WHERE cart_id = $1
         ORDER BY created_at ASC, id ASC
         "#,
     )
@@ -354,7 +354,7 @@ async fn cart_item_quantity(
     copy_id: i64,
 ) -> Result<Option<i32>, sqlx::Error> {
     sqlx::query_scalar::<_, i32>(
-        "SELECT quantity FROM cart_items WHERE cart_id = ? AND copy_id = ?",
+        "SELECT quantity FROM cart_items WHERE cart_id = $1 AND copy_id = $2",
     )
     .bind(cart_id)
     .bind(copy_id)
@@ -367,7 +367,7 @@ async fn saved_items(db: &DbPool, session_key: &str) -> Result<Vec<SavedItem>, s
         r#"
         SELECT copy_id, quantity
         FROM saved_items
-        WHERE session_key = ? AND user_id IS NULL
+        WHERE session_key = $1 AND user_id IS NULL
         ORDER BY created_at ASC, id ASC
         "#,
     )
@@ -382,7 +382,7 @@ async fn saved_item_quantity(
     copy_id: i64,
 ) -> Result<Option<i32>, sqlx::Error> {
     sqlx::query_scalar::<_, i32>(
-        "SELECT quantity FROM saved_items WHERE session_key = ? AND user_id IS NULL AND copy_id = ?",
+        "SELECT quantity FROM saved_items WHERE session_key = $1 AND user_id IS NULL AND copy_id = $2",
     )
     .bind(session_key)
     .bind(copy_id)
@@ -398,7 +398,7 @@ async fn removed_cart_item(
         r#"
         SELECT copy_id, quantity
         FROM removed_cart_items
-        WHERE session_key = ? AND user_id IS NULL
+        WHERE session_key = $1 AND user_id IS NULL
         ORDER BY updated_at DESC, id DESC
         LIMIT 1
         "#,
@@ -414,7 +414,7 @@ async fn removed_item_quantity(
     copy_id: i64,
 ) -> Result<Option<i32>, sqlx::Error> {
     sqlx::query_scalar::<_, i32>(
-        "SELECT quantity FROM removed_cart_items WHERE session_key = ? AND user_id IS NULL AND copy_id = ?",
+        "SELECT quantity FROM removed_cart_items WHERE session_key = $1 AND user_id IS NULL AND copy_id = $2",
     )
     .bind(session_key)
     .bind(copy_id)
@@ -431,7 +431,7 @@ async fn upsert_cart_item(
     sqlx::query(
         r#"
         INSERT INTO cart_items (cart_id, copy_id, quantity)
-        VALUES (?, ?, ?)
+        VALUES ($1, $2, $3)
         ON CONFLICT(cart_id, copy_id) DO UPDATE SET
             quantity = excluded.quantity,
             updated_at = CURRENT_TIMESTAMP
@@ -456,7 +456,7 @@ async fn upsert_saved_item(
     sqlx::query(
         r#"
         INSERT INTO saved_items (session_key, copy_id, quantity)
-        VALUES (?, ?, ?)
+        VALUES ($1, $2, $3)
         "#,
     )
     .bind(session_key)
@@ -477,7 +477,7 @@ async fn upsert_removed_cart_item(
     sqlx::query(
         r#"
         INSERT INTO removed_cart_items (session_key, copy_id, quantity)
-        VALUES (?, ?, ?)
+        VALUES ($1, $2, $3)
         "#,
     )
     .bind(session_key)
@@ -489,7 +489,7 @@ async fn upsert_removed_cart_item(
 }
 
 async fn delete_cart_item(db: &DbPool, cart_id: i64, copy_id: i64) -> Result<(), sqlx::Error> {
-    sqlx::query("DELETE FROM cart_items WHERE cart_id = ? AND copy_id = ?")
+    sqlx::query("DELETE FROM cart_items WHERE cart_id = $1 AND copy_id = $2")
         .bind(cart_id)
         .bind(copy_id)
         .execute(db)
@@ -504,7 +504,7 @@ async fn delete_saved_item(
     copy_id: i64,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "DELETE FROM saved_items WHERE session_key = ? AND user_id IS NULL AND copy_id = ?",
+        "DELETE FROM saved_items WHERE session_key = $1 AND user_id IS NULL AND copy_id = $2",
     )
     .bind(session_key)
     .bind(copy_id)
@@ -519,7 +519,7 @@ async fn delete_removed_cart_item(
     copy_id: i64,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "DELETE FROM removed_cart_items WHERE session_key = ? AND user_id IS NULL AND copy_id = ?",
+        "DELETE FROM removed_cart_items WHERE session_key = $1 AND user_id IS NULL AND copy_id = $2",
     )
     .bind(session_key)
     .bind(copy_id)
@@ -529,7 +529,7 @@ async fn delete_removed_cart_item(
 }
 
 async fn touch_cart(db: &DbPool, cart_id: i64) -> Result<(), sqlx::Error> {
-    sqlx::query("UPDATE carts SET updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    sqlx::query("UPDATE carts SET updated_at = CURRENT_TIMESTAMP WHERE id = $1")
         .bind(cart_id)
         .execute(db)
         .await?;

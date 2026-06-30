@@ -243,9 +243,10 @@ url = "${environment.demo.public_base_url}/healthz"
 expect_status = 200
 
 [[checks]]
-id = "database.migrations"
+id = "database.migrations.postgres"
 kind = "sqlx_migrations"
 provider = "neon"
+path = "migrations_postgres"
 expect_latest = true
 ```
 
@@ -393,7 +394,7 @@ Rules:
 Current implemented repair targets:
 
 - `neon`: idempotently creates or confirms the Neon project, branch, role, and database declared in `setup/setup.toml`, then writes the generated Postgres `DATABASE_URL` to `setup/.secrets.demo.env`.
-- `database.migrations`: applies `migrations/` for SQLite or `migrations_postgres/` for Postgres, based on `DATABASE_URL`.
+- `database.migrations`: applies the Postgres migrations in `migrations_postgres/` against the configured `DATABASE_URL`.
 
 ## Validation Finding Model
 

@@ -1,73 +1,39 @@
-use sqlx::any::{install_default_drivers, AnyPoolOptions};
 use std::io::{Error, ErrorKind};
 
-pub type DbPool = sqlx::AnyPool;
-pub type Db = sqlx::Any;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DatabaseKind {
-    Postgres,
-    Sqlite,
-}
-
-pub fn install_drivers() {
-    install_default_drivers();
-}
+pub type DbPool = sqlx::PgPool;
+pub type Db = sqlx::Postgres;
 
 pub fn require_database_url() -> Result<String, Error> {
     let database_url = std::env::var("DATABASE_URL").map_err(|_| {
         Error::new(
             ErrorKind::InvalidInput,
-            "DATABASE_URL is required; set it explicitly to a sqlite:// or postgres:// URL",
+            "DATABASE_URL is required; set it explicitly to a postgres:// or postgresql:// URL",
         )
     })?;
 
     if database_url.trim().is_empty() {
         return Err(Error::new(
             ErrorKind::InvalidInput,
-            "DATABASE_URL is empty; set it explicitly to a sqlite:// or postgres:// URL",
+            "DATABASE_URL is empty; set it explicitly to a postgres:// or postgresql:// URL",
         ));
     }
 
     Ok(database_url)
 }
 
-pub fn database_kind(database_url: &str) -> Result<DatabaseKind, Error> {
-    if database_url.starts_with("sqlite:") {
-        Ok(DatabaseKind::Sqlite)
-    } else if database_url.starts_with("postgres:") || database_url.starts_with("postgresql:") {
-        Ok(DatabaseKind::Postgres)
+pub fn require_postgres_url(database_url: &str) -> Result<(), Error> {
+    if database_url.starts_with("postgres:") || database_url.starts_with("postgresql:") {
+        Ok(())
     } else {
         Err(Error::new(
             ErrorKind::InvalidInput,
-            "DATABASE_URL must use sqlite://, sqlite:, postgres://, or postgresql://",
+            "DATABASE_URL must use postgres:// or postgresql://",
         ))
     }
 }
 
-pub fn ensure_sqlite_parent(database_url: &str) -> std::io::Result<()> {
-    if database_kind(database_url)? != DatabaseKind::Sqlite {
-        return Ok(());
-    }
-
-    let path = database_url
-        .trim_start_matches("sqlite://")
-        .trim_start_matches("sqlite:");
-    if path == ":memory:" || path.is_empty() {
-        return Ok(());
-    }
-
-    if let Some(parent) = std::path::Path::new(path).parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)?;
-        }
-    }
-
-    Ok(())
-}
-
 pub async fn connect(database_url: &str) -> Result<DbPool, sqlx::Error> {
-    AnyPoolOptions::new()
+    sqlx::postgres::PgPoolOptions::new()
         .max_connections(5)
         .connect(database_url)
         .await
@@ -78,20 +44,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn database_kind_accepts_explicit_supported_urls() {
-        assert_eq!(
-            database_kind("sqlite://data/bookstore.db?mode=rwc").unwrap(),
-            DatabaseKind::Sqlite
-        );
-        assert_eq!(
-            database_kind("postgresql://example/db").unwrap(),
-            DatabaseKind::Postgres
-        );
+    fn require_postgres_url_accepts_postgres_urls() {
+        assert!(require_postgres_url("postgres://example/db").is_ok());
+        assert!(require_postgres_url("postgresql://example/db").is_ok());
     }
 
     #[test]
-    fn database_kind_rejects_unsupported_urls() {
-        assert!(database_kind("").is_err());
-        assert!(database_kind("mysql://example/db").is_err());
+    fn require_postgres_url_rejects_non_postgres_urls() {
+        assert!(require_postgres_url("").is_err());
+        assert!(require_postgres_url("sqlite://data/bookstore.db").is_err());
+        assert!(require_postgres_url("mysql://example/db").is_err());
     }
 }

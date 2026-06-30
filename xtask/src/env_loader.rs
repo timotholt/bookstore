@@ -125,14 +125,14 @@ mod tests {
         let dir = temp_dir("dotenv_parse");
         fs::write(
             dir.join(".env"),
-            "DATABASE_URL='sqlite://data/bookstore.db?mode=rwc'\nexport APP_ENV=local\n# ignored\n",
+            "TEST_DATABASE_URL_FOR_PARSE='postgresql://localhost/davis_books'\nexport APP_ENV=local\n# ignored\n",
         )
         .unwrap();
 
         let store = EnvStore::load(&dir);
         assert_eq!(
-            store.get("DATABASE_URL").unwrap().value,
-            "sqlite://data/bookstore.db?mode=rwc"
+            store.get("TEST_DATABASE_URL_FOR_PARSE").unwrap().value,
+            "postgresql://localhost/davis_books"
         );
         assert_eq!(store.get("APP_ENV").unwrap().value, "local");
 

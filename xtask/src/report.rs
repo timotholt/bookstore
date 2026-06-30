@@ -219,6 +219,7 @@ impl Finding {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn new(
         id: &'static str,
         provider: &'static str,
