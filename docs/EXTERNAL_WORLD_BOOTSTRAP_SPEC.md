@@ -375,6 +375,7 @@ Validation must not repair. It may suggest:
 ```bash
 cargo xtask external setup --only neon.database
 cargo xtask external setup --only railway.variables
+cargo xtask external repair --only neon --yes
 cargo xtask external repair --only database.migrations
 ```
 
@@ -388,6 +389,11 @@ Rules:
 - Requires a finding ID or provider path.
 - Must show the finding it is repairing.
 - Must validate the repaired dependency after apply.
+
+Current implemented repair targets:
+
+- `neon`: idempotently creates or confirms the Neon project, branch, role, and database declared in `setup/setup.toml`, then writes the generated Postgres `DATABASE_URL` to `setup/.secrets.demo.env`.
+- `database.migrations`: applies `migrations/` for SQLite or `migrations_postgres/` for Postgres, based on `DATABASE_URL`.
 
 ## Validation Finding Model
 

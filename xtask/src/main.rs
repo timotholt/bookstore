@@ -100,7 +100,7 @@ fn run_external(root: &Path, args: &[String]) -> Result<(), String> {
                 "external",
                 "planned",
                 "Running first-slice setup orchestration.",
-                "This setup pass includes supported dependency checks with --install-deps and applies installers only with --yes. Provider mutation adapters are intentionally not enabled yet.",
+                "This setup pass checks local readiness, can create missing Neon resources with --yes, applies database migrations when DATABASE_URL is available, then validates.",
             ));
 
             report.extend(build_doctor_report(root));
@@ -119,7 +119,6 @@ fn run_external(root: &Path, args: &[String]) -> Result<(), String> {
                 ));
             }
 
-            report.extend(build_validation_report(root, options.local_only));
             if options.local_only {
                 report.findings.push(Finding::info(
                     "setup.providers",
@@ -129,15 +128,17 @@ fn run_external(root: &Path, args: &[String]) -> Result<(), String> {
                     "Run without --local-only to inspect provider setup plans.",
                 ));
             } else if let Some(manifest) = manifest {
-                report
-                    .findings
-                    .extend(plan_neon_setup(&manifest, &env_store, options.yes));
+                report.extend(plan_neon_setup(root, &manifest, &env_store, options.yes));
+                if options.yes {
+                    let env_store = EnvStore::load(root);
+                    report.extend(repair_database_migrations(root, &env_store, true));
+                }
                 report.findings.push(Finding::manual(
                     "setup.providers.remaining",
                     "external",
                     "not_implemented",
                     "Railway and Stripe setup adapters are not implemented yet.",
-                    "After Neon database validation is real, implement Railway environment/deploy validation, then Stripe webhook setup.",
+                    "After the app runtime can use Postgres, implement Railway environment/deploy validation, then Stripe webhook setup.",
                 ));
             } else {
                 report.findings.push(Finding::fail(
@@ -150,6 +151,8 @@ fn run_external(root: &Path, args: &[String]) -> Result<(), String> {
                     "Create or restore setup/setup.toml.",
                 ));
             }
+
+            report.extend(build_validation_report(root, options.local_only));
 
             finish_report(root, report, &options)
         }
@@ -171,6 +174,26 @@ fn run_external(root: &Path, args: &[String]) -> Result<(), String> {
             }) {
                 let env_store = EnvStore::load(root);
                 report.extend(repair_database_migrations(root, &env_store, options.yes));
+            } else if options
+                .only
+                .iter()
+                .any(|selector| selector == "neon" || selector.starts_with("neon."))
+            {
+                let env_store = EnvStore::load(root);
+                match SetupManifest::load(root) {
+                    Ok(manifest) => {
+                        report.extend(plan_neon_setup(root, &manifest, &env_store, options.yes));
+                    }
+                    Err(err) => report.findings.push(Finding::fail(
+                        "setup.manifest",
+                        "manifest",
+                        "missing",
+                        "Neon repair cannot run because setup/setup.toml could not be loaded.",
+                        &err,
+                        "manifest_missing",
+                        "Create or restore setup/setup.toml.",
+                    )),
+                }
             } else {
                 report.findings.push(Finding::manual(
                     "repair.adapters",

@@ -1,7 +1,9 @@
 use crate::env_loader::{EnvStore, EnvValue};
 use crate::manifest::SetupManifest;
-use crate::report::Finding;
+use crate::report::{Finding, Report};
 use serde_json::Value;
+use std::fs;
+use std::path::Path;
 use std::process::{Command, Stdio};
 
 pub fn validate_provider_readiness(
@@ -19,13 +21,14 @@ pub fn validate_provider_readiness(
 }
 
 pub fn plan_neon_setup(
+    root: &Path,
     manifest: &SetupManifest,
     env_store: &EnvStore,
     apply: bool,
-) -> Vec<Finding> {
-    let mut findings = Vec::new();
+) -> Report {
+    let mut report = Report::new("neon.setup");
     let Some(neon) = manifest.provider("neon") else {
-        findings.push(Finding::fail(
+        report.findings.push(Finding::fail(
             "neon.manifest",
             "neon",
             "missing",
@@ -34,7 +37,7 @@ pub fn plan_neon_setup(
             "manifest_incomplete",
             "Add a [[providers]] entry with id = \"neon\".",
         ));
-        return findings;
+        return report;
     };
 
     let project = neon.value("project").unwrap_or("davis-books");
@@ -52,7 +55,7 @@ pub fn plan_neon_setup(
         roles.join(", ")
     };
 
-    findings.push(Finding::info(
+    report.findings.push(Finding::info(
         "neon.desired_state",
         "neon",
         "planned",
@@ -62,70 +65,350 @@ pub fn plan_neon_setup(
         ),
     ));
 
-    if usable_env_value(env_store, "NEON_API_KEY").is_some() {
-        findings.push(Finding::manual(
-            "neon.api.inspect",
-            "neon",
-            if apply { "manual_apply" } else { "planned" },
-            "Neon API mutation is not enabled yet, but credentials are available for the next adapter slice.",
-            &format!(
-                "Validate or create project `{project}`, database `{database}`, branches `{branch_summary}`, and roles `{role_summary}` in Neon. Future adapter should perform this through the Neon API."
-            ),
-        ));
-    } else {
-        findings.push(Finding::warn(
+    if usable_env_value(env_store, "NEON_API_KEY").is_none() {
+        report.findings.push(Finding::warn(
             "neon.credentials",
             "neon",
             "missing",
             "Neon setup cannot inspect or rebuild provider resources without NEON_API_KEY.",
             "Add NEON_API_KEY to setup/.secrets.demo.env or import it from a recovery email with `cargo xtask external secrets import-email --from <path> --yes`.",
         ));
+        return report;
     }
 
-    match env_store.get("DATABASE_URL") {
-        Some(value)
-            if value.value.starts_with("postgres:") || value.value.starts_with("postgresql:") =>
-        {
-            findings.push(Finding::manual(
-                "neon.database.validate",
-                "neon",
-                "pending_adapter",
-                "A Postgres DATABASE_URL is present, but Postgres migration validation is not implemented yet.",
-                "Next slice: add a Postgres database validator that checks reachability and migrations_postgres/ status.",
-            ));
-        }
-        Some(value) if value.value.starts_with("sqlite:") => {
-            findings.push(Finding::fail(
-                "neon.database_url",
-                "neon",
-                "blocked",
-                "Neon setup cannot validate the database while DATABASE_URL points at SQLite.",
-                "DATABASE_URL is sqlite.",
-                "postgres_database_url_missing",
-                "Set DATABASE_URL to a Neon postgres:// URL when validating external database state.",
-            ));
-        }
-        Some(_) => {
-            findings.push(Finding::fail(
-                "neon.database_url",
-                "neon",
-                "invalid",
-                "DATABASE_URL is neither sqlite nor postgres.",
-                "Value redacted.",
-                "database_url_unsupported",
-                "Use a postgres:// Neon URL for external database validation.",
-            ));
-        }
-        None => findings.push(Finding::warn(
-            "neon.database_url",
+    if !command_exists("curl") {
+        report.findings.push(Finding::warn(
+            "neon.api.account",
             "neon",
-            "missing",
-            "DATABASE_URL is missing.",
-            "Add a Neon postgres:// DATABASE_URL to setup/.secrets.demo.env before running external database validation.",
+            "blocked",
+            "Neon setup needs curl, but curl is not installed.",
+            "Install curl or run the tool on a machine with curl.",
+        ));
+        return report;
+    }
+
+    if !apply {
+        report.findings.push(Finding::warn(
+            "neon.apply",
+            "neon",
+            "dry_run",
+            "Would inspect and create missing Neon resources through the Neon API.",
+            "Re-run with `cargo xtask external setup --yes` or `cargo xtask external repair --only neon --yes` to apply.",
+        ));
+        return report;
+    }
+
+    match apply_neon_setup(root, manifest, env_store) {
+        Ok(mut findings) => report.findings.append(&mut findings),
+        Err(err) => report.findings.push(Finding::fail(
+            "neon.apply",
+            "neon",
+            "failed",
+            "Neon setup failed.",
+            &err,
+            "provider_apply_failed",
+            "Inspect the Neon API error, update setup/setup.toml or credentials, then rerun setup.",
         )),
     }
 
-    findings
+    report
+}
+
+fn apply_neon_setup(
+    root: &Path,
+    manifest: &SetupManifest,
+    env_store: &EnvStore,
+) -> Result<Vec<Finding>, String> {
+    let api_key = usable_env_value(env_store, "NEON_API_KEY")
+        .ok_or_else(|| "NEON_API_KEY is missing".to_string())?;
+    let neon = manifest
+        .provider("neon")
+        .ok_or_else(|| "setup/setup.toml does not declare a Neon provider".to_string())?;
+    let project_name = neon.value("project").unwrap_or("davis-books");
+    let database_name = neon.value("database").unwrap_or("davis_books");
+    let branch_name = neon
+        .array("branches")
+        .first()
+        .map(String::as_str)
+        .unwrap_or("main");
+    let role_name = neon
+        .array("roles")
+        .first()
+        .map(String::as_str)
+        .unwrap_or("davis_books_app");
+
+    let mut findings = Vec::new();
+    let project = ensure_neon_project(
+        api_key,
+        neon,
+        project_name,
+        branch_name,
+        database_name,
+        role_name,
+    )?;
+    findings.push(project.finding);
+
+    let branch = ensure_neon_branch(api_key, &project.id, branch_name)?;
+    findings.push(branch.finding);
+
+    let role = ensure_neon_role(api_key, &project.id, &branch.id, role_name)?;
+    findings.push(role.finding);
+
+    let database =
+        ensure_neon_database(api_key, &project.id, &branch.id, database_name, role_name)?;
+    findings.push(database.finding);
+
+    let uri = get_neon_connection_uri(api_key, &project.id, &branch.id, database_name, role_name)?;
+    write_demo_secret(root, "DATABASE_URL", &uri)?;
+    findings.push(Finding::ok(
+        "neon.database_url.write",
+        "neon",
+        "written",
+        "Wrote Neon DATABASE_URL to setup/.secrets.demo.env.",
+        "Value redacted.",
+    ));
+
+    Ok(findings)
+}
+
+struct EnsuredResource {
+    id: String,
+    finding: Finding,
+}
+
+fn ensure_neon_project(
+    api_key: &EnvValue,
+    neon: &crate::manifest::ProviderManifest,
+    project_name: &str,
+    branch_name: &str,
+    database_name: &str,
+    role_name: &str,
+) -> Result<EnsuredResource, String> {
+    let org_id = neon.value("org_id");
+    let query = match org_id {
+        Some(org_id) if !org_id.trim().is_empty() => format!(
+            "/projects?limit=400&search={}&org_id={}",
+            url_encode(project_name),
+            url_encode(org_id)
+        ),
+        _ => format!("/projects?limit=400&search={}", url_encode(project_name)),
+    };
+    let projects = neon_get_json(&api_key.value, &query)?;
+    if let Some(id) = find_named_object_id(&projects, "projects", project_name) {
+        return Ok(EnsuredResource {
+            id,
+            finding: Finding::ok(
+                "neon.project",
+                "neon",
+                "present",
+                "Expected Neon project exists.",
+                &format!("project={project_name}"),
+            ),
+        });
+    }
+
+    let mut project = serde_json::json!({
+        "name": project_name,
+        "store_passwords": true,
+        "branch": {
+            "name": branch_name,
+            "database_name": database_name,
+            "role_name": role_name
+        }
+    });
+    if let Some(region) = neon.value("region_id") {
+        project["region_id"] = Value::String(region.to_string());
+    }
+    if let Some(org_id) = org_id {
+        project["org_id"] = Value::String(org_id.to_string());
+    }
+
+    let created = neon_post_json(
+        &api_key.value,
+        "/projects",
+        &serde_json::json!({ "project": project }),
+    )?;
+    let id = created
+        .get("project")
+        .and_then(|project| project.get("id"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| "Neon project create response did not include project.id".to_string())?
+        .to_string();
+
+    Ok(EnsuredResource {
+        id,
+        finding: Finding::ok(
+            "neon.project",
+            "neon",
+            "created",
+            "Created Neon project from setup/setup.toml.",
+            &format!("project={project_name}"),
+        ),
+    })
+}
+
+fn ensure_neon_branch(
+    api_key: &EnvValue,
+    project_id: &str,
+    branch_name: &str,
+) -> Result<EnsuredResource, String> {
+    let branches = neon_get_json(&api_key.value, &format!("/projects/{project_id}/branches"))?;
+    if let Some(id) = find_named_object_id(&branches, "branches", branch_name) {
+        return Ok(EnsuredResource {
+            id,
+            finding: Finding::ok(
+                "neon.branch",
+                "neon",
+                "present",
+                "Expected Neon branch exists.",
+                &format!("branch={branch_name}"),
+            ),
+        });
+    }
+
+    let created = neon_post_json(
+        &api_key.value,
+        &format!("/projects/{project_id}/branches"),
+        &serde_json::json!({
+            "branch": { "name": branch_name },
+            "endpoints": [{ "type": "read_write" }]
+        }),
+    )?;
+    let id = created
+        .get("branch")
+        .and_then(|branch| branch.get("id"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| "Neon branch create response did not include branch.id".to_string())?
+        .to_string();
+
+    Ok(EnsuredResource {
+        id,
+        finding: Finding::ok(
+            "neon.branch",
+            "neon",
+            "created",
+            "Created Neon branch from setup/setup.toml.",
+            &format!("branch={branch_name}"),
+        ),
+    })
+}
+
+fn ensure_neon_role(
+    api_key: &EnvValue,
+    project_id: &str,
+    branch_id: &str,
+    role_name: &str,
+) -> Result<EnsuredResource, String> {
+    let roles = neon_get_json(
+        &api_key.value,
+        &format!("/projects/{project_id}/branches/{branch_id}/roles"),
+    )?;
+    if let Some(id) = find_named_object_id(&roles, "roles", role_name) {
+        return Ok(EnsuredResource {
+            id,
+            finding: Finding::ok(
+                "neon.role",
+                "neon",
+                "present",
+                "Expected Neon role exists.",
+                &format!("role={role_name}"),
+            ),
+        });
+    }
+
+    let created = neon_post_json(
+        &api_key.value,
+        &format!("/projects/{project_id}/branches/{branch_id}/roles"),
+        &serde_json::json!({ "role": { "name": role_name } }),
+    )?;
+    let id = created
+        .get("role")
+        .and_then(|role| role.get("name"))
+        .and_then(Value::as_str)
+        .unwrap_or(role_name)
+        .to_string();
+
+    Ok(EnsuredResource {
+        id,
+        finding: Finding::ok(
+            "neon.role",
+            "neon",
+            "created",
+            "Created Neon role from setup/setup.toml.",
+            &format!("role={role_name}"),
+        ),
+    })
+}
+
+fn ensure_neon_database(
+    api_key: &EnvValue,
+    project_id: &str,
+    branch_id: &str,
+    database_name: &str,
+    role_name: &str,
+) -> Result<EnsuredResource, String> {
+    let databases = neon_get_json(
+        &api_key.value,
+        &format!("/projects/{project_id}/branches/{branch_id}/databases"),
+    )?;
+    if let Some(id) = find_named_object_id(&databases, "databases", database_name) {
+        return Ok(EnsuredResource {
+            id,
+            finding: Finding::ok(
+                "neon.database",
+                "neon",
+                "present",
+                "Expected Neon database exists.",
+                &format!("database={database_name}"),
+            ),
+        });
+    }
+
+    let created = neon_post_json(
+        &api_key.value,
+        &format!("/projects/{project_id}/branches/{branch_id}/databases"),
+        &serde_json::json!({
+            "database": {
+                "name": database_name,
+                "owner_name": role_name
+            }
+        }),
+    )?;
+    let id = created
+        .get("database")
+        .map(|database| object_identifier(database, database_name))
+        .unwrap_or_else(|| database_name.to_string());
+
+    Ok(EnsuredResource {
+        id,
+        finding: Finding::ok(
+            "neon.database",
+            "neon",
+            "created",
+            "Created Neon database from setup/setup.toml.",
+            &format!("database={database_name}"),
+        ),
+    })
+}
+
+fn get_neon_connection_uri(
+    api_key: &EnvValue,
+    project_id: &str,
+    branch_id: &str,
+    database_name: &str,
+    role_name: &str,
+) -> Result<String, String> {
+    let path = format!(
+        "/projects/{project_id}/connection_uri?branch_id={}&database_name={}&role_name={}&pooled=true",
+        url_encode(branch_id),
+        url_encode(database_name),
+        url_encode(role_name)
+    );
+    let json = neon_get_json(&api_key.value, &path)?;
+    json.get("uri")
+        .and_then(Value::as_str)
+        .map(ToString::to_string)
+        .ok_or_else(|| "Neon connection URI response did not include uri".to_string())
 }
 
 fn validate_neon_api(manifest: &SetupManifest, env_store: &EnvStore) -> Vec<Finding> {
@@ -172,10 +455,15 @@ fn validate_neon_api(manifest: &SetupManifest, env_store: &EnvStore) -> Vec<Find
         .map(String::as_str)
         .unwrap_or("main");
 
-    let projects = match neon_get_json(
-        &api_key.value,
-        &format!("/projects?limit=400&search={}", url_encode(project_name)),
-    ) {
+    let project_query = match neon.value("org_id") {
+        Some(org_id) if !org_id.trim().is_empty() => format!(
+            "/projects?limit=400&search={}&org_id={}",
+            url_encode(project_name),
+            url_encode(org_id)
+        ),
+        _ => format!("/projects?limit=400&search={}", url_encode(project_name)),
+    };
+    let projects = match neon_get_json(&api_key.value, &project_query) {
         Ok(json) => json,
         Err(err) => {
             findings.push(Finding::fail(
@@ -354,6 +642,98 @@ fn neon_get_json(api_key: &str, path: &str) -> Result<Value, String> {
     }
 
     serde_json::from_slice(&output.stdout).map_err(|err| format!("invalid Neon API JSON: {err}"))
+}
+
+fn neon_post_json(api_key: &str, path: &str, body: &Value) -> Result<Value, String> {
+    let url = format!("https://console.neon.tech/api/v2{path}");
+    let body = serde_json::to_string(body).map_err(|err| format!("invalid JSON body: {err}"))?;
+    let output = Command::new("curl")
+        .args([
+            "-sS",
+            "--fail",
+            "-X",
+            "POST",
+            "-H",
+            "Accept: application/json",
+            "-H",
+            "Content-Type: application/json",
+            "-H",
+            &format!("Authorization: Bearer {api_key}"),
+            "--data",
+            &body,
+            &url,
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|err| format!("failed to run curl: {err}"))?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+
+    serde_json::from_slice(&output.stdout).map_err(|err| format!("invalid Neon API JSON: {err}"))
+}
+
+fn write_demo_secret(root: &Path, key: &str, value: &str) -> Result<(), String> {
+    let path = root.join("setup/.secrets.demo.env");
+    let mut lines = match fs::read_to_string(&path) {
+        Ok(contents) => contents
+            .lines()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(err) => return Err(format!("failed to read {}: {err}", path.display())),
+    };
+
+    let mut replaced = false;
+    for line in &mut lines {
+        let trimmed = line.trim_start();
+        let exported = trimmed.strip_prefix("export ").unwrap_or(trimmed);
+        if exported
+            .split_once('=')
+            .map(|(name, _)| name.trim() == key)
+            .unwrap_or(false)
+        {
+            *line = format!("{key}={}", shell_quote_env_value(value));
+            replaced = true;
+        }
+    }
+    if !replaced {
+        lines.push(format!("{key}={}", shell_quote_env_value(value)));
+    }
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("failed to create {}: {err}", parent.display()))?;
+    }
+    fs::write(&path, format!("{}\n", lines.join("\n")))
+        .map_err(|err| format!("failed to write {}: {err}", path.display()))
+}
+
+fn shell_quote_env_value(value: &str) -> String {
+    if value.bytes().all(|byte| {
+        matches!(
+            byte,
+            b'A'..=b'Z'
+                | b'a'..=b'z'
+                | b'0'..=b'9'
+                | b'_'
+                | b'-'
+                | b'.'
+                | b':'
+                | b'/'
+                | b'?'
+                | b'='
+                | b'&'
+                | b'%'
+                | b'@'
+        )
+    }) {
+        value.to_string()
+    } else {
+        format!("'{}'", value.replace('\'', "'\\''"))
+    }
 }
 
 fn find_named_object_id(json: &Value, collection: &str, expected: &str) -> Option<String> {
@@ -609,10 +989,12 @@ mod tests {
         };
 
         let findings = plan_neon_setup(
+            std::path::Path::new("."),
             &manifest,
             &store_with([("DATABASE_URL", "postgres://redacted")]),
             false,
-        );
+        )
+        .findings;
 
         assert!(findings.iter().any(|finding| {
             finding.id == "neon.desired_state" && finding.evidence.contains("davis_books")
@@ -660,6 +1042,25 @@ mod tests {
         assert!(usable_env_value(&store, "NEON_API_KEY").is_none());
     }
 
+    #[test]
+    fn writes_demo_secret_without_duplicate_keys() {
+        let root = temp_dir("write_demo_secret");
+        fs::create_dir_all(root.join("setup")).unwrap();
+        fs::write(
+            root.join("setup/.secrets.demo.env"),
+            "NEON_API_KEY=redacted\nDATABASE_URL=old\n",
+        )
+        .unwrap();
+
+        write_demo_secret(&root, "DATABASE_URL", "postgresql://new?sslmode=require").unwrap();
+        let contents = fs::read_to_string(root.join("setup/.secrets.demo.env")).unwrap();
+
+        assert_eq!(contents.matches("DATABASE_URL=").count(), 1);
+        assert!(contents.contains("DATABASE_URL=postgresql://new?sslmode=require"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
     fn store_with<const N: usize>(pairs: [(&str, &str); N]) -> EnvStore {
         let mut values = BTreeMap::new();
         for (name, value) in pairs {
@@ -672,5 +1073,16 @@ mod tests {
             );
         }
         EnvStore::from_values(values)
+    }
+
+    fn temp_dir(name: &str) -> std::path::PathBuf {
+        let mut path = std::env::temp_dir();
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        path.push(format!("davis_books_providers_{name}_{nanos}"));
+        fs::create_dir_all(&path).unwrap();
+        path
     }
 }

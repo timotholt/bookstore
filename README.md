@@ -29,7 +29,7 @@ cargo test
 
 ## External World Bootstrap
 
-The project includes an `xtask` scaffold for rebuilding and validating deploy-time external dependencies.
+The project includes an `xtask` orchestrator for rebuilding and validating deploy-time external dependencies.
 
 ```bash
 cargo setup-everything
@@ -41,12 +41,13 @@ cargo xtask external validate --only neon --json
 cargo xtask external validate --local-only --json --write-report
 cargo xtask external validate --local-only --only database --json
 cargo xtask external install-deps
-cargo xtask external setup --install-deps
-cargo xtask external repair --only database.migrations
+cargo xtask external setup --install-deps --yes
+cargo xtask external repair --only neon --yes
+cargo xtask external repair --only database.migrations --yes
 cargo xtask external secrets import-email --from setup/recovery-email.example.txt
 ```
 
-`cargo setup-everything` and `cargo validate-everything` are aliases for the external setup and validation flow. `doctor`, `plan`, and `validate` are read-only. Use `--only <selector>` to focus a report and `--write-report` to write ignored JSON to `setup/reports/latest.json` plus timestamped report artifacts. `install-deps` is dry-run by default and runs supported installers only with `--yes`. `repair` is a targeted scaffold and requires `--only` before any repair adapters are added. `secrets import-email` parses known keys from a pasted recovery note and writes `setup/.secrets.demo.env` only with `--yes`. See [docs/EXTERNAL_WORLD_BOOTSTRAP_SPEC.md](docs/EXTERNAL_WORLD_BOOTSTRAP_SPEC.md) for the desired-state, setup, validation, and provider adapter plan.
+`cargo setup-everything` and `cargo validate-everything` are aliases for the external setup and validation flow. `doctor`, `plan`, and `validate` are read-only. Use `--only <selector>` to focus a report and `--write-report` to write ignored JSON to `setup/reports/latest.json` plus timestamped report artifacts. `install-deps` is dry-run by default and runs supported installers only with `--yes`. `setup --yes` can create or confirm Neon resources from `setup/setup.toml`, write the generated Postgres `DATABASE_URL` to ignored local secrets, apply migrations, then validate. `repair` requires `--only`; supported targets include `neon` and `database.migrations`. `secrets import-email` parses known keys from a pasted recovery note and writes `setup/.secrets.demo.env` only with `--yes`. See [docs/EXTERNAL_WORLD_BOOTSTRAP_SPEC.md](docs/EXTERNAL_WORLD_BOOTSTRAP_SPEC.md) for the desired-state, setup, validation, and provider adapter plan.
 
 ## Current MVP
 
