@@ -1,0 +1,13 @@
+Subject: Davis's Books demo recovery packet
+
+These are fake example values used to test the external bootstrap parser.
+
+APP_ENV=local
+PUBLIC_BASE_URL=http://127.0.0.1:8080
+DATABASE_URL=sqlite://data/bookstore.db?mode=rwc
+SESSION_SECRET=replace-with-demo-session-secret
+
+NEON_API_KEY=replace-with-neon-key
+RAILWAY_TOKEN=replace-with-railway-token
+STRIPE_SECRET_KEY=sk_test_replace_me
+STRIPE_WEBHOOK_SECRET=whsec_replace_me

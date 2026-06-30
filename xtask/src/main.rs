@@ -1,5 +1,12 @@
+mod env_loader;
+mod report;
+mod secrets;
+
+use env_loader::EnvStore;
+use report::{render_human_report, render_json_report, Finding, Report};
+use secrets::import_email;
+
 use std::env;
-use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -42,14 +49,26 @@ fn run_external(root: &Path, args: &[String]) -> Result<(), String> {
         [cmd, flags @ ..] if cmd == "doctor" => {
             let options = Options::parse(flags)?;
             let report = build_doctor_report(root);
-            emit_report(&report, options.json);
-            exit_if_failed(&report, false)
+            finish_report(root, report, &options)
         }
         [cmd, flags @ ..] if cmd == "validate" => {
             let options = Options::parse(flags)?;
             let report = build_validation_report(root, options.local_only);
-            emit_report(&report, options.json);
-            exit_if_failed(&report, false)
+            finish_report(root, report, &options)
+        }
+        [cmd, flags @ ..] if cmd == "plan" => {
+            let options = Options::parse(flags)?;
+            let mut report = Report::new("external.plan");
+            report.findings.push(Finding::info(
+                "plan.mode",
+                "external",
+                "read_only",
+                "Planning is read-only in this first provider-free slice.",
+                "The report combines doctor and validation findings. Provider action planning begins with the Neon adapter.",
+            ));
+            report.extend(build_doctor_report(root));
+            report.extend(build_validation_report(root, options.local_only));
+            finish_report(root, report, &options)
         }
         [cmd, flags @ ..] if cmd == "install-deps" => {
             let options = Options::parse(flags)?;
@@ -63,8 +82,7 @@ fn run_external(root: &Path, args: &[String]) -> Result<(), String> {
                     "Re-run with `cargo xtask external install-deps --yes` to install missing supported dependencies.",
                 ));
             }
-            emit_report(&report, options.json);
-            exit_if_failed(&report, false)
+            finish_report(root, report, &options)
         }
         [cmd, flags @ ..] if cmd == "setup" => {
             let options = Options::parse(flags)?;
@@ -77,6 +95,8 @@ fn run_external(root: &Path, args: &[String]) -> Result<(), String> {
                 "Running first-slice setup orchestration.",
                 "This setup pass installs supported local dependencies only with --yes or --install-deps, then validates local bootstrap state. Provider mutation adapters are intentionally not enabled yet.",
             ));
+
+            report.extend(build_doctor_report(root));
 
             if options.yes || options.install_deps {
                 report.extend(build_install_report(root, true)?);
@@ -99,8 +119,41 @@ fn run_external(root: &Path, args: &[String]) -> Result<(), String> {
                 "Next adapters should be Neon database validation/setup, then Railway variables/deploy validation.",
             ));
 
-            emit_report(&report, options.json);
-            exit_if_failed(&report, false)
+            finish_report(root, report, &options)
+        }
+        [cmd, flags @ ..] if cmd == "repair" => {
+            let options = Options::parse(flags)?;
+            let mut report = Report::new("external.repair");
+            if options.only.is_empty() {
+                report.findings.push(Finding::fail(
+                    "repair.target",
+                    "external",
+                    "missing",
+                    "Repair requires an explicit --only selector.",
+                    "",
+                    "repair_target_missing",
+                    "Run `cargo xtask external repair --only <finding-or-provider>` after reviewing validation output.",
+                ));
+            } else {
+                report.findings.push(Finding::manual(
+                    "repair.adapters",
+                    "external",
+                    "not_implemented",
+                    "Targeted repair adapters are not implemented yet.",
+                    "Next repair work should start with database.migrations after the database adapter exists.",
+                ));
+            }
+            finish_report(root, report, &options)
+        }
+        [cmd, subcmd, flags @ ..] if cmd == "secrets" && subcmd == "import-email" => {
+            let options = Options::parse(flags)?;
+            let Some(from) = options.from.as_deref() else {
+                return Err(
+                    "secrets import-email requires `--from <path-to-email-or-note>`".to_string(),
+                );
+            };
+            let report = import_email(root, from, options.yes)?;
+            finish_report(root, report, &options)
         }
         [cmd, ..] => Err(format!("unknown external command: {cmd}")),
     }
@@ -112,23 +165,51 @@ struct Options {
     yes: bool,
     local_only: bool,
     install_deps: bool,
+    write_report: bool,
+    only: Vec<String>,
+    from: Option<String>,
 }
 
 impl Options {
     fn parse(flags: &[String]) -> Result<Self, String> {
         let mut options = Options::default();
-        for flag in flags {
-            match flag.as_str() {
+        let mut index = 0;
+        while index < flags.len() {
+            match flags[index].as_str() {
                 "--json" => options.json = true,
                 "--yes" | "-y" => options.yes = true,
                 "--local-only" => options.local_only = true,
                 "--install-deps" => options.install_deps = true,
+                "--write-report" => options.write_report = true,
+                "--from" => {
+                    index += 1;
+                    let Some(value) = flags.get(index) else {
+                        return Err("--from requires a file path".to_string());
+                    };
+                    options.from = Some(value.to_string());
+                }
+                flag if flag.starts_with("--from=") => {
+                    options.from = Some(flag.trim_start_matches("--from=").to_string());
+                }
+                "--only" => {
+                    index += 1;
+                    let Some(value) = flags.get(index) else {
+                        return Err("--only requires a selector value".to_string());
+                    };
+                    options.only.push(value.to_string());
+                }
+                flag if flag.starts_with("--only=") => {
+                    options
+                        .only
+                        .push(flag.trim_start_matches("--only=").to_string());
+                }
                 "--help" | "-h" => {
                     print_external_help();
                     std::process::exit(0);
                 }
                 unknown => return Err(format!("unknown flag: {unknown}")),
             }
+            index += 1;
         }
         Ok(options)
     }
@@ -201,7 +282,14 @@ fn build_validation_report(root: &Path, local_only: bool) -> Report {
     check_manifest_content(root, &mut report);
     check_migrations(root, &mut report);
     check_git_tracking(root, &mut report);
-    check_env_contract(root, &mut report);
+    let env_store = EnvStore::load(root);
+    check_env_contract(root, &env_store, &mut report);
+    report.skip_if_failed(
+        "env.runtime",
+        "validate.providers.blocked",
+        "external",
+        "Provider validation is blocked until required runtime env is complete.",
+    );
 
     if local_only {
         report.findings.push(Finding::info(
@@ -425,207 +513,6 @@ fn tool_dependencies() -> Vec<ToolDependency> {
     ]
 }
 
-#[derive(Clone)]
-struct Report {
-    command: &'static str,
-    findings: Vec<Finding>,
-}
-
-impl Report {
-    fn new(command: &'static str) -> Self {
-        Self {
-            command,
-            findings: Vec::new(),
-        }
-    }
-
-    fn extend(&mut self, other: Report) {
-        self.findings.extend(other.findings);
-    }
-
-    fn ok(&self) -> bool {
-        !self
-            .findings
-            .iter()
-            .any(|finding| finding.severity == Severity::Fail)
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Severity {
-    Ok,
-    Info,
-    Warn,
-    Fail,
-    Manual,
-    Skipped,
-}
-
-impl Severity {
-    fn as_str(self) -> &'static str {
-        match self {
-            Severity::Ok => "ok",
-            Severity::Info => "info",
-            Severity::Warn => "warn",
-            Severity::Fail => "fail",
-            Severity::Manual => "manual",
-            Severity::Skipped => "skipped",
-        }
-    }
-}
-
-#[derive(Clone)]
-struct Finding {
-    id: &'static str,
-    provider: &'static str,
-    severity: Severity,
-    status: &'static str,
-    summary: String,
-    evidence: String,
-    cause: &'static str,
-    repair: String,
-}
-
-impl Finding {
-    fn ok(
-        id: &'static str,
-        provider: &'static str,
-        status: &'static str,
-        summary: &str,
-        evidence: &str,
-    ) -> Self {
-        Self::new(
-            id,
-            provider,
-            Severity::Ok,
-            status,
-            summary,
-            evidence,
-            "none",
-            "",
-        )
-    }
-
-    fn info(
-        id: &'static str,
-        provider: &'static str,
-        status: &'static str,
-        summary: &str,
-        evidence: &str,
-    ) -> Self {
-        Self::new(
-            id,
-            provider,
-            Severity::Info,
-            status,
-            summary,
-            evidence,
-            "none",
-            "",
-        )
-    }
-
-    fn warn(
-        id: &'static str,
-        provider: &'static str,
-        status: &'static str,
-        summary: &str,
-        repair: &str,
-    ) -> Self {
-        Self::new(
-            id,
-            provider,
-            Severity::Warn,
-            status,
-            summary,
-            "",
-            "attention_required",
-            repair,
-        )
-    }
-
-    fn fail(
-        id: &'static str,
-        provider: &'static str,
-        status: &'static str,
-        summary: &str,
-        evidence: &str,
-        cause: &'static str,
-        repair: &str,
-    ) -> Self {
-        Self::new(
-            id,
-            provider,
-            Severity::Fail,
-            status,
-            summary,
-            evidence,
-            cause,
-            repair,
-        )
-    }
-
-    fn manual(
-        id: &'static str,
-        provider: &'static str,
-        status: &'static str,
-        summary: &str,
-        repair: &str,
-    ) -> Self {
-        Self::new(
-            id,
-            provider,
-            Severity::Manual,
-            status,
-            summary,
-            "",
-            "manual_step_required",
-            repair,
-        )
-    }
-
-    fn skipped(
-        id: &'static str,
-        provider: &'static str,
-        status: &'static str,
-        summary: &str,
-        cause: &'static str,
-    ) -> Self {
-        Self::new(
-            id,
-            provider,
-            Severity::Skipped,
-            status,
-            summary,
-            "",
-            cause,
-            "",
-        )
-    }
-
-    fn new(
-        id: &'static str,
-        provider: &'static str,
-        severity: Severity,
-        status: &'static str,
-        summary: &str,
-        evidence: &str,
-        cause: &'static str,
-        repair: &str,
-    ) -> Self {
-        Self {
-            id,
-            provider,
-            severity,
-            status,
-            summary: summary.to_string(),
-            evidence: evidence.to_string(),
-            cause,
-            repair: repair.to_string(),
-        }
-    }
-}
-
 fn check_file(
     report: &mut Report,
     root: &Path,
@@ -733,20 +620,34 @@ fn check_gitignore(root: &Path, report: &mut Report) {
 }
 
 fn check_env_files(root: &Path, report: &mut Report) {
-    if root.join(".env").exists() {
+    let env_paths = [
+        (".env", root.join(".env")),
+        (".env.local", root.join(".env.local")),
+        (
+            "setup/.secrets.demo.env",
+            root.join("setup/.secrets.demo.env"),
+        ),
+    ];
+
+    let present: Vec<&str> = env_paths
+        .iter()
+        .filter_map(|(label, path)| path.exists().then_some(*label))
+        .collect();
+
+    if !present.is_empty() {
         report.findings.push(Finding::info(
             "local.env",
             "local",
             "present",
-            ".env exists locally.",
-            ".env is ignored and may contain local demo values.",
+            &format!("Local env files present: {}.", present.join(", ")),
+            "Recognized env files are ignored and may contain local demo values.",
         ));
     } else {
         report.findings.push(Finding::warn(
             "local.env",
             "local",
             "missing",
-            ".env is not present.",
+            "No local env file is present.",
             "Copy setup/secrets.example.env to .env or setup/.secrets.demo.env when you are ready to run against provider resources.",
         ));
     }
@@ -884,7 +785,13 @@ fn check_manifest_content(root: &Path, report: &mut Report) {
 
 fn check_git_tracking(root: &Path, report: &mut Report) {
     let tracked_env = Command::new("git")
-        .args(["ls-files", ".env"])
+        .args([
+            "ls-files",
+            ".env",
+            ".env.local",
+            "setup/.secrets.demo.env",
+            "setup/.secrets.local.env",
+        ])
         .current_dir(root)
         .output();
 
@@ -894,7 +801,7 @@ fn check_git_tracking(root: &Path, report: &mut Report) {
                 "secrets.git_tracking",
                 "git",
                 "clean",
-                ".env is not tracked by Git.",
+                "Known local secret files are not tracked by Git.",
                 "Secret hygiene check passed.",
             ));
         }
@@ -903,10 +810,10 @@ fn check_git_tracking(root: &Path, report: &mut Report) {
                 "secrets.git_tracking",
                 "git",
                 "invalid",
-                ".env appears to be tracked by Git.",
+                "One or more local secret files appear to be tracked by Git.",
                 &String::from_utf8_lossy(&output.stdout),
                 "secret_tracked",
-                "Remove .env from Git tracking and rotate any exposed values.",
+                "Remove tracked local secret files from Git and rotate any exposed values.",
             ));
         }
         Ok(output) => {
@@ -928,36 +835,124 @@ fn check_git_tracking(root: &Path, report: &mut Report) {
     }
 }
 
-fn check_env_contract(root: &Path, report: &mut Report) {
-    for name in [
-        "DATABASE_URL",
-        "SESSION_SECRET",
-        "APP_ENV",
-        "PUBLIC_BASE_URL",
-    ] {
-        if env::var(name).is_ok() {
+fn check_env_contract(root: &Path, env_store: &EnvStore, report: &mut Report) {
+    for required in required_env_contracts(root) {
+        if let Some(value) = env_store.get(&required.name) {
             report.findings.push(Finding::ok(
                 "env.runtime",
                 "env",
                 "present",
-                &format!("{name} is present in the process environment."),
-                "Value redacted.",
+                &format!("{} is present in recognized env sources.", required.name),
+                &format!("Value redacted. Source: {}.", value.source.label()),
             ));
-        } else {
-            let local_hint = if root.join(".env").exists() {
-                ".env exists; runtime loading is handled by the app, not xtask."
-            } else {
-                "Copy setup/secrets.example.env to .env or setup/.secrets.demo.env."
-            };
+        } else if required.has_local_fallback {
             report.findings.push(Finding::warn(
                 "env.runtime",
                 "env",
+                "missing_with_fallback",
+                &format!(
+                    "{} is missing, but setup/setup.toml defines a local fallback.",
+                    required.name
+                ),
+                "Set an explicit value before validating a deployed environment.",
+            ));
+        } else {
+            let local_hint = if root.join(".env").exists()
+                || root.join(".env.local").exists()
+                || root.join("setup/.secrets.demo.env").exists()
+            {
+                "A local env file exists, but this value was not found in recognized env sources."
+            } else {
+                "Copy setup/secrets.example.env to .env or setup/.secrets.demo.env."
+            };
+            report.findings.push(Finding::fail(
+                "env.runtime",
+                "env",
                 "missing",
-                &format!("{name} is not present in the process environment."),
+                &format!(
+                    "{} is required and was not found in recognized env sources.",
+                    required.name
+                ),
+                "",
+                "required_env_missing",
                 local_hint,
             ));
         }
     }
+}
+
+struct RequiredEnv {
+    name: String,
+    has_local_fallback: bool,
+}
+
+fn required_env_contracts(root: &Path) -> Vec<RequiredEnv> {
+    let manifest = fs::read_to_string(root.join("setup/setup.toml")).unwrap_or_default();
+    let mut required = Vec::new();
+    let mut in_required_env = false;
+    let mut current_name: Option<String> = None;
+    let mut current_has_fallback = false;
+
+    for line in manifest.lines() {
+        let line = line.trim();
+        if line == "[[required_env]]" {
+            if let Some(name) = current_name.take() {
+                required.push(RequiredEnv {
+                    name,
+                    has_local_fallback: current_has_fallback,
+                });
+            }
+            in_required_env = true;
+            current_has_fallback = false;
+            continue;
+        }
+        if line.starts_with('[') {
+            if in_required_env {
+                if let Some(name) = current_name.take() {
+                    required.push(RequiredEnv {
+                        name,
+                        has_local_fallback: current_has_fallback,
+                    });
+                }
+            }
+            in_required_env = false;
+        }
+        if in_required_env && line.starts_with("name") {
+            if let Some((_, value)) = line.split_once('=') {
+                let value = value.trim().trim_matches('"');
+                if !value.is_empty() {
+                    current_name = Some(value.to_string());
+                }
+            }
+        } else if in_required_env && line.starts_with("local_fallback") {
+            current_has_fallback = true;
+        }
+    }
+
+    if let Some(name) = current_name.take() {
+        required.push(RequiredEnv {
+            name,
+            has_local_fallback: current_has_fallback,
+        });
+    }
+
+    if required.is_empty() {
+        required.extend(
+            [
+                "DATABASE_URL",
+                "SESSION_SECRET",
+                "APP_ENV",
+                "PUBLIC_BASE_URL",
+            ]
+            .iter()
+            .map(|name| RequiredEnv {
+                name: name.to_string(),
+                has_local_fallback: false,
+            }),
+        );
+    }
+
+    required
 }
 
 fn command_exists(command: &str) -> bool {
@@ -983,72 +978,45 @@ fn repo_root() -> Result<PathBuf, String> {
     }
 }
 
-fn emit_report(report: &Report, json: bool) {
-    if json {
-        println!("{}", render_json_report(report));
+fn finish_report(root: &Path, mut report: Report, options: &Options) -> Result<(), String> {
+    let finding_count_before_filter = report.findings.len();
+    report.retain_only(&options.only);
+    if !options.only.is_empty() && finding_count_before_filter > 0 && report.findings.is_empty() {
+        report.findings.push(Finding::fail(
+            "filter.no_matches",
+            "external",
+            "empty",
+            "The --only selector did not match any findings.",
+            &options.only.join(", "),
+            "selector_matched_nothing",
+            "Use a finding ID, provider name, or prefix shown by an unfiltered report.",
+        ));
+    }
+
+    if options.write_report {
+        write_report_artifact(root, &report)?;
+    }
+
+    if options.json {
+        println!("{}", render_json_report(&report));
     } else {
-        println!("{}", render_human_report(report));
+        println!("{}", render_human_report(&report));
     }
+
+    exit_if_failed(&report, false)
 }
 
-fn render_human_report(report: &Report) -> String {
-    let mut out = String::new();
-    let _ = writeln!(out, "External World Report: {}", report.command);
-    let _ = writeln!(out, "status: {}", if report.ok() { "ok" } else { "failed" });
-    let _ = writeln!(out);
-
-    for finding in &report.findings {
-        let _ = writeln!(
-            out,
-            "[{}] {} ({})",
-            finding.severity.as_str(),
-            finding.id,
-            finding.status
-        );
-        let _ = writeln!(out, "      {}", finding.summary);
-        if !finding.evidence.is_empty() {
-            let _ = writeln!(out, "      Evidence: {}", finding.evidence.trim());
-        }
-        if finding.cause != "none" {
-            let _ = writeln!(out, "      Cause: {}", finding.cause);
-        }
-        if !finding.repair.is_empty() {
-            let _ = writeln!(out, "      Repair: {}", finding.repair);
-        }
-    }
-
-    out
-}
-
-fn render_json_report(report: &Report) -> String {
-    let mut out = String::new();
-    let _ = write!(
-        out,
-        "{{\"command\":\"{}\",\"ok\":{},\"findings\":[",
-        json_escape(report.command),
-        report.ok()
-    );
-
-    for (idx, finding) in report.findings.iter().enumerate() {
-        if idx > 0 {
-            out.push(',');
-        }
-        let _ = write!(
-            out,
-            "{{\"id\":\"{}\",\"provider\":\"{}\",\"severity\":\"{}\",\"status\":\"{}\",\"summary\":\"{}\",\"evidence\":\"{}\",\"cause\":\"{}\",\"repair\":\"{}\"}}",
-            json_escape(finding.id),
-            json_escape(finding.provider),
-            finding.severity.as_str(),
-            json_escape(finding.status),
-            json_escape(&finding.summary),
-            json_escape(&finding.evidence),
-            json_escape(finding.cause),
-            json_escape(&finding.repair)
-        );
-    }
-
-    out.push_str("]}");
-    out
+fn write_report_artifact(root: &Path, report: &Report) -> Result<(), String> {
+    let reports_dir = root.join("setup/reports");
+    fs::create_dir_all(&reports_dir).map_err(|err| {
+        format!(
+            "failed to create report directory {}: {err}",
+            reports_dir.display()
+        )
+    })?;
+    let path = reports_dir.join("latest.json");
+    fs::write(&path, render_json_report(report))
+        .map_err(|err| format!("failed to write report {}: {err}", path.display()))
 }
 
 fn exit_if_failed(report: &Report, allow_fail: bool) -> Result<(), String> {
@@ -1062,20 +1030,6 @@ fn exit_if_failed(report: &Report, allow_fail: bool) -> Result<(), String> {
     }
 }
 
-fn json_escape(value: &str) -> String {
-    value
-        .chars()
-        .flat_map(|ch| match ch {
-            '"' => "\\\"".chars().collect::<Vec<_>>(),
-            '\\' => "\\\\".chars().collect::<Vec<_>>(),
-            '\n' => "\\n".chars().collect::<Vec<_>>(),
-            '\r' => "\\r".chars().collect::<Vec<_>>(),
-            '\t' => "\\t".chars().collect::<Vec<_>>(),
-            other => vec![other],
-        })
-        .collect()
-}
-
 fn shell_words(program: &str, args: &[&str]) -> String {
     let mut parts = Vec::with_capacity(args.len() + 1);
     parts.push(program.to_string());
@@ -1085,12 +1039,12 @@ fn shell_words(program: &str, args: &[&str]) -> String {
 
 fn print_help() {
     println!(
-        "Davis's Books xtask\n\nCommands:\n  cargo xtask external doctor\n  cargo xtask external validate [--local-only] [--json]\n  cargo xtask external setup [--install-deps] [--yes] [--json]\n  cargo xtask external install-deps [--yes] [--json]\n"
+        "Davis's Books xtask\n\nCommands:\n  cargo xtask external doctor\n  cargo xtask external plan [--local-only] [--json] [--only <selector>] [--write-report]\n  cargo xtask external validate [--local-only] [--json] [--only <selector>] [--write-report]\n  cargo xtask external setup [--install-deps] [--yes] [--json] [--only <selector>] [--write-report]\n  cargo xtask external repair --only <selector>\n  cargo xtask external install-deps [--yes] [--json] [--only <selector>] [--write-report]\n  cargo xtask external secrets import-email --from <path> [--yes]\n"
     );
 }
 
 fn print_external_help() {
     println!(
-        "External world commands:\n  doctor        Read-only local bootstrap readiness check\n  validate      Read-only local/provider validation report\n  setup         First-slice setup orchestration\n  install-deps  Install supported local dependencies when passed --yes\n\nFlags:\n  --json          Emit machine-readable JSON\n  --local-only    Skip provider checks\n  --install-deps  Let setup install supported local dependencies\n  --yes, -y       Apply supported installers\n"
+        "External world commands:\n  doctor        Read-only local bootstrap readiness check\n  plan          Read-only action planning scaffold\n  validate      Read-only local/provider validation report\n  setup         First-slice setup orchestration\n  repair        Targeted repair scaffold; requires --only\n  install-deps  Install supported local dependencies when passed --yes\n  secrets import-email --from <path>\n                Parse a pasted recovery email/note into setup/.secrets.demo.env with --yes\n\nFlags:\n  --json                 Emit machine-readable JSON\n  --local-only           Skip provider checks\n  --only <selector>      Show matching finding IDs/providers only\n  --from <path>          Read a local input file\n  --write-report         Write setup/reports/latest.json\n  --install-deps         Let setup install supported local dependencies\n  --yes, -y              Apply supported installers/writes\n"
     );
 }

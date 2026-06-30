@@ -33,12 +33,16 @@ The project includes an `xtask` scaffold for rebuilding and validating deploy-ti
 
 ```bash
 cargo xtask external doctor
+cargo xtask external plan --local-only
 cargo xtask external validate --local-only
+cargo xtask external validate --local-only --json --write-report
 cargo xtask external install-deps
 cargo xtask external setup --install-deps
+cargo xtask external repair --only database.migrations
+cargo xtask external secrets import-email --from setup/recovery-email.example.txt
 ```
 
-`doctor` and `validate` are read-only. `install-deps` is dry-run by default and runs supported installers only with `--yes`. See [docs/EXTERNAL_WORLD_BOOTSTRAP_SPEC.md](docs/EXTERNAL_WORLD_BOOTSTRAP_SPEC.md) for the desired-state, setup, validation, and provider adapter plan.
+`doctor`, `plan`, and `validate` are read-only. Use `--only <selector>` to focus a report and `--write-report` to write ignored JSON to `setup/reports/latest.json`. `install-deps` is dry-run by default and runs supported installers only with `--yes`. `repair` is a targeted scaffold and requires `--only` before any repair adapters are added. `secrets import-email` parses known keys from a pasted recovery note and writes `setup/.secrets.demo.env` only with `--yes`. See [docs/EXTERNAL_WORLD_BOOTSTRAP_SPEC.md](docs/EXTERNAL_WORLD_BOOTSTRAP_SPEC.md) for the desired-state, setup, validation, and provider adapter plan.
 
 ## Current MVP
 
