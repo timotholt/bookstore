@@ -1,0 +1,38 @@
+{% extends "layouts/auth_base.html" %}
+
+{% block title %}Sign In - {{ self.store_name() }}{% endblock %}
+
+{% block content %}
+<main class="auth-shell">
+  <div class="auth-card">
+    <h1>Sign in</h1>
+
+    {% if let Some(msg) = error_message %}
+      <div class="auth-alert auth-alert--error">
+        {{ msg }}
+      </div>
+    {% endif %}
+
+    <form class="auth-form" method="post" action="/login">
+      <div class="auth-field">
+        <label for="email">Email address</label>
+        <input type="email" id="email" name="email" value="{{ email }}" required autocomplete="email" autofocus>
+      </div>
+
+      <div class="auth-field">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required autocomplete="current-password">
+      </div>
+
+      <button type="submit" class="primary-button auth-submit">Sign In</button>
+    </form>
+
+    <div class="auth-alt">
+      <div class="auth-divider">
+        <span>New to {{ self.store_name() }}?</span>
+      </div>
+      <a href="/signup" class="secondary-button auth-alt-action">Create your {{ self.store_name() }} account</a>
+    </div>
+  </div>
+</main>
+{% endblock %}

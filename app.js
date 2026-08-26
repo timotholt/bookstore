@@ -3,6 +3,9 @@
   let cartWasOpenBeforeSwap = false;
   let drawerItemsScrollTop = 0;
   let cartPageScrollY = null;
+  let catalogRefreshTimer = null;
+  let catalogAbortController = null;
+  let catalogRequestSeq = 0;
 
   function sendEvent(payload) {
     const body = JSON.stringify(Object.assign({
@@ -54,19 +57,25 @@
     const format = (data.get("format") || "").toString();
     const sort = (data.get("sort") || "").toString();
     const maxPrice = (data.get("max_price") || "").toString();
+    const minRating = (data.get("min_rating") || "").toString();
+    const listings = data.getAll("listing").map(function (value) {
+      return value.toString();
+    });
 
     sendEvent({
       event_name: "catalog_searched",
       source: source,
       target_type: "search",
-      target_id: query || genre || condition || format || sort || maxPrice || "catalog",
+      target_id: query || genre || condition || format || sort || maxPrice || minRating || "catalog",
       metadata: {
         q: query,
         genre: genre,
         condition: condition,
+        listing: listings,
         format: format,
         sort: sort,
-        max_price: maxPrice
+        max_price: maxPrice,
+        min_rating: minRating
       }
     });
   }
@@ -219,6 +228,109 @@
     startTimer();
   }
 
+  function appendCatalogParam(params, key, value) {
+    const normalized = (value || "").toString().trim();
+    if (!normalized || normalized === "All") return;
+    if (key === "max_price" && normalized === "499") return;
+    if (key === "sort" && normalized === "popular") return;
+    params.append(key, normalized);
+  }
+
+  function catalogSearchParams() {
+    const form = document.getElementById("catalogFilters");
+    if (!form) return null;
+    syncListingFilter();
+    const data = new FormData(form);
+    const params = new URLSearchParams();
+
+    data.forEach(function (value, key) {
+      appendCatalogParam(params, key, value);
+    });
+
+    const sort = document.getElementById("sortSelect");
+    if (sort) {
+      params.delete("sort");
+      appendCatalogParam(params, "sort", sort.value);
+    }
+
+    return params;
+  }
+
+  function syncListingFilter() {
+    const form = document.getElementById("catalogFilters");
+    if (!form) return;
+    const hidden = document.getElementById("listingFilter");
+    if (!hidden) return;
+
+    const selectedListings = Array.from(form.querySelectorAll("[data-listing-option]:checked")).map(function (input) {
+      return input.value;
+    });
+    hidden.value = selectedListings.length === 1 ? selectedListings[0] : "";
+  }
+
+  function syncRatingStars() {
+    const form = document.getElementById("catalogFilters");
+    if (!form) return;
+    const checked = form.querySelector('input[name="min_rating"]:checked');
+    const value = checked ? checked.value : "";
+    const activeStar = value ? parseInt(value, 10) : 1;
+
+    form.querySelectorAll(".rating-star-option").forEach(function (option, index) {
+      const starNumber = index + 1;
+      const input = option.querySelector('input[name="min_rating"]');
+      option.classList.toggle("is-filled", starNumber <= activeStar);
+      option.classList.toggle("is-selected", Boolean(input && input.checked));
+    });
+  }
+
+  function refreshCatalogResults(source, delay) {
+    const form = document.getElementById("catalogFilters");
+    const target = document.getElementById("catalogResults");
+    const params = catalogSearchParams();
+    if (!form || !target || !params) return;
+
+    window.clearTimeout(catalogRefreshTimer);
+    catalogRefreshTimer = window.setTimeout(function () {
+      const query = params.toString();
+      const catalogUrl = "/catalog" + (query ? "?" + query : "");
+      const searchUrl = "/search" + (query ? "?" + query : "");
+
+      if (catalogAbortController) {
+        catalogAbortController.abort();
+      }
+      catalogAbortController = new AbortController();
+      const requestSeq = ++catalogRequestSeq;
+      target.classList.add("is-loading");
+
+      fetch(catalogUrl, {
+        headers: { "HX-Request": "true" },
+        signal: catalogAbortController.signal
+      })
+        .then(function (response) {
+          if (!response.ok) throw new Error("Catalog refresh failed");
+          return response.text();
+        })
+        .then(function (html) {
+          if (requestSeq !== catalogRequestSeq) return;
+          const currentTarget = document.getElementById("catalogResults");
+          if (currentTarget) currentTarget.outerHTML = html;
+          window.history.replaceState({}, "", searchUrl);
+          trackSearch(form, source || "catalog.filters");
+        })
+        .catch(function (error) {
+          if (requestSeq === catalogRequestSeq && error.name !== "AbortError") {
+            console.error(error);
+            target.classList.remove("is-loading");
+          }
+        })
+        .finally(function () {
+          if (requestSeq !== catalogRequestSeq) return;
+          const currentTarget = document.getElementById("catalogResults");
+          if (currentTarget) currentTarget.classList.remove("is-loading");
+        });
+    }, delay || 0);
+  }
+
   document.addEventListener("click", function (event) {
     trackClick(event);
 
@@ -247,9 +359,27 @@
   });
 
   document.addEventListener("input", function (event) {
-    if (event.target.id !== "priceFilter") return;
-    const priceValue = document.getElementById("priceValue");
-    if (priceValue) priceValue.textContent = "$" + event.target.value;
+    const catalogForm = event.target.closest("#catalogFilters");
+    if (event.target.id === "priceFilter") {
+      const priceValue = document.getElementById("priceValue");
+      if (priceValue) priceValue.textContent = "$" + event.target.value;
+    }
+    if (!catalogForm) return;
+    if (event.target.matches('input[type="search"], input[type="range"]')) {
+      refreshCatalogResults("catalog.filters", event.target.type === "range" ? 120 : 250);
+    }
+  });
+
+  document.addEventListener("change", function (event) {
+    if (event.target.closest("#catalogFilters")) {
+      if (event.target.matches("[data-listing-option]")) syncListingFilter();
+      if (event.target.matches('input[name="min_rating"]')) syncRatingStars();
+      refreshCatalogResults("catalog.filters", 0);
+      return;
+    }
+    if (event.target.matches("#sortSelect")) {
+      refreshCatalogResults("catalog.sort", 0);
+    }
   });
 
   document.addEventListener("submit", function (event) {
@@ -267,12 +397,13 @@
     if (query && query.value.trim()) params.set("q", query.value.trim());
     if (genre && genre.value && genre.value !== "All") params.set("genre", genre.value);
     const search = params.toString();
-    window.location.href = "/" + (search ? "?" + search : "") + "#catalog";
+    window.location.href = "/search" + (search ? "?" + search : "");
   }, true);
 
   document.addEventListener("submit", function (event) {
     if (!event.target.matches("#catalogFilters")) return;
-    trackSearch(event.target, "catalog.filters");
+    event.preventDefault();
+    refreshCatalogResults("catalog.filters", 0);
   }, true);
 
   document.body.addEventListener("htmx:beforeRequest", function (event) {
@@ -326,6 +457,8 @@
   document.addEventListener("DOMContentLoaded", function () {
     syncCartCount();
     initHeroCarousel();
+    syncListingFilter();
+    syncRatingStars();
   });
 
   document.addEventListener("click", function (event) {

@@ -1,12 +1,12 @@
 {% extends "layouts/base.html" %}
 
-{% block title %}{{ book.title }} | Davis's Books{% endblock %}
-{% block description %}View condition notes, price, and pickup details for {{ book.title }} at Davis's Books.{% endblock %}
+{% block title %}{{ book.title }} | {{ self.store_name() }}{% endblock %}
+{% block description %}View condition notes, price, and pickup details for {{ book.title }} at {{ self.store_name() }}.{% endblock %}
 
 {% block content %}
 <main id="top" class="book-details-view">
   <div class="details-nav">
-    <a class="back-link" href="/#catalog">
+    <a class="back-link" href="/search">
       <svg class="back-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <path d="M19 12H5M12 19l-7-7 7-7"></path>
       </svg>
@@ -37,7 +37,7 @@
     <div class="details-middle-specs">
       <section class="detail-info-card detail-summary-card" aria-labelledby="bookDetailTitle">
         {% if !book.author.is_empty() %}
-        <p class="details-brand-link">Visit the <a href="/?author={{ book.author_slug }}#catalog">{{ book.author }} shelf</a></p>
+        <p class="details-brand-link">Visit the <a href="/search?q={{ book.author }}">{{ book.author }} shelf</a></p>
         {% endif %}
         <h1 class="details-title" id="bookDetailTitle">{{ book.title }}</h1>
         {% if !book.author.is_empty() %}
@@ -46,19 +46,19 @@
 
         <div class="details-rating">
           <div class="stars">★★★★★</div>
-          <span class="rating-text">4.8 (124 Davis's reader notes)</span>
+          <span class="rating-text">4.8 (124 reader notes)</span>
         </div>
 
         <div class="details-price-row">
-          <span class="discount-badge">-33%</span>
+          <span class="discount-badge" id="mainDiscount"{% if !book.is_new || book.list_price.is_none() %} hidden{% endif %}>{% if let Some(list) = book.list_price.as_ref() %}-{{ self.discount_pct(book.price, list) }}%{% endif %}</span>
           <span class="ui-price ui-price--detail">
             <span class="ui-price-symbol">$</span>
             <strong class="ui-price-dollars" id="mainPriceDollars">{{ self.price_dollars(book.price) }}</strong>
             <span class="ui-price-cents" id="mainPriceCents">{{ self.price_cents(book.price) }}</span>
           </span>
         </div>
-        <div class="list-price-row">
-          List Price: <span class="list-price-strike" id="mainListPrice">{{ self.money_val(self.list_price(book.price)) }}</span>
+        <div class="list-price-row" id="mainListPriceRow"{% if !book.is_new || book.list_price.is_none() %} hidden{% endif %}>
+          List Price: <span class="list-price-strike" id="mainListPrice">{% if let Some(list) = book.list_price.as_ref() %}{{ self.money(list) }}{% endif %}</span>
         </div>
 
         <div class="details-quick-specs">
@@ -83,7 +83,8 @@
                   data-copy-id="{{ copy.copy_id }}"
                   data-price-dollars="{{ self.price_dollars(copy.price) }}"
                   data-price-cents="{{ self.price_cents(copy.price) }}"
-                  data-list-price="{{ self.money_val(self.list_price(copy.price)) }}"
+                  data-list-price="{% if copy.is_new %}{% if let Some(list) = copy.list_price.as_ref() %}{{ self.money(list) }}{% endif %}{% endif %}"
+                  data-discount="{% if copy.is_new %}{% if let Some(list) = copy.list_price.as_ref() %}{{ self.discount_pct(copy.price, list) }}{% endif %}{% endif %}"
                   data-stock="{{ copy.stock }}"
                   data-notes="{{ copy.notes.as_deref().unwrap_or("") }}"
                   data-condition="{% if !copy.condition.is_empty() %}{{ copy.condition }}{% else %}New{% endif %}"
@@ -108,7 +109,7 @@
               {% if !book.isbn.is_empty() %}<tr><td>ISBN-13</td><td>{{ book.isbn }}</td></tr>{% endif %}
               <tr><td>Language</td><td>English</td></tr>
               <tr><td>Condition</td><td id="specsCondition">{% if !book.condition.is_empty() %}{{ book.condition }}{% else %}New{% endif %}</td></tr>
-              <tr><td>Store</td><td>Davis's Books, La Habra</td></tr>
+              <tr><td>Store</td><td>{{ self.store_name() }}, {{ self.store_city() }}</td></tr>
               <tr class="dynamic-attribute-row" id="attr-color" style="display: none;"><td>Color</td><td class="value"></td></tr>
               <tr class="dynamic-attribute-row" id="attr-size" style="display: none;"><td>Size</td><td class="value"></td></tr>
               <tr class="dynamic-attribute-row" id="attr-material" style="display: none;"><td>Material</td><td class="value"></td></tr>
@@ -137,7 +138,7 @@
         </div>
         <div class="buybox-delivery">
           <span class="delivery-highlight">FREE store pickup</span> on orders over $35.
-          <span class="delivery-time">Ready from Davis's Books in La Habra.</span>
+          <span class="delivery-time">Ready from {{ self.store_name() }} in La Habra.</span>
         </div>
         <div class="buybox-stock-status">
           <span class="in-stock">In Stock.</span>
@@ -157,11 +158,11 @@
         <div class="buybox-merchant-details">
           <div class="merchant-row">
             <span class="merchant-label">Ships from</span>
-            <span class="merchant-value">Davis's Books</span>
+            <span class="merchant-value">{{ self.store_name() }}</span>
           </div>
           <div class="merchant-row">
             <span class="merchant-label">Sold by</span>
-            <span class="merchant-value">Davis's Books</span>
+            <span class="merchant-value">{{ self.store_name() }}</span>
           </div>
         </div>
       </div>
@@ -222,6 +223,7 @@
       const dollars = btn.getAttribute('data-price-dollars');
       const cents = btn.getAttribute('data-price-cents');
       const listPrice = btn.getAttribute('data-list-price');
+      const discount = btn.getAttribute('data-discount');
       const stock = btn.getAttribute('data-stock');
       const condition = btn.getAttribute('data-condition');
       const format = btn.getAttribute('data-format');
@@ -234,6 +236,14 @@
       if (centsEl) centsEl.innerText = cents;
       const listPriceEl = document.getElementById('mainListPrice');
       if (listPriceEl) listPriceEl.innerText = listPrice;
+      const hasSale = listPrice && discount && discount !== '0';
+      const listPriceRow = document.getElementById('mainListPriceRow');
+      if (listPriceRow) listPriceRow.hidden = !hasSale;
+      const discountEl = document.getElementById('mainDiscount');
+      if (discountEl) {
+        discountEl.hidden = !hasSale;
+        if (hasSale) discountEl.innerText = '-' + discount + '%';
+      }
 
       // 4. Update right column buybox price
       const buyboxDollarsEl = document.getElementById('buyboxPriceDollars');

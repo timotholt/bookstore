@@ -3,20 +3,19 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Secure Checkout | Davis's Books</title>
-    <meta name="description" content="Review your Davis's Books order before secure payment.">
+    <title>Secure Checkout | {{ self.store_name() }}</title>
+    <meta name="description" content="Review your {{ self.store_name() }} order before secure payment.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=optional">
-    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=optional" rel="stylesheet">
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=optional">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=optional" rel="stylesheet">
     <link rel="stylesheet" href="/styles.css">
     <script src="/assets/htmx.min.js" defer></script>
   </head>
   <body class="checkout-body">
     <header class="checkout-header">
-      <a class="brand checkout-brand" href="/" aria-label="Davis's Books home">
-        <span class="brand-mark" aria-hidden="true">DB</span>
-        <span>Davis's Books</span>
+      <a class="brand checkout-brand" href="/" aria-label="{{ self.store_name() }} home">
+        <span>{{ self.store_name() }}</span>
       </a>
       <h1>Secure Checkout</h1>
       <div class="checkout-header-assurance">Encrypted checkout</div>
@@ -53,7 +52,7 @@
             </form>
             <div>
               <h2>Order total: {{ summary.total_label }}</h2>
-              <p>By placing your order, you agree to Davis's Books pickup, return, and privacy policies.</p>
+              <p>By placing your order, you agree to {{ self.store_name() }} pickup, return, and privacy policies.</p>
             </div>
           </section>
 
@@ -74,7 +73,7 @@
           <div class="checkout-summary-note">
             <span>Secure checkout</span>
             <span>Hand-inspected copies</span>
-            <span>Pickup support from Davis's Books</span>
+            <span>Pickup support from {{ self.store_name() }}</span>
           </div>
         </aside>
       </div>

@@ -1,0 +1,78 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Login & Security - {{ self.store_name() }}{% endblock %}
+
+{% block content %}
+<main class="account-page-shell account-page-shell--narrow">
+  <nav class="account-breadcrumb" aria-label="Breadcrumb">
+    <a href="/account">Your Account</a>
+    <span>Login & Security</span>
+  </nav>
+
+  <section class="account-page-heading">
+    <h1>Login & Security</h1>
+    <p>Review the sign-in details attached to this account.</p>
+  </section>
+
+  <section class="account-setting-list" aria-label="Login and security settings">
+    <div class="account-setting-row">
+      <div>
+        <strong>Name</strong>
+        <p>{{ user.display_name() }}</p>
+      </div>
+      <a href="/account/profile">Edit</a>
+    </div>
+
+    <div class="account-setting-row">
+      <div>
+        <strong>Email</strong>
+        <p>{{ user.email }}</p>
+      </div>
+      <a href="/account/profile">Edit</a>
+    </div>
+
+    <div class="account-setting-row">
+      <div>
+        <strong>Primary mobile number</strong>
+        {% if !user.phone_number_value().is_empty() %}
+          <p>{{ user.phone_number_value() }}</p>
+        {% else %}
+          <p>Not added yet</p>
+        {% endif %}
+        <small>Used for pickup contact now. Phone sign-in requires verified-phone support later.</small>
+      </div>
+      <a href="/account/profile">Edit</a>
+    </div>
+
+    <div class="account-setting-row">
+      <div>
+        <strong>Default US address</strong>
+        {% if !user.address_line1_value().is_empty() %}
+          <p>{{ user.address_line1_value() }}</p>
+          <small>{{ user.address_city_value() }}{% if !user.address_city_value().is_empty() && !user.address_state_value().is_empty() %}, {% endif %}{{ user.address_state_value() }} {{ user.address_postal_code_value() }}</small>
+        {% else %}
+          <p>Not added yet</p>
+        {% endif %}
+      </div>
+      <a href="/account/profile">Edit</a>
+    </div>
+
+    <div class="account-setting-row">
+      <div>
+        <strong>Password</strong>
+        <p>********</p>
+      </div>
+      <a href="/account/profile">Edit</a>
+    </div>
+
+    <div class="account-setting-row account-setting-row--muted">
+      <div>
+        <strong>2-step verification</strong>
+        <p>Not enabled</p>
+        <small>This needs a verified email or phone challenge before we turn it on.</small>
+      </div>
+      <span>Planned</span>
+    </div>
+  </section>
+</main>
+{% endblock %}

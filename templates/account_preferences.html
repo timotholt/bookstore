@@ -1,0 +1,41 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Shopping Preferences - {{ self.store_name() }}{% endblock %}
+
+{% block content %}
+<main class="account-page-shell account-page-shell--narrow">
+  <nav class="account-breadcrumb" aria-label="Breadcrumb">
+    <a href="/account">Your Account</a>
+    <span>Shopping Preferences</span>
+  </nav>
+
+  <section class="account-page-heading">
+    <h1>Shopping Preferences</h1>
+    <p>Set the account-level preferences {{ self.store_name() }} can support today.</p>
+  </section>
+
+  {% if let Some(msg) = success_message %}
+    <div class="auth-alert auth-alert--success">{{ msg }}</div>
+  {% endif %}
+
+  {% if let Some(msg) = error_message %}
+    <div class="auth-alert auth-alert--error">{{ msg }}</div>
+  {% endif %}
+
+  <section class="account-panel">
+    <form class="account-form" method="post" action="/account/preferences">
+      <label class="account-checkbox">
+        <input type="checkbox" name="marketing_opt_in" value="yes" {% if user.marketing_opt_in %}checked{% endif %}>
+        <span>Email me about used-book deals and pickup updates.</span>
+      </label>
+
+      <div class="account-preference-note">
+        <strong>Coming later</strong>
+        <p>Favorite genres, authors, recently viewed books, and recommendation controls need their own persistent account tables.</p>
+      </div>
+
+      <button type="submit" class="primary-button">Save preferences</button>
+    </form>
+  </section>
+</main>
+{% endblock %}

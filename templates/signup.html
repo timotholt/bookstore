@@ -1,0 +1,52 @@
+{% extends "layouts/auth_base.html" %}
+
+{% block title %}Sign Up - {{ self.store_name() }}{% endblock %}
+
+{% block content %}
+<main class="auth-shell">
+  <div class="auth-card">
+    <h1>Create account</h1>
+
+    {% if let Some(msg) = error_message %}
+      <div class="auth-alert auth-alert--error">
+        {{ msg }}
+      </div>
+    {% endif %}
+
+    <form class="auth-form" method="post" action="/signup">
+      <div class="account-form-grid">
+        <div class="auth-field">
+          <label for="first_name">First name</label>
+          <input type="text" id="first_name" name="first_name" value="{{ first_name }}" required autocomplete="given-name" maxlength="80">
+        </div>
+
+        <div class="auth-field">
+          <label for="last_name">Last name</label>
+          <input type="text" id="last_name" name="last_name" value="{{ last_name }}" required autocomplete="family-name" maxlength="80">
+        </div>
+      </div>
+
+      <div class="auth-field">
+        <label for="email">Email address</label>
+        <input type="email" id="email" name="email" value="{{ email }}" required autocomplete="email" autofocus>
+      </div>
+
+      <div class="auth-field">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required autocomplete="new-password" minlength="8" placeholder="At least 8 characters">
+      </div>
+
+      <div class="auth-field">
+        <label for="password_confirm">Re-enter password</label>
+        <input type="password" id="password_confirm" name="password_confirm" required autocomplete="new-password" minlength="8">
+      </div>
+
+      <button type="submit" class="primary-button auth-submit">Continue</button>
+    </form>
+
+    <div class="auth-footnote">
+      <p>Already have an account? <a href="/login" class="text-link">Sign in</a></p>
+    </div>
+  </div>
+</main>
+{% endblock %}

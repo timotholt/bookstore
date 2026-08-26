@@ -1,16 +1,18 @@
 <header class="site-header">
   <div class="header-top-bar">
-    <a class="brand site-logo" href="/#top" aria-label="Davis's Books home">
-      <span class="brand-mark" aria-hidden="true">DB</span>
-      <span>Davis's Books</span>
+    <a class="brand site-logo" href="/#top" aria-label="{{ self.store_name() }} home">
+      <span class="brand-text">{{ self.store_short_name() }}</span>
     </a>
 
     <div class="header-delivery-widget">
       <span class="delivery-to">Store pickup</span>
-      <span class="delivery-location">La Habra, CA <span class="location-time">· 10am-7pm</span></span>
+      <span class="delivery-details">
+        <span class="delivery-location">{{ self.store_city() }}</span>
+        <span class="location-time">{{ self.store_hours() }}</span>
+      </span>
     </div>
 
-    <form class="header-search-form" id="headerSearchForm" action="/#catalog" method="get">
+    <form class="header-search-form" id="headerSearchForm" action="/search" method="get">
       <div class="search-select-wrapper">
         <select id="headerGenreSelect" name="genre" aria-label="Select Genre category">
           <option value="All">All Genres</option>
@@ -20,7 +22,7 @@
         </select>
       </div>
       <div class="search-input-wrapper">
-        <input id="headerSearchInput" name="q" type="search" placeholder="Search Davis's Books..." autocomplete="off">
+        <input id="headerSearchInput" name="q" type="search" placeholder="{{ self.search_placeholder() }}" autocomplete="off">
         <div class="search-suggestions" id="searchSuggestions" hidden></div>
       </div>
       <button class="header-search-submit" type="submit" aria-label="Submit search">
@@ -31,14 +33,48 @@
     </form>
 
     <div class="header-widget language-selector-widget">
-      <span class="language-flag">US</span>
-      <span class="language-code">EN <span class="arrow-down">▼</span></span>
+      <span class="language-flag" role="img" aria-label="United States">🇺🇸</span>
+      <span class="language-code">EN</span>
     </div>
 
-    <div class="header-widget">
-      <span class="widget-top">Hello, Sign in</span>
-      <span class="widget-bottom">Account & Lists <span class="arrow-down">▼</span></span>
-    </div>
+    {% if let Some(user) = current_user %}
+      <details class="header-widget account-menu">
+        <summary class="account-menu-summary">
+          <span class="widget-top">Hello {{ user.header_name() }}</span>
+          <span class="widget-bottom">Account &amp; Info <span class="arrow-down">▼</span></span>
+        </summary>
+        <div class="account-menu-panel">
+          <div class="account-menu-callout">
+            <span>Who's reading?</span>
+            <a href="/account/profile">View profile</a>
+            <form method="post" action="/logout">
+              <button type="submit">Sign out</button>
+            </form>
+          </div>
+          <div class="account-menu-columns">
+            <section>
+              <h3>Your Lists</h3>
+              <a href="/cart">Your Saved Books</a>
+              <a href="/cart">Cart & Saved for Later</a>
+              <a href="/#staff-picks">Staff Picks</a>
+            </section>
+            <section>
+              <h3>Your Account</h3>
+              <a href="/account">Account</a>
+              <a href="/account/security">Login & Security</a>
+              <a href="/account/orders">Orders</a>
+              <a href="/account/profile">Profile</a>
+              <a href="/account/preferences">Shopping Preferences</a>
+            </section>
+          </div>
+        </div>
+      </details>
+    {% else %}
+      <a class="header-widget account-signin-link" href="/login">
+        <span class="widget-top">Hello,</span>
+        <span class="widget-bottom">Sign in</span>
+      </a>
+    {% endif %}
 
     <div class="header-widget">
       <span class="widget-top">Trade-in</span>

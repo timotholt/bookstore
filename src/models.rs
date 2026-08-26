@@ -20,7 +20,9 @@ pub struct BookCard {
     #[sqlx(rename = "copy_id")]
     pub copy_id: i64,
     pub condition: String,
+    pub is_new: bool,
     pub price: f64,
+    pub list_price: Option<f64>,
     pub notes: Option<String>,
     pub format: String,
     pub stock: i32,
@@ -44,8 +46,10 @@ pub struct CatalogFilters {
     pub author: Option<String>,
     pub genre: Option<String>,
     pub condition: Option<String>,
+    pub listing: Option<String>,
     pub max_price: Option<String>,
     pub format: Option<String>,
+    pub min_rating: Option<String>,
     pub sort: Option<String>,
     #[serde(skip)]
     pub result_text: String,
@@ -96,4 +100,84 @@ pub struct AnalyticsEventPayload {
     pub target_id: Option<String>,
     pub page_path: Option<String>,
     pub metadata: Option<Value>,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
+pub struct User {
+    pub id: String,
+    pub email: String,
+    pub full_name: Option<String>,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub phone_number: Option<String>,
+    pub address_line1: Option<String>,
+    pub address_line2: Option<String>,
+    pub address_city: Option<String>,
+    pub address_state: Option<String>,
+    pub address_postal_code: Option<String>,
+    pub marketing_opt_in: bool,
+}
+
+impl User {
+    pub fn display_name(&self) -> String {
+        let name = [self.first_name_value(), self.last_name_value()]
+            .into_iter()
+            .filter(|value| !value.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        if !name.is_empty() {
+            return name;
+        }
+
+        self.full_name
+            .as_deref()
+            .filter(|name| !name.trim().is_empty())
+            .unwrap_or(&self.email)
+            .to_string()
+    }
+
+    pub fn header_name(&self) -> String {
+        if let Some(first_name) = self
+            .first_name
+            .as_deref()
+            .filter(|name| !name.trim().is_empty())
+        {
+            first_name.to_string()
+        } else {
+            self.display_name()
+        }
+    }
+
+    pub fn first_name_value(&self) -> &str {
+        self.first_name.as_deref().unwrap_or("")
+    }
+
+    pub fn last_name_value(&self) -> &str {
+        self.last_name.as_deref().unwrap_or("")
+    }
+
+    pub fn phone_number_value(&self) -> &str {
+        self.phone_number.as_deref().unwrap_or("")
+    }
+
+    pub fn address_line1_value(&self) -> &str {
+        self.address_line1.as_deref().unwrap_or("")
+    }
+
+    pub fn address_line2_value(&self) -> &str {
+        self.address_line2.as_deref().unwrap_or("")
+    }
+
+    pub fn address_city_value(&self) -> &str {
+        self.address_city.as_deref().unwrap_or("")
+    }
+
+    pub fn address_state_value(&self) -> &str {
+        self.address_state.as_deref().unwrap_or("")
+    }
+
+    pub fn address_postal_code_value(&self) -> &str {
+        self.address_postal_code.as_deref().unwrap_or("")
+    }
 }

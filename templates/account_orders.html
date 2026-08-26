@@ -1,0 +1,29 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Orders - {{ self.store_name() }}{% endblock %}
+
+{% block content %}
+<main class="account-page-shell">
+  <nav class="account-breadcrumb" aria-label="Breadcrumb">
+    <a href="/account">Your Account</a>
+    <span>Orders</span>
+  </nav>
+
+  <section class="account-page-heading account-page-heading--split">
+    <div>
+      <h1>Your Orders</h1>
+      <p>Order history will appear here after checkout creates real orders.</p>
+    </div>
+    <form class="account-order-search" action="/account/orders" method="get">
+      <input type="search" name="q" placeholder="Search orders" aria-label="Search orders">
+      <button type="submit">Search Orders</button>
+    </form>
+  </section>
+
+  <section class="account-empty-state">
+    <h2>No orders yet</h2>
+    <p>Your checkout flow is still a local review step, so there are no completed orders to show. Once order creation lands, pickup status, totals, and receipts belong here.</p>
+    <a class="primary-button" href="/cart">Review cart</a>
+  </section>
+</main>
+{% endblock %}

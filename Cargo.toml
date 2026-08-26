@@ -15,7 +15,7 @@ askama = { version = "0.12" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 rust_decimal = { version = "1.34", features = ["serde-float"] }
-tower-sessions = { version = "0.12", features = ["memory-store"] }
+tower-sessions = "0.13.0"
 tower-http = { version = "0.5", features = ["fs", "trace"] }
 argon2 = "0.5"
 validator = { version = "0.16", features = ["derive"] }
@@ -27,6 +27,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1.7", features = ["v4", "serde"] }
 tower_governor = "0.4"
 chrono = { version = "0.4", features = ["serde"] }
+tower-sessions-sqlx-store = { version = "0.14.0", features = ["postgres"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

@@ -2,6 +2,10 @@ bookstore
 data/*.db
 data/*.db-*
 /target/
+.DS_Store
+/.cocoindex_code/
+/.serena/
+/scratch.rs
 .env
 .env.*
 !.env.example

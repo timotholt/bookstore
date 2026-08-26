@@ -1,5 +1,6 @@
 use crate::db::{Db, DbPool};
 use crate::models::{AnalyticsEventPayload, BookCard, CatalogFilters, VariantAttribute};
+use rust_decimal::Decimal;
 use sqlx::QueryBuilder;
 
 const BASE_SELECT: &str = r#"
@@ -18,7 +19,9 @@ const BASE_SELECT: &str = r#"
         b.is_new_arrival as is_new_arrival,
         c.id as copy_id,
         COALESCE(c.condition, '') as condition,
+        c.is_new as is_new,
         c.price::float8 as price,
+        c.list_price::float8 as list_price,
         COALESCE(c.notes, '') as notes,
         COALESCE(c.format, 'Standard') as format,
         c.stock as stock,
@@ -30,6 +33,7 @@ const BASE_SELECT: &str = r#"
     LEFT JOIN authors a ON a.id = b.primary_author_id
     LEFT JOIN genres g ON g.id = b.primary_genre_id
     JOIN book_copies c ON c.book_id = b.id
+    LEFT JOIN review_aggregates ra ON ra.book_id = b.id
     WHERE c.is_sold = false
 "#;
 
@@ -96,6 +100,14 @@ pub async fn list_books(
         }
     }
 
+    let wants_new = filters.listing.as_deref().unwrap_or("").trim() == "new";
+    let wants_used = filters.listing.as_deref().unwrap_or("").trim() == "used";
+    match (wants_new, wants_used) {
+        (true, false) => query_builder.push(" AND c.is_new = true"),
+        (false, true) => query_builder.push(" AND c.is_new = false"),
+        _ => &mut query_builder,
+    };
+
     if let Some(ref format) = filters.format {
         if !format.is_empty() && format != "All" {
             query_builder.push(" AND c.format = ");
@@ -108,6 +120,24 @@ pub async fn list_books(
             if max_price > 0.0 {
                 query_builder.push(" AND c.price <= ");
                 query_builder.push_bind(max_price);
+            }
+        }
+    }
+
+    if let Some(ref min_rating_str) = filters.min_rating {
+        if let Ok(min_rating) = min_rating_str.parse::<f64>() {
+            if (1.0..=5.0).contains(&min_rating) {
+                query_builder.push(
+                    " AND (ra.book_id IS NULL OR ra.published_count = 0 OR ra.average_rating ",
+                );
+                if min_rating >= 5.0 {
+                    query_builder.push("> ");
+                    query_builder.push_bind(Decimal::from(4));
+                } else {
+                    query_builder.push(">= ");
+                    query_builder.push_bind(Decimal::from(min_rating as i32));
+                }
+                query_builder.push(")");
             }
         }
     }
@@ -156,7 +186,9 @@ pub async fn collection_books(
             b.is_new_arrival as is_new_arrival,
             c.id as copy_id,
             COALESCE(c.condition, '') as condition,
+            c.is_new as is_new,
             c.price::float8 as price,
+            c.list_price::float8 as list_price,
             COALESCE(c.notes, '') as notes,
             COALESCE(c.format, 'Standard') as format,
             c.stock as stock,

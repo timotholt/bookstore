@@ -3,6 +3,7 @@ use axum::{
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
+use secrecy::ExposeSecret;
 use serde::Deserialize;
 use std::collections::HashMap;
 use tower_sessions::Session;
@@ -52,8 +53,96 @@ fn unique_formats(books: &[BookCard]) -> Vec<String> {
 
 fn result_filters(filters: CatalogFilters, count: usize, total: usize) -> CatalogFilters {
     let mut out = filters;
-    out.result_text = format!("{} of {} used books shown", count, total);
+    out.result_text = format!("{} of {} items shown", count, total);
     out
+}
+
+fn listing_checked(filters: &CatalogFilters, option: &str) -> bool {
+    filters
+        .listing
+        .as_deref()
+        .map(|listing| listing.trim().is_empty() || listing.trim() == option)
+        .unwrap_or(true)
+}
+
+struct StoreChrome {
+    genres: Vec<String>,
+    cart: CartView,
+    cart_lines: Vec<ui::CartLineView>,
+    removed_notice: Option<ui::RemovedCartNoticeView>,
+    drawer_checkout_button: ui::ButtonView,
+    drawer_browse_books_link: ui::LinkView,
+}
+
+async fn store_chrome(db: &DbPool, session: &Session) -> Result<StoreChrome, AppError> {
+    let all_books = store::list_books(db, &CatalogFilters::default()).await?;
+    let cart = cart::view(db, session).await?;
+    let cart_is_empty = cart.item_count == 0;
+    let cart_lines = ui::cart_lines(cart.lines.clone(), "#cartDrawer");
+    let removed_notice = ui::removed_notice(
+        cart::removed_item_view(db, session).await?,
+        "#cartDrawer",
+        "cart.drawer",
+    );
+
+    Ok(StoreChrome {
+        genres: unique_genres(&all_books),
+        cart,
+        cart_lines,
+        removed_notice,
+        drawer_checkout_button: ui::checkout_start_button("cart.drawer", cart_is_empty),
+        drawer_browse_books_link: ui::browse_books_link("cart.drawer.empty", "secondary-button"),
+    })
+}
+
+async fn signup_template_response(
+    db: &DbPool,
+    session: &Session,
+    error_message: Option<String>,
+    email: String,
+    first_name: String,
+    last_name: String,
+) -> Result<Response, AppError> {
+    let chrome = store_chrome(db, session).await?;
+    let current_user = crate::auth::get_current_user(db, session).await?;
+
+    Ok(SignupTemplate {
+        error_message,
+        email,
+        first_name,
+        last_name,
+        genres: chrome.genres,
+        cart: chrome.cart,
+        cart_lines: chrome.cart_lines,
+        removed_notice: chrome.removed_notice,
+        drawer_checkout_button: chrome.drawer_checkout_button,
+        drawer_browse_books_link: chrome.drawer_browse_books_link,
+        current_user,
+    }
+    .into_response())
+}
+
+async fn login_template_response(
+    db: &DbPool,
+    session: &Session,
+    error_message: Option<String>,
+    email: String,
+) -> Result<Response, AppError> {
+    let chrome = store_chrome(db, session).await?;
+    let current_user = crate::auth::get_current_user(db, session).await?;
+
+    Ok(LoginTemplate {
+        error_message,
+        email,
+        genres: chrome.genres,
+        cart: chrome.cart,
+        cart_lines: chrome.cart_lines,
+        removed_notice: chrome.removed_notice,
+        drawer_checkout_button: chrome.drawer_checkout_button,
+        drawer_browse_books_link: chrome.drawer_browse_books_link,
+        current_user,
+    }
+    .into_response())
 }
 
 // Handlers
@@ -116,11 +205,9 @@ pub async fn home(
     State(state): State<AppState>,
     session: Session,
     headers: HeaderMap,
-    Query(filters): Query<CatalogFilters>,
 ) -> Result<impl IntoResponse, AppError> {
     restore_cart_session(&headers, &session).await?;
     let db = &state.db;
-    let books = store::list_books(db, &filters).await?;
     let all_books = store::list_books(db, &CatalogFilters::default()).await?;
     let best_sellers = store::collection_books(db, "best-sellers", 6).await?;
     let deals = store::collection_books(db, "used-deals", 6).await?;
@@ -186,7 +273,7 @@ pub async fn home(
             "home.new_arrivals",
             new_arrivals,
         )
-        .with_cta("#catalog", "Browse new arrivals"),
+        .with_cta("/search", "Browse new arrivals"),
         ui::product_shelf(
             "deals",
             "Deals",
@@ -198,23 +285,22 @@ pub async fn home(
     ];
 
     let template = HomeTemplate {
-        title: String::from("Davis's Books | Used Books Online"),
+        title: format!("{} | Used Books Online", crate::brand::STORE_NAME),
         genres: unique_genres(&all_books),
-        conditions: unique_conditions(&all_books),
-        formats: unique_formats(&all_books),
         featured,
         featured_add_button,
         featured_buy_now_button,
         quick_fillers,
         product_sections,
-        catalog_cards: ui::product_cards(books.clone(), "catalog.results"),
         staff_picks,
         drawer_checkout_button: ui::checkout_start_button("cart.drawer", cart.item_count == 0),
         drawer_browse_books_link: ui::browse_books_link("cart.drawer.empty", "secondary-button"),
         cart,
         cart_lines,
         removed_notice,
-        filters: result_filters(filters, books.len(), all_books.len()),
+        current_user: crate::auth::get_current_user(db, &session)
+            .await
+            .unwrap_or(None),
     };
 
     Ok(template)
@@ -236,10 +322,63 @@ pub async fn catalog(
         };
         Ok(template.into_response())
     } else {
-        // Redirect non-HTMX requests to homepage with catalog anchor
-        let redirect = axum::response::Redirect::to("/#catalog");
+        let redirect = axum::response::Redirect::to("/search");
         Ok(redirect.into_response())
     }
+}
+
+pub async fn search_page(
+    State(state): State<AppState>,
+    session: Session,
+    headers: HeaderMap,
+    Query(filters): Query<CatalogFilters>,
+) -> Result<impl IntoResponse, AppError> {
+    restore_cart_session(&headers, &session).await?;
+    let db = &state.db;
+    let books = store::list_books(db, &filters).await?;
+    let all_books = store::list_books(db, &CatalogFilters::default()).await?;
+    let cart = cart::view(db, &session).await?;
+    let cart_lines = ui::cart_lines(cart.lines.clone(), "#cartDrawer");
+    let removed_notice = ui::removed_notice(
+        cart::removed_item_view(db, &session).await?,
+        "#cartDrawer",
+        "cart.drawer",
+    );
+    let query = filters.q.clone().unwrap_or_default();
+    let show_new_checked = listing_checked(&filters, "new");
+    let show_used_checked = listing_checked(&filters, "used");
+    let min_rating = filters.min_rating.clone().unwrap_or_default();
+
+    let template = SearchTemplate {
+        title: if query.is_empty() {
+            format!("Search | {}", crate::brand::STORE_NAME)
+        } else {
+            format!(
+                "Search results for \"{}\" | {}",
+                query,
+                crate::brand::STORE_NAME
+            )
+        },
+        query,
+        genres: unique_genres(&all_books),
+        conditions: unique_conditions(&all_books),
+        formats: unique_formats(&all_books),
+        show_new_checked,
+        show_used_checked,
+        min_rating,
+        catalog_cards: ui::product_cards(books.clone(), "search.results"),
+        drawer_checkout_button: ui::checkout_start_button("cart.drawer", cart.item_count == 0),
+        drawer_browse_books_link: ui::browse_books_link("cart.drawer.empty", "secondary-button"),
+        cart,
+        cart_lines,
+        removed_notice,
+        filters: result_filters(filters, books.len(), all_books.len()),
+        current_user: crate::auth::get_current_user(db, &session)
+            .await
+            .unwrap_or(None),
+    };
+
+    Ok(template)
 }
 
 pub async fn book_detail(
@@ -312,6 +451,9 @@ pub async fn book_detail(
         cart,
         cart_lines,
         removed_notice,
+        current_user: crate::auth::get_current_user(db, &session)
+            .await
+            .unwrap_or(None),
     };
 
     Ok(template)
@@ -483,6 +625,9 @@ pub async fn cart_page(
         saved_count_label: content.saved_count_label,
         checkout_button: content.checkout_button,
         browse_books_link: content.browse_books_link,
+        current_user: crate::auth::get_current_user(db, &session)
+            .await
+            .unwrap_or(None),
     };
 
     attach_cart_cookie(template.into_response(), &session).await
@@ -598,4 +743,518 @@ async fn attach_cart_cookie(
         response.headers_mut().append(header::SET_COOKIE, value);
     }
     Ok(response)
+}
+
+// Authentication Handlers
+
+pub async fn signup_page(
+    State(state): State<AppState>,
+    session: Session,
+    headers: HeaderMap,
+) -> Result<Response, AppError> {
+    restore_cart_session(&headers, &session).await?;
+    signup_template_response(
+        &state.db,
+        &session,
+        None,
+        String::new(),
+        String::new(),
+        String::new(),
+    )
+    .await
+}
+
+#[derive(Deserialize)]
+pub struct SignupForm {
+    pub first_name: String,
+    pub last_name: String,
+    pub email: String,
+    pub password: secrecy::Secret<String>,
+    pub password_confirm: secrecy::Secret<String>,
+}
+
+#[derive(Deserialize)]
+pub struct AuthForm {
+    pub email: String,
+    pub password: secrecy::Secret<String>,
+}
+
+pub async fn signup_action(
+    State(state): State<AppState>,
+    session: Session,
+    headers: HeaderMap,
+    Form(form): Form<SignupForm>,
+) -> Result<Response, AppError> {
+    use crate::auth::{register_user, AuthError};
+
+    restore_cart_session(&headers, &session).await?;
+
+    if form.email.trim().is_empty() {
+        return signup_template_response(
+            &state.db,
+            &session,
+            Some("Email is required".into()),
+            form.email,
+            form.first_name,
+            form.last_name,
+        )
+        .await;
+    }
+
+    if form.password.expose_secret() != form.password_confirm.expose_secret() {
+        return signup_template_response(
+            &state.db,
+            &session,
+            Some("Passwords must match.".into()),
+            form.email,
+            form.first_name,
+            form.last_name,
+        )
+        .await;
+    }
+
+    match register_user(
+        &state.db,
+        &form.first_name,
+        &form.last_name,
+        form.email.trim(),
+        form.password,
+    )
+    .await
+    {
+        Ok(user) => {
+            crate::auth::sign_in_user(&session, &user.id)
+                .await
+                .map_err(|err| AppError::Validation(err.to_string()))?;
+            Ok(axum::response::Redirect::to("/account/profile").into_response())
+        }
+        Err(AuthError::UserExists) => {
+            signup_template_response(
+                &state.db,
+                &session,
+                Some("An account with this email already exists.".into()),
+                form.email,
+                form.first_name,
+                form.last_name,
+            )
+            .await
+        }
+        Err(AuthError::Validation(message)) => {
+            signup_template_response(
+                &state.db,
+                &session,
+                Some(message),
+                form.email,
+                form.first_name,
+                form.last_name,
+            )
+            .await
+        }
+        Err(e) => {
+            tracing::error!("Signup error: {:?}", e);
+            signup_template_response(
+                &state.db,
+                &session,
+                Some("An unexpected error occurred. Please try again.".into()),
+                form.email,
+                form.first_name,
+                form.last_name,
+            )
+            .await
+        }
+    }
+}
+
+pub async fn login_page(
+    State(state): State<AppState>,
+    session: Session,
+    headers: HeaderMap,
+) -> Result<Response, AppError> {
+    restore_cart_session(&headers, &session).await?;
+    login_template_response(&state.db, &session, None, String::new()).await
+}
+
+pub async fn login_action(
+    State(state): State<AppState>,
+    session: Session,
+    headers: HeaderMap,
+    Form(form): Form<AuthForm>,
+) -> Result<Response, AppError> {
+    use crate::auth::{login_user, AuthError};
+
+    restore_cart_session(&headers, &session).await?;
+
+    if form.email.trim().is_empty() {
+        return login_template_response(
+            &state.db,
+            &session,
+            Some("Email is required".into()),
+            form.email,
+        )
+        .await;
+    }
+
+    match login_user(&state.db, &session, form.email.trim(), form.password).await {
+        Ok(_) => {
+            // TODO: Merge cart from anonymous session to user session if needed
+            Ok(axum::response::Redirect::to("/").into_response())
+        }
+        Err(AuthError::InvalidCredentials) => {
+            login_template_response(
+                &state.db,
+                &session,
+                Some("Invalid email or password.".into()),
+                form.email,
+            )
+            .await
+        }
+        Err(AuthError::Validation(message)) => {
+            login_template_response(&state.db, &session, Some(message), form.email).await
+        }
+        Err(e) => {
+            tracing::error!("Login error: {:?}", e);
+            login_template_response(
+                &state.db,
+                &session,
+                Some("An unexpected error occurred. Please try again.".into()),
+                form.email,
+            )
+            .await
+        }
+    }
+}
+
+pub async fn logout_action(session: Session) -> Result<impl IntoResponse, AppError> {
+    crate::auth::logout_user(&session).await;
+    Ok(axum::response::Redirect::to("/"))
+}
+
+async fn current_user_or_login(
+    db: &DbPool,
+    session: &Session,
+) -> Result<Result<User, Response>, AppError> {
+    match crate::auth::get_current_user(db, session).await? {
+        Some(user) => Ok(Ok(user)),
+        None => Ok(Err(axum::response::Redirect::to("/login").into_response())),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct ProfileForm {
+    pub first_name: String,
+    pub last_name: String,
+    pub email: String,
+    pub phone_number: String,
+    pub address_line1: String,
+    pub address_line2: String,
+    pub address_city: String,
+    pub address_state: String,
+    pub address_postal_code: String,
+    pub marketing_opt_in: Option<String>,
+}
+
+pub async fn account_home_page(
+    State(state): State<AppState>,
+    session: Session,
+    headers: HeaderMap,
+) -> Result<Response, AppError> {
+    restore_cart_session(&headers, &session).await?;
+    let user = match current_user_or_login(&state.db, &session).await? {
+        Ok(user) => user,
+        Err(response) => return Ok(response),
+    };
+    let chrome = store_chrome(&state.db, &session).await?;
+
+    Ok(AccountHomeTemplate {
+        current_user: Some(user.clone()),
+        genres: chrome.genres,
+        cart: chrome.cart,
+        cart_lines: chrome.cart_lines,
+        removed_notice: chrome.removed_notice,
+        drawer_checkout_button: chrome.drawer_checkout_button,
+        drawer_browse_books_link: chrome.drawer_browse_books_link,
+    }
+    .into_response())
+}
+
+pub async fn profile_page(
+    State(state): State<AppState>,
+    session: Session,
+    headers: HeaderMap,
+) -> Result<Response, AppError> {
+    restore_cart_session(&headers, &session).await?;
+    let user = match current_user_or_login(&state.db, &session).await? {
+        Ok(user) => user,
+        Err(response) => return Ok(response),
+    };
+    let chrome = store_chrome(&state.db, &session).await?;
+
+    Ok(AccountProfileTemplate {
+        current_user: Some(user.clone()),
+        user,
+        genres: chrome.genres,
+        cart: chrome.cart,
+        cart_lines: chrome.cart_lines,
+        removed_notice: chrome.removed_notice,
+        drawer_checkout_button: chrome.drawer_checkout_button,
+        drawer_browse_books_link: chrome.drawer_browse_books_link,
+        success_message: None,
+        error_message: None,
+    }
+    .into_response())
+}
+
+pub async fn profile_action(
+    State(state): State<AppState>,
+    session: Session,
+    headers: HeaderMap,
+    Form(form): Form<ProfileForm>,
+) -> Result<Response, AppError> {
+    use crate::auth::{update_user_profile, AuthError};
+
+    restore_cart_session(&headers, &session).await?;
+    let current_user = match current_user_or_login(&state.db, &session).await? {
+        Ok(user) => user,
+        Err(response) => return Ok(response),
+    };
+    let chrome = store_chrome(&state.db, &session).await?;
+
+    match update_user_profile(
+        &state.db,
+        &current_user.id,
+        &form.first_name,
+        &form.last_name,
+        &form.email,
+        &form.phone_number,
+        &form.address_line1,
+        &form.address_line2,
+        &form.address_city,
+        &form.address_state,
+        &form.address_postal_code,
+        form.marketing_opt_in.is_some(),
+    )
+    .await
+    {
+        Ok(user) => Ok(AccountProfileTemplate {
+            current_user: Some(user.clone()),
+            user,
+            genres: chrome.genres,
+            cart: chrome.cart,
+            cart_lines: chrome.cart_lines,
+            removed_notice: chrome.removed_notice,
+            drawer_checkout_button: chrome.drawer_checkout_button,
+            drawer_browse_books_link: chrome.drawer_browse_books_link,
+            success_message: Some("Profile saved.".into()),
+            error_message: None,
+        }
+        .into_response()),
+        Err(AuthError::UserExists) => Ok(AccountProfileTemplate {
+            current_user: Some(current_user.clone()),
+            user: current_user,
+            genres: chrome.genres,
+            cart: chrome.cart,
+            cart_lines: chrome.cart_lines,
+            removed_notice: chrome.removed_notice,
+            drawer_checkout_button: chrome.drawer_checkout_button,
+            drawer_browse_books_link: chrome.drawer_browse_books_link,
+            success_message: None,
+            error_message: Some("That email is already used by another account.".into()),
+        }
+        .into_response()),
+        Err(AuthError::Validation(message)) => Ok(AccountProfileTemplate {
+            current_user: Some(current_user.clone()),
+            user: current_user,
+            genres: chrome.genres,
+            cart: chrome.cart,
+            cart_lines: chrome.cart_lines,
+            removed_notice: chrome.removed_notice,
+            drawer_checkout_button: chrome.drawer_checkout_button,
+            drawer_browse_books_link: chrome.drawer_browse_books_link,
+            success_message: None,
+            error_message: Some(message),
+        }
+        .into_response()),
+        Err(err) => {
+            tracing::error!("Profile update error: {:?}", err);
+            Ok(AccountProfileTemplate {
+                current_user: Some(current_user.clone()),
+                user: current_user,
+                genres: chrome.genres,
+                cart: chrome.cart,
+                cart_lines: chrome.cart_lines,
+                removed_notice: chrome.removed_notice,
+                drawer_checkout_button: chrome.drawer_checkout_button,
+                drawer_browse_books_link: chrome.drawer_browse_books_link,
+                success_message: None,
+                error_message: Some("An unexpected error occurred. Please try again.".into()),
+            }
+            .into_response())
+        }
+    }
+}
+
+pub async fn security_page(
+    State(state): State<AppState>,
+    session: Session,
+    headers: HeaderMap,
+) -> Result<Response, AppError> {
+    restore_cart_session(&headers, &session).await?;
+    let user = match current_user_or_login(&state.db, &session).await? {
+        Ok(user) => user,
+        Err(response) => return Ok(response),
+    };
+    let chrome = store_chrome(&state.db, &session).await?;
+
+    Ok(AccountSecurityTemplate {
+        current_user: Some(user.clone()),
+        user,
+        genres: chrome.genres,
+        cart: chrome.cart,
+        cart_lines: chrome.cart_lines,
+        removed_notice: chrome.removed_notice,
+        drawer_checkout_button: chrome.drawer_checkout_button,
+        drawer_browse_books_link: chrome.drawer_browse_books_link,
+    }
+    .into_response())
+}
+
+pub async fn orders_page(
+    State(state): State<AppState>,
+    session: Session,
+    headers: HeaderMap,
+) -> Result<Response, AppError> {
+    restore_cart_session(&headers, &session).await?;
+    let user = match current_user_or_login(&state.db, &session).await? {
+        Ok(user) => user,
+        Err(response) => return Ok(response),
+    };
+    let chrome = store_chrome(&state.db, &session).await?;
+
+    Ok(AccountOrdersTemplate {
+        current_user: Some(user.clone()),
+        genres: chrome.genres,
+        cart: chrome.cart,
+        cart_lines: chrome.cart_lines,
+        removed_notice: chrome.removed_notice,
+        drawer_checkout_button: chrome.drawer_checkout_button,
+        drawer_browse_books_link: chrome.drawer_browse_books_link,
+    }
+    .into_response())
+}
+
+pub async fn preferences_page(
+    State(state): State<AppState>,
+    session: Session,
+    headers: HeaderMap,
+) -> Result<Response, AppError> {
+    restore_cart_session(&headers, &session).await?;
+    let user = match current_user_or_login(&state.db, &session).await? {
+        Ok(user) => user,
+        Err(response) => return Ok(response),
+    };
+    let chrome = store_chrome(&state.db, &session).await?;
+
+    Ok(AccountPreferencesTemplate {
+        current_user: Some(user.clone()),
+        user,
+        genres: chrome.genres,
+        cart: chrome.cart,
+        cart_lines: chrome.cart_lines,
+        removed_notice: chrome.removed_notice,
+        drawer_checkout_button: chrome.drawer_checkout_button,
+        drawer_browse_books_link: chrome.drawer_browse_books_link,
+        success_message: None,
+        error_message: None,
+    }
+    .into_response())
+}
+
+#[derive(Deserialize)]
+pub struct PreferencesForm {
+    pub marketing_opt_in: Option<String>,
+}
+
+pub async fn preferences_action(
+    State(state): State<AppState>,
+    session: Session,
+    headers: HeaderMap,
+    Form(form): Form<PreferencesForm>,
+) -> Result<Response, AppError> {
+    use crate::auth::{update_user_profile, AuthError};
+
+    restore_cart_session(&headers, &session).await?;
+    let current_user = match current_user_or_login(&state.db, &session).await? {
+        Ok(user) => user,
+        Err(response) => return Ok(response),
+    };
+    let chrome = store_chrome(&state.db, &session).await?;
+
+    let first_name = current_user.first_name_value().to_string();
+    let last_name = current_user.last_name_value().to_string();
+    let phone_number = current_user.phone_number_value().to_string();
+    let address_line1 = current_user.address_line1_value().to_string();
+    let address_line2 = current_user.address_line2_value().to_string();
+    let address_city = current_user.address_city_value().to_string();
+    let address_state = current_user.address_state_value().to_string();
+    let address_postal_code = current_user.address_postal_code_value().to_string();
+
+    match update_user_profile(
+        &state.db,
+        &current_user.id,
+        &first_name,
+        &last_name,
+        &current_user.email,
+        &phone_number,
+        &address_line1,
+        &address_line2,
+        &address_city,
+        &address_state,
+        &address_postal_code,
+        form.marketing_opt_in.is_some(),
+    )
+    .await
+    {
+        Ok(user) => Ok(AccountPreferencesTemplate {
+            current_user: Some(user.clone()),
+            user,
+            genres: chrome.genres,
+            cart: chrome.cart,
+            cart_lines: chrome.cart_lines,
+            removed_notice: chrome.removed_notice,
+            drawer_checkout_button: chrome.drawer_checkout_button,
+            drawer_browse_books_link: chrome.drawer_browse_books_link,
+            success_message: Some("Preferences saved.".into()),
+            error_message: None,
+        }
+        .into_response()),
+        Err(AuthError::Validation(message)) => Ok(AccountPreferencesTemplate {
+            current_user: Some(current_user.clone()),
+            user: current_user,
+            genres: chrome.genres,
+            cart: chrome.cart,
+            cart_lines: chrome.cart_lines,
+            removed_notice: chrome.removed_notice,
+            drawer_checkout_button: chrome.drawer_checkout_button,
+            drawer_browse_books_link: chrome.drawer_browse_books_link,
+            success_message: None,
+            error_message: Some(message),
+        }
+        .into_response()),
+        Err(err) => {
+            tracing::error!("Preferences update error: {:?}", err);
+            Ok(AccountPreferencesTemplate {
+                current_user: Some(current_user.clone()),
+                user: current_user,
+                genres: chrome.genres,
+                cart: chrome.cart,
+                cart_lines: chrome.cart_lines,
+                removed_notice: chrome.removed_notice,
+                drawer_checkout_button: chrome.drawer_checkout_button,
+                drawer_browse_books_link: chrome.drawer_browse_books_link,
+                success_message: None,
+                error_message: Some("An unexpected error occurred. Please try again.".into()),
+            }
+            .into_response())
+        }
+    }
 }

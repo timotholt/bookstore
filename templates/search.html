@@ -1,0 +1,106 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+{% block description %}Search results at {{ self.store_name() }}.{% endblock %}
+
+{% block content %}
+<main id="top" class="search-results-view">
+  <section class="catalog-shell" id="catalog" aria-labelledby="searchTitle">
+    <div class="catalog-header">
+      <div>
+        <p class="eyebrow">Search</p>
+        <h1 id="searchTitle">{% if query.is_empty() %}Search all items{% else %}Search results for &ldquo;{{ query }}&rdquo;{% endif %}</h1>
+      </div>
+    </div>
+
+    <div class="catalog-layout">
+      <form class="filters" id="catalogFilters" action="/search" method="get" aria-label="Search filters">
+        <input id="listingFilter" name="listing" type="hidden" value="{{ filters.listing.as_deref().unwrap_or("") }}">
+        <div class="filter-block">
+          <label for="sidebarSearchInput">Keyword Search</label>
+          <input id="sidebarSearchInput" name="q" type="search" value="{{ filters.q.as_deref().unwrap_or("") }}" placeholder="Title, author, or ISBN..." autocomplete="off">
+        </div>
+        <div class="filter-block">
+          <label for="genreFilter">Genre</label>
+          <select id="genreFilter" name="genre">
+            <option value="All">All genres</option>
+            {% for gen in genres %}
+            <option value="{{ gen }}" {% if self.selected(filters.genre.as_deref(), gen) %}selected{% endif %}>{{ gen }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="filter-block">
+          <label for="conditionFilter">Condition</label>
+          <select id="conditionFilter" name="condition">
+            <option value="All">Any condition</option>
+            {% for cond in conditions %}
+            <option value="{{ cond }}" {% if self.selected(filters.condition.as_deref(), cond) %}selected{% endif %}>{{ cond }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <fieldset class="filter-block">
+          <legend>New or Used</legend>
+          <div class="checkbox-filter-list">
+            <label class="filter-check">
+              <input data-listing-option type="checkbox" value="new" {% if show_new_checked %}checked{% endif %}>
+              <span>New</span>
+            </label>
+            <label class="filter-check">
+              <input data-listing-option type="checkbox" value="used" {% if show_used_checked %}checked{% endif %}>
+              <span>Used</span>
+            </label>
+          </div>
+        </fieldset>
+        <div class="filter-block">
+          <div class="price-header">
+            <label for="priceFilter">Max Price</label>
+            <span id="priceValue">${{ filters.max_price.as_deref().unwrap_or("499") }}</span>
+          </div>
+          <div class="slider-container">
+            <input id="priceFilter" name="max_price" type="range" min="4" max="499" value="{{ filters.max_price.as_deref().unwrap_or("499") }}">
+          </div>
+        </div>
+        <fieldset class="filter-block">
+          <legend>Reviews</legend>
+          <div class="rating-star-filter" aria-label="Minimum review rating">
+            <label class="rating-star-option {% if self.rating_star_filled(1) %}is-filled{% endif %} {% if min_rating.is_empty() %}is-selected{% endif %}">
+              <input name="min_rating" type="radio" value="" {% if min_rating.is_empty() %}checked{% endif %} aria-label="Any rating">
+              <span aria-hidden="true">★</span>
+            </label>
+            <label class="rating-star-option {% if self.rating_star_filled(2) %}is-filled{% endif %} {% if min_rating == "2" %}is-selected{% endif %}">
+              <input name="min_rating" type="radio" value="2" {% if min_rating == "2" %}checked{% endif %} aria-label="2 stars and up">
+              <span aria-hidden="true">★</span>
+            </label>
+            <label class="rating-star-option {% if self.rating_star_filled(3) %}is-filled{% endif %} {% if min_rating == "3" %}is-selected{% endif %}">
+              <input name="min_rating" type="radio" value="3" {% if min_rating == "3" %}checked{% endif %} aria-label="3 stars and up">
+              <span aria-hidden="true">★</span>
+            </label>
+            <label class="rating-star-option {% if self.rating_star_filled(4) %}is-filled{% endif %} {% if min_rating == "4" %}is-selected{% endif %}">
+              <input name="min_rating" type="radio" value="4" {% if min_rating == "4" %}checked{% endif %} aria-label="4 stars and up">
+              <span aria-hidden="true">★</span>
+            </label>
+            <label class="rating-star-option {% if self.rating_star_filled(5) %}is-filled{% endif %} {% if min_rating == "5" %}is-selected{% endif %}">
+              <input name="min_rating" type="radio" value="5" {% if min_rating == "5" %}checked{% endif %} aria-label="More than 4 stars">
+              <span aria-hidden="true">★</span>
+            </label>
+          </div>
+        </fieldset>
+        <div class="filter-block">
+          <label for="formatFilter">Format / Size</label>
+          <select id="formatFilter" name="format">
+            <option value="All">All formats and sizes</option>
+            {% for fmt in formats %}
+            <option value="{{ fmt }}" {% if self.selected(filters.format.as_deref(), fmt) %}selected{% endif %}>{{ fmt }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <a class="secondary-button" id="resetFilters" href="/search">Reset filters</a>
+      </form>
+
+      <main class="catalog-main">
+        {% include "components/catalog_results.html" %}
+      </main>
+    </div>
+  </section>
+</main>
+{% endblock %}

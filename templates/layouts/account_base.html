@@ -3,27 +3,31 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}{{ title }}{% endblock %}</title>
-    <meta name="description" content="{% block description %}Browse affordable used books by title, author, genre, condition, and price at {{ self.store_name() }}.{% endblock %}">
+    <title>{% block title %}Your Account - {{ self.store_name() }}{% endblock %}</title>
+    <meta name="description" content="{% block description %}Manage your {{ self.store_name() }} account.{% endblock %}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=optional">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=optional" rel="stylesheet">
     <link rel="stylesheet" href="/styles.css">
-    <script src="/assets/htmx.min.js" defer></script>
   </head>
-  <body>
-    {% include "components/header.html" %}
-    
+  <body class="account-body">
+    <header class="account-topbar">
+      <a class="auth-brand" href="/" aria-label="{{ self.store_name() }} home">
+        <span>{{ self.store_name() }}</span>
+      </a>
+      <nav class="account-topbar-nav" aria-label="Account navigation">
+        <span class="account-topbar-user">Hello, {{ user.display_name() }}</span>
+        <a href="/account">Your Account</a>
+        <a href="/">Back to store</a>
+        <form method="post" action="/logout">
+          <button type="submit">Sign out</button>
+        </form>
+      </nav>
+    </header>
+
     {% block content %}{% endblock %}
-    
-    {% include "components/footer.html" %}
-    
-    {% include "components/cart.html" %}
-    
-    <dialog class="book-modal" id="bookModal">
-      <div class="modal-content" id="modalContent"></div>
-    </dialog>
+
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="/app.js"></script>
   </body>

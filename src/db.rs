@@ -1,7 +1,27 @@
+use std::collections::HashSet;
 use std::io::{Error, ErrorKind};
 
 pub type DbPool = sqlx::PgPool;
 pub type Db = sqlx::Postgres;
+
+pub fn load_runtime_env() {
+    let process_keys = std::env::vars()
+        .map(|(name, _)| name)
+        .collect::<HashSet<_>>();
+
+    for path in [".env", ".env.local", "setup/.secrets.demo.env"] {
+        let Ok(iter) = dotenvy::from_path_iter(path) else {
+            continue;
+        };
+
+        for item in iter.flatten() {
+            let (name, value) = item;
+            if !process_keys.contains(&name) {
+                std::env::set_var(name, value);
+            }
+        }
+    }
+}
 
 pub fn require_database_url() -> Result<String, Error> {
     let database_url = std::env::var("DATABASE_URL").map_err(|_| {

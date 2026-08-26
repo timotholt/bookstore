@@ -3,7 +3,7 @@ use axum::{
     Router,
 };
 use tower_http::services::{ServeDir, ServeFile};
-use tower_sessions::{cookie::SameSite, MemoryStore, SessionManagerLayer};
+use tower_sessions::{cookie::SameSite, SessionManagerLayer};
 
 use crate::db::DbPool;
 use crate::handlers;
@@ -14,7 +14,7 @@ pub struct AppState {
 }
 
 pub fn build_router(state: AppState) -> Router {
-    let session_store = MemoryStore::default();
+    let session_store = tower_sessions_sqlx_store::PostgresStore::new(state.db.clone());
     let session_layer = SessionManagerLayer::new(session_store)
         .with_secure(std::env::var("APP_ENV").unwrap_or_default() == "production")
         .with_same_site(SameSite::Lax);
@@ -24,7 +24,28 @@ pub fn build_router(state: AppState) -> Router {
         .route("/readyz", get(handlers::readyz))
         .route("/events", post(handlers::record_event))
         .route("/", get(handlers::home))
+        .route(
+            "/signup",
+            get(handlers::signup_page).post(handlers::signup_action),
+        )
+        .route(
+            "/login",
+            get(handlers::login_page).post(handlers::login_action),
+        )
+        .route("/logout", post(handlers::logout_action))
+        .route("/account", get(handlers::account_home_page))
+        .route("/account/security", get(handlers::security_page))
+        .route("/account/orders", get(handlers::orders_page))
+        .route(
+            "/account/preferences",
+            get(handlers::preferences_page).post(handlers::preferences_action),
+        )
+        .route(
+            "/account/profile",
+            get(handlers::profile_page).post(handlers::profile_action),
+        )
         .route("/catalog", get(handlers::catalog))
+        .route("/search", get(handlers::search_page))
         .route("/books/:book_id", get(handlers::book_detail))
         .route("/cart", get(handlers::cart_page))
         .route("/cart/items", post(handlers::add_cart_item))
@@ -93,7 +114,7 @@ mod tests {
     }
 
     async fn postgres_test_db() -> PostgresTestDb {
-        dotenvy::dotenv().ok();
+        crate::db::load_runtime_env();
         let database_url =
             std::env::var("DATABASE_URL").expect("DATABASE_URL must be set for Postgres tests");
         crate::db::require_postgres_url(&database_url)
@@ -129,6 +150,11 @@ mod tests {
             .run(&pool)
             .await
             .expect("run Postgres test migrations");
+
+        tower_sessions_sqlx_store::PostgresStore::new(pool.clone())
+            .migrate()
+            .await
+            .expect("run session store test migrations");
 
         PostgresTestDb {
             pool,
@@ -283,6 +309,33 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn catalog_htmx_route_accepts_listing_filters() {
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let app = test_app(db);
+
+        for uri in [
+            "/catalog?listing=new",
+            "/catalog?listing=used",
+            "/catalog?q=atomic&listing=new",
+        ] {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri(uri)
+                        .header("HX-Request", "true")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(response.status(), StatusCode::OK, "{uri}");
+        }
+    }
+
+    #[tokio::test]
     async fn catalog_without_htmx_redirects_to_home_catalog() {
         let test_db = postgres_test_db().await;
         let db = test_db.pool();
@@ -304,7 +357,7 @@ mod tests {
                 .headers()
                 .get(header::LOCATION)
                 .and_then(|v| v.to_str().ok()),
-            Some("/#catalog")
+            Some("/search")
         );
     }
 
@@ -339,6 +392,210 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn profile_page_requires_login() {
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let app = test_app(db);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/account/profile")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        assert_eq!(
+            response
+                .headers()
+                .get(header::LOCATION)
+                .and_then(|v| v.to_str().ok()),
+            Some("/login")
+        );
+    }
+
+    #[tokio::test]
+    async fn signup_signs_in_and_profile_update_persists() {
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let (app, db) = test_app_with_db(db);
+
+        let signup_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/signup")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from(
+                        "first_name=Taylor&last_name=Reader&email=reader%40example.com&password=correcthorse&password_confirm=correcthorse",
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(signup_response.status(), StatusCode::SEE_OTHER);
+        assert_eq!(
+            signup_response
+                .headers()
+                .get(header::LOCATION)
+                .and_then(|v| v.to_str().ok()),
+            Some("/account/profile")
+        );
+        let cookie = session_cookie(&signup_response);
+
+        let profile_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/account/profile")
+                    .header(header::COOKIE, cookie.clone())
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(profile_response.status(), StatusCode::OK);
+        let profile_body = response_body(profile_response).await;
+        assert!(profile_body.contains("reader@example.com"));
+        assert!(profile_body.contains("Profile"));
+
+        let update_response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/account/profile")
+                    .header(header::COOKIE, cookie)
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from(
+                        "first_name=Taylor&last_name=Reader&email=taylor%40example.com&phone_number=555-0101&address_line1=123%20Book%20St&address_line2=Apt%204&address_city=La%20Habra&address_state=CA&address_postal_code=90631&marketing_opt_in=yes",
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(update_response.status(), StatusCode::OK);
+        let update_body = response_body(update_response).await;
+        assert!(update_body.contains("Profile saved."));
+
+        let row = sqlx::query_as::<
+            _,
+            (
+                Option<String>,
+                Option<String>,
+                String,
+                Option<String>,
+                Option<String>,
+                Option<String>,
+                Option<String>,
+                Option<String>,
+                Option<String>,
+                bool,
+            ),
+        >(
+            r#"
+            SELECT
+                first_name,
+                last_name,
+                email,
+                phone_number,
+                address_line1,
+                address_line2,
+                address_city,
+                address_state,
+                address_postal_code,
+                marketing_opt_in
+            FROM users
+            WHERE email = 'taylor@example.com'
+            "#,
+        )
+        .fetch_one(&db)
+        .await
+        .unwrap();
+
+        assert_eq!(row.0.as_deref(), Some("Taylor"));
+        assert_eq!(row.1.as_deref(), Some("Reader"));
+        assert_eq!(row.2, "taylor@example.com");
+        assert_eq!(row.3.as_deref(), Some("555-0101"));
+        assert_eq!(row.4.as_deref(), Some("123 Book St"));
+        assert_eq!(row.5.as_deref(), Some("Apt 4"));
+        assert_eq!(row.6.as_deref(), Some("La Habra"));
+        assert_eq!(row.7.as_deref(), Some("CA"));
+        assert_eq!(row.8.as_deref(), Some("90631"));
+        assert!(row.9);
+    }
+
+    #[tokio::test]
+    async fn account_flyout_and_pages_render_for_signed_in_user() {
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let app = test_app(db);
+
+        let signup_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/signup")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from(
+                        "first_name=Account&last_name=Reader&email=account%40example.com&password=correcthorse&password_confirm=correcthorse",
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(signup_response.status(), StatusCode::SEE_OTHER);
+        let cookie = session_cookie(&signup_response);
+
+        let home_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .header(header::COOKIE, cookie.clone())
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(home_response.status(), StatusCode::OK);
+        let home_body = response_body(home_response).await;
+        assert!(home_body.contains("account-menu-panel"));
+        assert!(home_body.contains(r#"href="/account/security""#));
+        assert!(home_body.contains(r#"href="/account/orders""#));
+        assert!(home_body.contains(r#"href="/account/preferences""#));
+
+        for (uri, expected) in [
+            ("/account", "Your Account"),
+            ("/account/security", "Login & Security"),
+            ("/account/orders", "Your Orders"),
+            ("/account/preferences", "Shopping Preferences"),
+        ] {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri(uri)
+                        .header(header::COOKIE, cookie.clone())
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK, "{uri}");
+            let body = response_body(response).await;
+            assert!(body.contains(expected), "{uri}: {body}");
+        }
     }
 
     #[tokio::test]
@@ -979,7 +1236,7 @@ mod tests {
         assert!(body.contains("Dune"));
         assert!(body.contains("Encrypted checkout"));
         assert!(body.contains(
-            r#"<a class="brand checkout-brand" href="/" aria-label="Davis's Books home">"#
+            r#"<a class="brand checkout-brand" href="/" aria-label="Chantel&#x27;s Corner home">"#
         ));
         assert!(!body.contains("All Genres"));
         assert!(!body.contains("Best Sellers"));

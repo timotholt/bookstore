@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Shopping Cart | {{ self.store_name() }}</title>
-    <meta name="description" content="Review your stack and checkout at {{ self.store_name() }}.">
+    <title>{% block title %}Authentication - {{ self.store_name() }}{% endblock %}</title>
+    <meta name="description" content="Sign in or create an account for {{ self.store_name() }}.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=optional">
@@ -12,13 +12,15 @@
     <link rel="stylesheet" href="/styles.css">
     <script src="/assets/htmx.min.js" defer></script>
   </head>
-  <body>
-    {% include "components/header.html" %}
-    
-    {% include "components/cart_page_content.html" %}
+  <body class="{% block body_class %}auth-body{% endblock %}">
+    {% block header %}
+      {% include "components/header.html" %}
+    {% endblock %}
 
-    {% include "components/footer.html" %}
-    
+    {% block content %}{% endblock %}
+
+    {% include "components/cart.html" %}
+
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="/app.js"></script>
   </body>

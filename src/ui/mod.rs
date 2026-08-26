@@ -1,4 +1,7 @@
-use crate::models::{BookCard, CartLine};
+use crate::{
+    brand,
+    models::{BookCard, CartLine},
+};
 
 #[derive(Debug, Clone)]
 pub struct AnalyticsAttrs {
@@ -44,6 +47,7 @@ pub struct HtmxAttrs {
     pub target: String,
     pub swap: String,
     pub headers: String,
+    pub sync: String,
 }
 
 impl HtmxAttrs {
@@ -55,6 +59,7 @@ impl HtmxAttrs {
             target: String::new(),
             swap: String::new(),
             headers: String::new(),
+            sync: String::new(),
         }
     }
 
@@ -64,11 +69,13 @@ impl HtmxAttrs {
         target: impl Into<String>,
         swap: impl Into<String>,
     ) -> Self {
+        let target = target.into();
         Self {
             enabled: true,
             post_url: post_url.into(),
             vals: vals.into(),
-            target: target.into(),
+            sync: format!("{}:replace", target),
+            target,
             swap: swap.into(),
             headers: String::new(),
         }
@@ -162,6 +169,13 @@ impl ButtonView {
         book: &BookCard,
         source: impl Into<String>,
     ) -> Self {
+        let htmx = HtmxAttrs::post(
+            "/cart/items",
+            format!(r#"{{"copy_id":"{}"}}"#, book.copy_id),
+            "#cartDrawer",
+            "outerHTML show:none",
+        );
+
         Self {
             label: label.into(),
             class_name: class_name.into(),
@@ -171,12 +185,7 @@ impl ButtonView {
             target_id: book.id.clone(),
             aria_label: String::new(),
             analytics: AnalyticsAttrs::click(click_event, source, "book", book.id.clone()),
-            htmx: HtmxAttrs::post(
-                "/cart/items",
-                format!(r#"{{"copy_id":"{}"}}"#, book.copy_id),
-                "#cartDrawer",
-                "outerHTML show:none",
-            ),
+            htmx,
         }
     }
 
@@ -191,6 +200,9 @@ impl ButtonView {
         target: impl Into<String>,
         source: impl Into<String>,
     ) -> Self {
+        let target = target.into();
+        let htmx = HtmxAttrs::post(url, "", target, "outerHTML show:none");
+
         Self {
             label: label.into(),
             class_name: class_name.into(),
@@ -200,7 +212,7 @@ impl ButtonView {
             target_id: copy_id.to_string(),
             aria_label: aria_label.into(),
             analytics: AnalyticsAttrs::click(click_event, source, "copy", copy_id.to_string()),
-            htmx: HtmxAttrs::post(url, "", target, "outerHTML show:none"),
+            htmx,
         }
     }
 
@@ -227,7 +239,6 @@ pub struct ProductCardView {
     pub analytics: AnalyticsAttrs,
     pub title_link: LinkView,
     pub add_button: ButtonView,
-    pub buy_now_button: ButtonView,
 }
 
 #[derive(Debug, Clone)]
@@ -542,14 +553,14 @@ pub fn checkout_sections() -> Vec<CheckoutSectionView> {
             "checkout-address-section",
             "1. Delivery",
             "Delivering to La Habra, CA",
-            "Store pickup at Davis's Books, 1261 Smoke Tree Dr, La Habra, CA 90631.",
+            &format!("Store pickup at {}, {}.", brand::STORE_NAME, brand::STORE_ADDRESS),
             "Ready in 1-2 days",
         ),
         CheckoutSectionView::informational(
             "",
             "2. Payment",
             "Secure card payment",
-            "Stripe Checkout will collect card details in the next phase. No card data is stored by Davis's Books.",
+            &format!("Stripe Checkout will collect card details in the next phase. No card data is stored by {}.", brand::STORE_NAME),
             "Not charged yet",
         ),
     ]
@@ -595,7 +606,7 @@ pub fn checkout_start_button(source: impl Into<String>, disabled: bool) -> Butto
 pub fn browse_books_link(source: impl Into<String>, class_name: impl Into<String>) -> LinkView {
     LinkView::tracked(
         "Browse used books",
-        "/#catalog",
+        "/search",
         class_name,
         "browse_books_clicked",
         source,
@@ -616,14 +627,6 @@ impl ProductCardView {
             &book,
             source.clone(),
         );
-        let buy_now_button = ButtonView::cart_action(
-            "Buy Now",
-            "card-btn buy-now-btn",
-            "buy-now-card",
-            "buy_now_clicked",
-            &book,
-            source.clone(),
-        );
 
         Self {
             rating_count: 48,
@@ -631,7 +634,6 @@ impl ProductCardView {
             analytics: AnalyticsAttrs::product(source, book.id.clone()),
             title_link,
             add_button,
-            buy_now_button,
             book,
         }
     }

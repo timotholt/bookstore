@@ -1,0 +1,59 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Your Account - {{ self.store_name() }}{% endblock %}
+
+{% block content %}
+<main class="account-page-shell">
+  <nav class="account-breadcrumb" aria-label="Breadcrumb">
+    <a href="/">Store</a>
+    <span>Your Account</span>
+  </nav>
+
+  <section class="account-page-heading">
+    <h1>Your Account</h1>
+    <p>Manage your {{ self.store_name() }} identity, orders, saved books, and shopping preferences.</p>
+  </section>
+
+  <section class="account-card-grid" aria-label="Account tools">
+    <a class="account-tool-card" href="/account/profile">
+      <span class="account-tool-icon">ID</span>
+      <span>
+        <strong>Profile</strong>
+        <small>Name, email, phone number, and contact preference</small>
+      </span>
+    </a>
+
+    <a class="account-tool-card" href="/account/security">
+      <span class="account-tool-icon">OK</span>
+      <span>
+        <strong>Login & security</strong>
+        <small>Password status, recovery phone, and sign-in protections</small>
+      </span>
+    </a>
+
+    <a class="account-tool-card" href="/account/orders">
+      <span class="account-tool-icon">OR</span>
+      <span>
+        <strong>Orders</strong>
+        <small>Track pickup history once checkout is connected</small>
+      </span>
+    </a>
+
+    <a class="account-tool-card" href="/cart">
+      <span class="account-tool-icon">SB</span>
+      <span>
+        <strong>Saved books</strong>
+        <small>Review saved-for-later items from your cart</small>
+      </span>
+    </a>
+
+    <a class="account-tool-card" href="/account/preferences">
+      <span class="account-tool-icon">PR</span>
+      <span>
+        <strong>Shopping preferences</strong>
+        <small>Book deal emails and future personalization controls</small>
+      </span>
+    </a>
+  </section>
+</main>
+{% endblock %}

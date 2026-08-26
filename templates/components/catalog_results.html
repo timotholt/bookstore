@@ -7,7 +7,7 @@
     <div class="sort-wrapper">
       <label class="sort-label" for="sortSelect">
         <span>Sort by</span>
-        <select id="sortSelect" name="sort" form="catalogFilters" hx-get="/catalog" hx-include="#catalogFilters" hx-target="#catalogResults" hx-swap="innerHTML">
+        <select id="sortSelect" name="sort" form="catalogFilters">
           <option value="popular" {% if crate::templates::is_selected(filters.sort.as_deref(), "popular") %}selected{% endif %}>Popularity</option>
           <option value="price-asc" {% if crate::templates::is_selected(filters.sort.as_deref(), "price-asc") %}selected{% endif %}>Price: Low to High</option>
           <option value="price-desc" {% if crate::templates::is_selected(filters.sort.as_deref(), "price-desc") %}selected{% endif %}>Price: High to Low</option>

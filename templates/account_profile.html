@@ -1,0 +1,89 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Profile - {{ self.store_name() }}{% endblock %}
+
+{% block content %}
+<main class="account-page-shell account-page-shell--narrow">
+  <nav class="account-breadcrumb" aria-label="Breadcrumb">
+    <a href="/account">Your Account</a>
+    <span>Profile</span>
+  </nav>
+
+  <section class="account-panel" aria-labelledby="profileTitle">
+    <div class="account-panel-heading">
+      <p class="account-eyebrow">Account setup</p>
+      <h1 id="profileTitle">Profile</h1>
+      <p>Keep your contact details ready for pickup, order updates, saved items, and reviews.</p>
+    </div>
+
+    {% if let Some(msg) = success_message %}
+      <div class="auth-alert auth-alert--success">{{ msg }}</div>
+    {% endif %}
+
+    {% if let Some(msg) = error_message %}
+      <div class="auth-alert auth-alert--error">{{ msg }}</div>
+    {% endif %}
+
+    <form class="account-form" method="post" action="/account/profile">
+      <div class="account-form-grid">
+        <div class="auth-field">
+          <label for="first_name">First name</label>
+          <input type="text" id="first_name" name="first_name" value="{{ user.first_name_value() }}" autocomplete="given-name" maxlength="80">
+        </div>
+
+        <div class="auth-field">
+          <label for="last_name">Last name</label>
+          <input type="text" id="last_name" name="last_name" value="{{ user.last_name_value() }}" autocomplete="family-name" maxlength="80">
+        </div>
+      </div>
+
+      <div class="auth-field">
+        <label for="email">Email address</label>
+        <input type="email" id="email" name="email" value="{{ user.email }}" required autocomplete="email">
+      </div>
+
+      <div class="auth-field">
+        <label for="phone_number">Phone number</label>
+        <input type="tel" id="phone_number" name="phone_number" value="{{ user.phone_number_value() }}" autocomplete="tel" maxlength="40">
+      </div>
+
+      <div class="auth-field">
+        <label for="address_line1">Street address</label>
+        <input type="text" id="address_line1" name="address_line1" value="{{ user.address_line1_value() }}" autocomplete="address-line1" maxlength="120">
+      </div>
+
+      <div class="auth-field">
+        <label for="address_line2">Apartment, suite, unit, building, floor, etc.</label>
+        <input type="text" id="address_line2" name="address_line2" value="{{ user.address_line2_value() }}" autocomplete="address-line2" maxlength="120">
+      </div>
+
+      <div class="account-form-grid account-form-grid--address">
+        <div class="auth-field">
+          <label for="address_city">City</label>
+          <input type="text" id="address_city" name="address_city" value="{{ user.address_city_value() }}" autocomplete="address-level2" maxlength="80">
+        </div>
+
+        <div class="auth-field">
+          <label for="address_state">State</label>
+          <input type="text" id="address_state" name="address_state" value="{{ user.address_state_value() }}" autocomplete="address-level1" maxlength="2" autocapitalize="characters" pattern="[A-Za-z]{2}" placeholder="CA">
+        </div>
+
+        <div class="auth-field">
+          <label for="address_postal_code">ZIP code</label>
+          <input type="text" id="address_postal_code" name="address_postal_code" value="{{ user.address_postal_code_value() }}" autocomplete="postal-code" maxlength="20" inputmode="numeric">
+        </div>
+      </div>
+
+      <label class="account-checkbox">
+        <input type="checkbox" name="marketing_opt_in" value="yes" {% if user.marketing_opt_in %}checked{% endif %}>
+        <span>Email me about used-book deals and pickup updates.</span>
+      </label>
+
+      <div class="account-actions">
+        <button type="submit" class="primary-button">Save profile</button>
+        <a class="secondary-button" href="/account">Back to account</a>
+      </div>
+    </form>
+  </section>
+</main>
+{% endblock %}
