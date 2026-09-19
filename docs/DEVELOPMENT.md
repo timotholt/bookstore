@@ -19,7 +19,7 @@ Try `/`, `/search`, a book linked from the homepage, `/cart`, `/signup`, and `/l
 
 ## Railway deployment
 
-[Live portfolio demo](https://chantelscorner.com/) — homepage and database readiness verified on 2026-09-19. Checkout is a preview; no payment is collected.
+[Live portfolio demo](https://www.chantelscorner.com/) — homepage and database readiness verified on 2026-09-19. Checkout is a preview; no payment is collected.
 
 The repository includes a Dockerfile that builds the Rust binary and packages the static assets it serves from the working directory. Railway supplies `PORT`; when `ADDR` is unset, the app listens on `0.0.0.0:$PORT`. Set the following service variables in Railway:
 

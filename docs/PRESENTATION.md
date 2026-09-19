@@ -47,7 +47,7 @@ Suggested description:
 
 Suggested topics: `rust`, `axum`, `askama`, `htmx`, `postgresql`, `sqlx`, `bookstore`, `portfolio`, `server-side-rendering`.
 
-The About homepage links to the [verified public demo](https://chantelscorner.com/). Public homepage and database readiness were independently checked on 2026-09-19. Screenshots and the walkthrough remain captures of the isolated local demo.
+The About homepage links to the [verified public demo](https://www.chantelscorner.com/). Public homepage and database readiness were independently checked on 2026-09-19. Screenshots and the walkthrough remain captures of the isolated local demo.
 
 ## Social preview
 

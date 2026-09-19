@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://chantelscorner.com/">Live demo</a> ·
+  <a href="https://www.chantelscorner.com/">Live demo</a> ·
   <a href="#product-tour">Product tour</a> ·
   <a href="#architecture">Architecture</a> ·
   <a href="#run-locally">Run locally</a> ·
