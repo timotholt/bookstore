@@ -74,4 +74,4 @@ curl -i http://127.0.0.1:8080/cart
 
 The [product architecture](docs/PRODUCT_ARCHITECTURE_SPEC.md), [infrastructure plan](docs/INFRASTRUCTURE_SPEC.md), [review design](docs/REVIEWS_SPEC.md), and [external setup design](docs/EXTERNAL_WORLD_BOOTSTRAP_SPEC.md) describe intended work as well as current code; they are not a list of shipped features. [AGENTS.md](AGENTS.md) contains repository engineering guidance.
 
-Some internal identifiers retain the earlier Davis's Books naming (for example the Cargo package, cart cookie, database examples, and repository path). They are kept for compatibility; the customer-facing project name is Chantel's Corner.
+The Cargo package and binary are named `chantels-corner`. The `davis_cart_key` cookie, original applied migration, archived static prototype, and local repository path retain legacy naming for compatibility or historical context. These are not the customer-facing brand.

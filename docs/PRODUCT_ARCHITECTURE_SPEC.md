@@ -2,7 +2,7 @@
 
 Status: canonical product and application architecture spec.
 
-This spec supersedes the old migration plan. Chantel's Corner is a Rust/Axum, server-rendered portfolio storefront for a bookstore. It mixes implemented architecture with planned features; see the README for what can be demonstrated today. Internal names inherited from Davis's Books may remain where renaming would disrupt compatibility.
+This spec supersedes the old migration plan. Chantel's Corner is a Rust/Axum, server-rendered portfolio storefront for a bookstore. It mixes implemented architecture with planned features; see the README for what can be demonstrated today. The legacy cart cookie and original applied migration retain their names for compatibility; new code uses Chantel's Corner naming.
 
 ## Objective
 

@@ -1132,7 +1132,7 @@ fn shell_words(program: &str, args: &[&str]) -> String {
 
 fn print_help() {
     println!(
-        "Davis's Books xtask\n\nCommands:\n  cargo xtask external doctor\n  cargo xtask external plan [--local-only] [--json] [--only <selector>] [--write-report]\n  cargo xtask external validate [--local-only] [--json] [--only <selector>] [--write-report]\n  cargo xtask external setup [--install-deps] [--yes] [--json] [--only <selector>] [--write-report]\n  cargo xtask external repair --only <selector>\n  cargo xtask external install-deps [--yes] [--json] [--only <selector>] [--write-report]\n  cargo xtask external secrets import-email --from <path> [--yes]\n"
+        "Chantel's Corner xtask\n\nCommands:\n  cargo xtask external doctor\n  cargo xtask external plan [--local-only] [--json] [--only <selector>] [--write-report]\n  cargo xtask external validate [--local-only] [--json] [--only <selector>] [--write-report]\n  cargo xtask external setup [--install-deps] [--yes] [--json] [--only <selector>] [--write-report]\n  cargo xtask external repair --only <selector>\n  cargo xtask external install-deps [--yes] [--json] [--only <selector>] [--write-report]\n  cargo xtask external secrets import-email --from <path> [--yes]\n"
     );
 }
 

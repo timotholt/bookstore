@@ -1,12 +1,12 @@
 [project]
-name = "davis-books"
+name = "chantels-corner"
 owner_email = "timotholt@gmail.com"
 github_repo = "timotholt/bookstore"
 
 [environment.local]
 app_env = "local"
 public_base_url = "http://127.0.0.1:8080"
-database_url = "postgresql://user:password@localhost/davis_books"
+database_url = "postgresql://user:password@localhost/neondb"
 
 [environment.demo]
 app_env = "production"
@@ -38,7 +38,7 @@ branches = ["production"]
 id = "railway"
 adapter = "api"
 required = false
-project = "davis-books"
+project = "chantels-corner"
 service = "web"
 environment = "production"
 

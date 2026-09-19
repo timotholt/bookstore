@@ -309,7 +309,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        path.push(format!("davis_books_xtask_{name}_{nanos}"));
+        path.push(format!("chantels_corner_xtask_{name}_{nanos}"));
         fs::create_dir_all(&path).unwrap();
         path
     }

@@ -4,7 +4,7 @@ Status: target infrastructure design, not evidence that Railway, Stripe, or a pu
 
 ## Purpose
 
-This document defines how Chantel's Corner could be deployed as a full-stack demo project on Railway and Neon while staying portable enough to rebuild if either provider becomes unusable. Existing resource identifiers may retain the earlier Davis's Books name for compatibility.
+This document defines how Chantel's Corner could be deployed as a full-stack demo project on Railway and Neon while staying portable enough to rebuild if either provider becomes unusable. The existing Neon project is named `bookstore`; existing provider identifiers need not be renamed to match the storefront brand.
 
 The goal is not PCI-grade production commerce. The goal is a professional interview-ready stack that demonstrates real backend engineering: Rust/Axum server rendering, PostgreSQL persistence, migrations, sessions, Stripe Checkout handoff, staff auth, CMS inventory workflows, and a repeatable infrastructure story.
 
@@ -36,7 +36,7 @@ Responsibilities:
 
 Expected Railway project resources:
 
-- Project: `davis-books`
+- Project: `chantels-corner` (planned name; verify existing Railway resources before setup)
 - Service: `web`
 - Environment: `production`
 - Deploy source: GitHub repository `timotholt/bookstore`
@@ -55,13 +55,13 @@ Responsibilities:
 
 Expected Neon project resources:
 
-- Project: `davis-books`
-- Database: `davis_books`
+- Project: `bookstore` (existing)
+- Database: `neondb` (existing)
 - Roles:
-  - `davis_books_app`: application role with CRUD permissions
-  - `davis_books_migrator`: migration role with schema permissions
+  - `neondb_owner`: current owner role used by the local demo
+  - Scoped app and migration roles are future hardening work, not existing resources
 - Branches:
-  - `main`: production-like demo data
+  - `production`: configured branch name; verify it in Neon before deployment
   - optional `dev`: staging or local testing branch
 
 ## Account Creation Policy
@@ -143,9 +143,9 @@ The recovery packet may include plaintext secrets only if the account owner expl
 
 Recommended safer format:
 
-- `infra/secrets/davis-books.env.example`: committed variable names with fake values
-- `infra/secrets/davis-books.recovery.md`: not committed if it contains private account details
-- `infra/secrets/davis-books.env.age`: optional encrypted secret bundle if the user chooses local encrypted storage
+- `infra/secrets/chantels-corner.env.example`: committed variable names with fake values
+- `infra/secrets/chantels-corner.recovery.md`: not committed if it contains private account details
+- `infra/secrets/chantels-corner.env.age`: optional encrypted secret bundle if the user chooses local encrypted storage
 
 ## Environment Variables
 
@@ -200,7 +200,7 @@ infra/
   neon.md
   secrets/
     README.md
-    davis-books.env.example
+    chantels-corner.env.example
   scripts/
     check-tools.sh
     bootstrap-neon.sh
@@ -387,7 +387,7 @@ infra/scripts/check-tools.sh
 infra/scripts/bootstrap-neon.sh
 infra/scripts/configure-railway.sh
 infra/scripts/migrate.sh production
-infra/scripts/smoke-test.sh https://davis-books.example
+infra/scripts/smoke-test.sh https://chantels-corner.example
 ```
 
 The exact scripts can evolve, but the final developer experience should be close to this.

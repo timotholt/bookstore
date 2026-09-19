@@ -40,17 +40,17 @@ pub fn plan_neon_setup(
         return report;
     };
 
-    let project = neon.value("project").unwrap_or("davis-books");
-    let database = neon.value("database").unwrap_or("davis_books");
+    let project = neon.value("project").unwrap_or("bookstore");
+    let database = neon.value("database").unwrap_or("neondb");
     let branches = neon.array("branches");
     let roles = neon.array("roles");
     let branch_summary = if branches.is_empty() {
-        "main".to_string()
+        "production".to_string()
     } else {
         branches.join(", ")
     };
     let role_summary = if roles.is_empty() {
-        "davis_books_app, davis_books_migrator".to_string()
+        "neondb_owner".to_string()
     } else {
         roles.join(", ")
     };
@@ -124,18 +124,18 @@ fn apply_neon_setup(
     let neon = manifest
         .provider("neon")
         .ok_or_else(|| "setup/setup.toml does not declare a Neon provider".to_string())?;
-    let project_name = neon.value("project").unwrap_or("davis-books");
-    let database_name = neon.value("database").unwrap_or("davis_books");
+    let project_name = neon.value("project").unwrap_or("bookstore");
+    let database_name = neon.value("database").unwrap_or("neondb");
     let branch_name = neon
         .array("branches")
         .first()
         .map(String::as_str)
-        .unwrap_or("main");
+        .unwrap_or("production");
     let role_name = neon
         .array("roles")
         .first()
         .map(String::as_str)
-        .unwrap_or("davis_books_app");
+        .unwrap_or("neondb_owner");
 
     let mut findings = Vec::new();
     let project = ensure_neon_project(
@@ -447,13 +447,13 @@ fn validate_neon_api(manifest: &SetupManifest, env_store: &EnvStore) -> Vec<Find
         return findings;
     }
 
-    let project_name = neon.value("project").unwrap_or("davis-books");
-    let database_name = neon.value("database").unwrap_or("davis_books");
+    let project_name = neon.value("project").unwrap_or("bookstore");
+    let database_name = neon.value("database").unwrap_or("neondb");
     let branch_name = neon
         .array("branches")
         .first()
         .map(String::as_str)
-        .unwrap_or("main");
+        .unwrap_or("production");
 
     let project_query = match neon.value("org_id") {
         Some(org_id) if !org_id.trim().is_empty() => format!(
@@ -985,10 +985,10 @@ mod tests {
         };
         provider
             .values
-            .insert("project".to_string(), "davis-books".to_string());
+            .insert("project".to_string(), "bookstore".to_string());
         provider
             .values
-            .insert("database".to_string(), "davis_books".to_string());
+            .insert("database".to_string(), "neondb".to_string());
         provider.arrays.insert(
             "roles".to_string(),
             vec!["app".to_string(), "migrator".to_string()],
@@ -1007,7 +1007,7 @@ mod tests {
         .findings;
 
         assert!(findings.iter().any(|finding| {
-            finding.id == "neon.desired_state" && finding.evidence.contains("davis_books")
+            finding.id == "neon.desired_state" && finding.evidence.contains("neondb")
         }));
     }
 
@@ -1016,12 +1016,12 @@ mod tests {
         let json: Value = serde_json::json!({
             "projects": [
                 {"id": "silent", "name": "other"},
-                {"id": "project-id", "name": "davis-books"}
+                {"id": "project-id", "name": "bookstore"}
             ]
         });
 
         assert_eq!(
-            find_named_object_id(&json, "projects", "davis-books"),
+            find_named_object_id(&json, "projects", "bookstore"),
             Some("project-id".to_string())
         );
     }
@@ -1042,7 +1042,10 @@ mod tests {
 
     #[test]
     fn url_encode_handles_spaces_and_symbols() {
-        assert_eq!(url_encode("davis books/test"), "davis%20books%2Ftest");
+        assert_eq!(
+            url_encode("chantels corner/test"),
+            "chantels%20corner%2Ftest"
+        );
     }
 
     #[test]
@@ -1091,7 +1094,7 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        path.push(format!("davis_books_providers_{name}_{nanos}"));
+        path.push(format!("chantels_corner_providers_{name}_{nanos}"));
         fs::create_dir_all(&path).unwrap();
         path
     }

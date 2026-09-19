@@ -203,12 +203,12 @@ Example:
 
 ```toml
 [project]
-name = "davis-books"
+name = "chantels-corner"
 owner_email = "timotholt@gmail.com"
 github_repo = "timotholt/bookstore"
 
 [environment.demo]
-public_base_url = "https://davis-books-demo.up.railway.app"
+public_base_url = "https://YOUR-RAILWAY-DOMAIN.up.railway.app"
 app_env = "production"
 
 [[providers]]
@@ -216,7 +216,7 @@ id = "railway"
 adapter = "api"
 required = true
 account_email = "timotholt@gmail.com"
-project = "davis-books"
+project = "chantels-corner"
 service = "web"
 environment = "production"
 
@@ -224,10 +224,10 @@ environment = "production"
 id = "neon"
 adapter = "api"
 required = true
-project = "davis-books"
-database = "davis_books"
-roles = ["davis_books_app", "davis_books_migrator"]
-branches = ["main"]
+project = "bookstore"
+database = "neondb"
+roles = ["neondb_owner"]
+branches = ["production"]
 
 [[providers]]
 id = "stripe"
@@ -418,7 +418,7 @@ Human output example:
 ```text
 [fail] neon.database.reachable
        Could not connect to DATABASE_URL.
-       Cause: authentication failed for role davis_books_app.
+       Cause: authentication failed for role neondb_owner.
        Evidence: postgres returned SQLSTATE 28P01.
        Repair: update DATABASE_URL from Neon or run:
                cargo xtask external setup --only neon.connection_strings
@@ -484,7 +484,7 @@ github.repo
 
 railway.account
   -> railway token or CLI login
-  -> project davis-books
+  -> project chantels-corner
   -> service web
   -> environment production
   -> deploy source timotholt/bookstore
@@ -493,10 +493,10 @@ railway.account
 
 neon.account
   -> neon API key or CLI login
-  -> project davis-books
-  -> database davis_books
+  -> project bookstore
+  -> database neondb
   -> roles
-  -> branch main
+  -> branch production
   -> connection strings
   -> migrations applied
 

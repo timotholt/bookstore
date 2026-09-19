@@ -211,6 +211,34 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn catalog_seed_uses_chantels_corner_brand() {
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+
+        let title: String = sqlx::query_scalar("SELECT title FROM books WHERE id = 'm001'")
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_eq!(title, "Chantel's Corner Brass Bookmark");
+
+        let legacy_quotes: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM book_copies WHERE staff_quote LIKE '%Davis Team'",
+        )
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        assert_eq!(legacy_quotes, 0);
+
+        let description: String = sqlx::query_scalar(
+            "SELECT description FROM book_collections WHERE slug = 'staff-picks'",
+        )
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        assert_eq!(description, "Books highlighted by Chantel's Corner staff.");
+    }
+
+    #[tokio::test]
     async fn healthz_returns_ok() {
         let test_db = postgres_test_db().await;
         let db = test_db.pool();

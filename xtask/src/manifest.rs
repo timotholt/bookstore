@@ -152,22 +152,22 @@ mod tests {
         let manifest = parse_setup_manifest(
             r#"
             [project]
-            name = "davis-books"
+            name = "chantels-corner"
 
             [[providers]]
             id = "neon"
             adapter = "api"
             required = false
-            project = "davis-books"
+            project = "bookstore"
             roles = ["app", "migrator"]
             "#,
         );
 
         let neon = manifest.provider("neon").expect("neon provider");
-        assert_eq!(manifest.project.get("name").unwrap(), "davis-books");
+        assert_eq!(manifest.project.get("name").unwrap(), "chantels-corner");
         assert_eq!(neon.adapter, "api");
         assert!(!neon.required);
-        assert_eq!(neon.value("project"), Some("davis-books"));
+        assert_eq!(neon.value("project"), Some("bookstore"));
         assert_eq!(neon.array("roles"), ["app", "migrator"]);
     }
 

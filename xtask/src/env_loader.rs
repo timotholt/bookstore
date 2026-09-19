@@ -125,14 +125,14 @@ mod tests {
         let dir = temp_dir("dotenv_parse");
         fs::write(
             dir.join(".env"),
-            "TEST_DATABASE_URL_FOR_PARSE='postgresql://localhost/davis_books'\nexport APP_ENV=local\n# ignored\n",
+            "TEST_DATABASE_URL_FOR_PARSE='postgresql://localhost/neondb'\nexport APP_ENV=local\n# ignored\n",
         )
         .unwrap();
 
         let store = EnvStore::load(&dir);
         assert_eq!(
             store.get("TEST_DATABASE_URL_FOR_PARSE").unwrap().value,
-            "postgresql://localhost/davis_books"
+            "postgresql://localhost/neondb"
         );
         assert_eq!(store.get("APP_ENV").unwrap().value, "local");
 
@@ -164,7 +164,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        path.push(format!("davis_books_xtask_{name}_{nanos}"));
+        path.push(format!("chantels_corner_xtask_{name}_{nanos}"));
         fs::create_dir_all(&path).unwrap();
         path
     }
