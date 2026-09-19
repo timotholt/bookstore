@@ -2,7 +2,7 @@
 
 [Project showcase](../README.md) · [Documentation index](README.md)
 
-The README is organized for a quick product tour followed by a technical review: cover, screenshots and walkthrough, architecture, engineering decisions, current scope, and local setup.
+The README is organized for a quick product tour followed by a technical review: cover, screenshots and walkthrough, architecture, engineering decisions, current scope, and a link to the development guide.
 
 ## Asset inventory
 
@@ -10,16 +10,16 @@ The README is organized for a quick product tour followed by a technical review:
 | --- | --- | --- |
 | [Repository cover](assets/repository-cover.png) | README title artwork | AI-generated bookstore illustration |
 | [Social preview](assets/social-preview.jpg) | GitHub link-sharing preview; 1280 × 640, under 1 MB | Resized and encoded copy of the cover |
-| [Homepage](assets/homepage.png) | Storefront overview | Actual local application screenshot |
-| [Catalog](assets/catalog.png) | Science Fiction filter results | Actual local application screenshot |
-| [Book detail](assets/book-detail.png) | Dune copy information | Actual local application screenshot |
-| [Cart](assets/cart.png) | A sample book added to the cart | Actual local application screenshot |
-| [Account](assets/account.png) | Account navigation for a fictional reader | Actual local application screenshot |
-| [Walkthrough GIF](assets/shopping-walkthrough.gif) | Inline README demonstration | Browser recording of the local application |
+| [Homepage](assets/homepage.png) | Storefront overview | Actual application screenshot |
+| [Catalog](assets/catalog.png) | Science Fiction filter results | Actual application screenshot |
+| [Book detail](assets/book-detail.png) | Dune copy information | Actual application screenshot |
+| [Cart](assets/cart.png) | A sample book added to the cart | Actual application screenshot |
+| [Account](assets/account.png) | Account navigation for a fictional reader | Actual application screenshot |
+| [Walkthrough GIF](assets/shopping-walkthrough.gif) | Inline README demonstration | Browser recording of the application |
 | [Walkthrough video](assets/shopping-walkthrough.mp4) | Higher-quality downloadable demonstration | Same browser recording |
 | [Architecture poster](study-assets/bookstore-stack-professional.png) | Explain the stack | AI-generated architecture illustration |
 
-The screenshots use the seeded demo catalog at a 1440 × 1000 viewport. The account screenshot uses a fictional Avery Reader account created only in an isolated local PostgreSQL database. No real customer information is shown. Storefront ratings, promotions, and other sample copy should not be interpreted as evidence of real commerce.
+The screenshots use the seeded demo catalog at a 1440 × 1000 viewport. The account screenshot uses a fictional Avery Reader account created only in an isolated demonstration PostgreSQL database. No real customer information is shown. Storefront ratings, promotions, and other sample copy should not be interpreted as evidence of real commerce.
 
 The architecture poster simplifies HTTP response plumbing. SQLx results return to the Rust handler before the handler prepares view data for Askama; Axum delivers the resulting response to the browser.
 
@@ -27,10 +27,10 @@ The architecture poster simplifies HTTP response plumbing. SQLx results return t
 
 1. Run the current Rust application against a disposable local PostgreSQL database. Follow the [development guide](DEVELOPMENT.md). A separate database prevents demo carts and accounts from mixing with other data.
 2. Install `agent-browser` and `ffmpeg` if they are not already available. These are optional presentation tools, not application dependencies.
-3. Run the capture script against that local server:
+3. Run the capture script with the development server listening on port 8083:
 
    ```bash
-   bash docs/capture-showcase.sh http://127.0.0.1:8083
+   bash docs/capture-showcase.sh
    ```
 
    If the CLI is not on `PATH`, set `AGENT_BROWSER_BIN` to its executable path. The script uses a fresh browser session, captures the homepage, filters to Science Fiction, opens the seeded Dune record, adds it to the cart, and exports the four screenshots plus the GIF and MP4. It rejects non-local URLs and closes its browser session afterward.
@@ -47,7 +47,7 @@ Suggested description:
 
 Suggested topics: `rust`, `axum`, `askama`, `htmx`, `postgresql`, `sqlx`, `bookstore`, `portfolio`, `server-side-rendering`.
 
-The About homepage links to the [verified public demo](https://web-production-61bc2.up.railway.app/). Public homepage and database readiness were independently checked on 2026-09-19. Screenshots and the walkthrough remain captures of the isolated local demo.
+The About homepage links to the [verified public demo](https://www.chantelscorner.com/). Public homepage and database readiness were independently checked on 2026-09-19. Screenshots and the walkthrough remain captures of the isolated demonstration environment.
 
 ## Social preview
 
@@ -66,11 +66,11 @@ The cover and architecture images were created using the built-in image-generati
 
 ## Verification for this presentation
 
-- Captures taken from the current Rust application on 2026-09-19 using an isolated local PostgreSQL database.
+- Captures taken from the current Rust application on 2026-09-19 using an isolated demonstration PostgreSQL database.
 - `cargo check --locked`: passed.
 - `cargo test --locked -- --test-threads=1`: 34 passed, 0 failed.
 - GitHub Markdown rendering checked in a browser: all 12 README images loaded.
 - Local documentation links and capture-script shell syntax checked.
 - The browser walkthrough exercises catalog filtering, a book-detail page, adding to cart, and cart rendering.
 
-These checks support the local demo. The CI badge reports the status of GitHub's `main` branch separately.
+These checks validate the demonstration build. The CI badge reports the status of GitHub's `main` branch separately.
