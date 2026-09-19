@@ -1,0 +1,11 @@
+Generated with the built-in image_gen tool.
+
+Use case: scientific-educational. Create a beautiful, highly legible illustrated study poster for a beginner learning the actual tech stack of "Chantel's Corner", a Rust bookstore website. Landscape composition, warm paper background, bookstore illustrations, restrained teal and rust accent colors, large crisp typography, generous spacing. Title "YOUR BOOKSTORE TECH STACK". Subtitle "Chantel's Corner". Diagram with explicitly numbered stages and distinct arrows, arranged as a clear loop:
+1. "BROWSER" subtitle "HTML + CSS + HTMX" caption "Customer searches for a book"
+2. "AXUM" subtitle "Routes the request" caption "Rust code handles the search"
+3. "SQLx" subtitle "Runs SQL queries" connected bidirectionally to
+4. "POSTGRESQL" subtitle "Stores books, carts and accounts".
+Return path flows from SQLx to Rust handler to "ASKAMA" subtitle "Turns data into HTML", then arrow to BROWSER caption "HTMX updates the results".
+Visually group Axum, SQLx, the Rust handler, and Askama within a large server area labeled "RUST SERVER", with a foundation band "TOKIO — runs asynchronous work". PostgreSQL outside server area. HTMX only in browser, Askama only in server. Add three compact illustrated memory cards below: "Rust = language", "Argon2 = password hashing", "tower-sessions = remembers the session". Footer "Axum routes • SQLx queries • PostgreSQL stores • Askama renders • HTMX swaps".
+No code, no invented stack tools, no Go, SQLite, React or payment claims. Illustrate book shelves and a friendly crab subtly without distracting from readable labels. Arrows must convey the request and response correctly; use ample space rather than dense text.
+
