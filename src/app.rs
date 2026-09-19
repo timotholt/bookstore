@@ -727,6 +727,22 @@ mod tests {
         let cart_cookie = named_cookie(&add_response, cart::BROWSER_CART_KEY_COOKIE);
         let restarted_app = build_router(AppState { db });
 
+        assert!(cart_cookie.starts_with("chantels_cart_key="));
+        let legacy_cookie = cart_cookie.replacen("chantels_cart_key=", "davis_cart_key=", 1);
+        let legacy_response = restarted_app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/cart")
+                    .header(header::COOKIE, legacy_cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(legacy_response.status(), StatusCode::OK);
+        assert!(!response_body(legacy_response).await.contains("Dune"));
+
         let response = restarted_app
             .oneshot(
                 Request::builder()

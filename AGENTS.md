@@ -1,6 +1,6 @@
 # Agent Guidance
 
-This repository is Chantel's Corner, a Rust/Axum, Askama, HTMX, PostgreSQL storefront. The old Go server and SQLite runtime are retired. Do not reintroduce Go code, Go-era architecture, or SQLite as an application database. The `davis_cart_key` cookie and original SQL migration retain legacy identifiers for compatibility; use Chantel's Corner for new code and public-facing copy.
+This repository is Chantel's Corner, a Rust/Axum, Askama, HTMX, PostgreSQL storefront. The old Go server and SQLite runtime are retired. Do not reintroduce Go code, Go-era architecture, or SQLite as an application database. The original applied SQL migration retains legacy identifiers to preserve its checksum; use Chantel's Corner for new code and public-facing copy.
 
 ## Source Of Truth
 

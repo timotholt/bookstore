@@ -74,4 +74,4 @@ curl -i http://127.0.0.1:8080/cart
 
 The [product architecture](docs/PRODUCT_ARCHITECTURE_SPEC.md), [infrastructure plan](docs/INFRASTRUCTURE_SPEC.md), [review design](docs/REVIEWS_SPEC.md), and [external setup design](docs/EXTERNAL_WORLD_BOOTSTRAP_SPEC.md) describe intended work as well as current code; they are not a list of shipped features. [AGENTS.md](AGENTS.md) contains repository engineering guidance.
 
-The Cargo package and binary are named `chantels-corner`. The `davis_cart_key` cookie, original applied migration, archived static prototype, and local repository path retain legacy naming for compatibility or historical context. These are not the customer-facing brand.
+The Cargo package and binary are named `chantels-corner`, and new carts use the `chantels_cart_key` browser cookie. The original applied migration, archived static prototype, and local repository path retain legacy naming for migration integrity or historical context. These are not the customer-facing brand.

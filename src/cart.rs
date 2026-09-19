@@ -10,12 +10,9 @@ use crate::models::{CartItem, CartLine, CartView, SavedItem, SavedItemsView};
 use crate::store;
 
 const CART_SESSION_KEY: &str = "cart_session_key";
-const LEGACY_CART_KEY: &str = "cart";
-pub const BROWSER_CART_KEY_COOKIE: &str = "davis_cart_key";
+pub const BROWSER_CART_KEY_COOKIE: &str = "chantels_cart_key";
 
 pub async fn view(db: &DbPool, session: &Session) -> Result<CartView, AppError> {
-    import_legacy_session_cart(db, session).await?;
-
     let Some(session_key) = session.get::<String>(CART_SESSION_KEY).await? else {
         return Ok(empty_cart_view());
     };
@@ -28,8 +25,6 @@ pub async fn view(db: &DbPool, session: &Session) -> Result<CartView, AppError> 
 }
 
 pub async fn saved_view(db: &DbPool, session: &Session) -> Result<SavedItemsView, AppError> {
-    import_legacy_session_cart(db, session).await?;
-
     let Some(session_key) = session.get::<String>(CART_SESSION_KEY).await? else {
         return Ok(SavedItemsView::default());
     };
@@ -253,7 +248,6 @@ pub async fn current_session_key(session: &Session) -> Result<Option<String>, Ap
 }
 
 async fn writable_cart_id(db: &DbPool, session: &Session) -> Result<i64, AppError> {
-    import_legacy_session_cart(db, session).await?;
     let session_key = cart_session_key(session).await?;
     ensure_active_cart(db, &session_key)
         .await
@@ -261,7 +255,6 @@ async fn writable_cart_id(db: &DbPool, session: &Session) -> Result<i64, AppErro
 }
 
 async fn optional_cart_id(db: &DbPool, session: &Session) -> Result<Option<i64>, AppError> {
-    import_legacy_session_cart(db, session).await?;
     let Some(session_key) = session.get::<String>(CART_SESSION_KEY).await? else {
         return Ok(None);
     };
@@ -309,29 +302,6 @@ async fn ensure_active_cart(db: &DbPool, session_key: &str) -> Result<i64, sqlx:
     active_cart_id(db, session_key)
         .await?
         .ok_or(sqlx::Error::RowNotFound)
-}
-
-async fn import_legacy_session_cart(db: &DbPool, session: &Session) -> Result<(), AppError> {
-    let Some(items) = session.remove::<Vec<CartItem>>(LEGACY_CART_KEY).await? else {
-        return Ok(());
-    };
-    if items.is_empty() {
-        return Ok(());
-    }
-
-    let session_key = cart_session_key(session).await?;
-    let cart_id = ensure_active_cart(db, &session_key).await?;
-    for item in items {
-        if item.copy_id > 0 && item.quantity > 0 {
-            let stock = store::copy_stock(db, item.copy_id).await.unwrap_or(0);
-            let quantity = std::cmp::min(item.quantity, stock);
-            if quantity > 0 {
-                upsert_cart_item(db, cart_id, item.copy_id, quantity).await?;
-            }
-        }
-    }
-
-    Ok(())
 }
 
 async fn cart_items(db: &DbPool, cart_id: i64) -> Result<Vec<CartItem>, sqlx::Error> {
