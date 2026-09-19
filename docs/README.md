@@ -1,6 +1,6 @@
 # Project documentation
 
-[Return to Chantel’s Corner](../README.md)
+[Live storefront](https://www.chantelscorner.com/) · [Repository showcase](../README.md)
 
 Start with the product tour in the main README, then choose a path below.
 

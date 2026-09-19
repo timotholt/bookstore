@@ -17,13 +17,15 @@
   <a href="https://www.chantelscorner.com/">Live demo</a> ·
   <a href="#product-tour">Product tour</a> ·
   <a href="#architecture">Architecture</a> ·
-  <a href="#run-locally">Run locally</a> ·
+  <a href="#development">Development</a> ·
   <a href="docs/README.md">Documentation</a>
 </p>
 
 Browse new and used books, compare individual copies, filter the catalog, and build a reading stack. The application combines a Rust backend with HTML-first interactions and PostgreSQL persistence.
 
 **Portfolio demo:** the catalog is seeded sample data. Checkout reviews the cart; it does not place orders, take payments, or charge a card. Some storefront copy and ratings are illustrative. See [current scope](#current-scope) for implemented features and planned work.
+
+Visit [Chantel’s Corner](https://www.chantelscorner.com/) to explore the live demo over HTTPS.
 
 ## Product tour
 
@@ -35,7 +37,7 @@ Curated shelves, category browsing, new arrivals, and copy-level prices give the
 
 ### Search → inspect → add to cart
 
-The walkthrough below was recorded from the running Rust application against an isolated local PostgreSQL database.
+The walkthrough below was recorded from the running Rust application against an isolated demonstration PostgreSQL database.
 
 ![Product walkthrough: filter the catalog, inspect a book, and add it to the cart](docs/assets/shopping-walkthrough.gif)
 
@@ -97,20 +99,9 @@ The walkthrough below was recorded from the running Rust application against an 
 
 Cart identity is currently tied to the browser/session. Signing in does not yet merge it into a durable user-owned cart. The order-history screen is an explicit empty state because checkout does not create orders.
 
-## Run locally
+## Development
 
-Requires a Rust toolchain with Cargo and a reachable PostgreSQL database. The database role needs permission to create application tables and the `tower_sessions` schema.
-
-```bash
-git clone https://github.com/timotholt/bookstore.git
-cd bookstore
-export DATABASE_URL='postgresql://USER:PASSWORD@HOST:5432/DATABASE'
-cargo run --locked
-```
-
-Open **http://127.0.0.1:8080**. Startup applies pending migrations and seeds the demo catalog. Set `ADDR=127.0.0.1:8081` to use another port. Keep credentials in the shell or an ignored local environment file.
-
-[Complete setup, testing, and deployment instructions](docs/DEVELOPMENT.md)
+The [development guide](docs/DEVELOPMENT.md) covers setup, testing, and deployment. The application uses Rust, Cargo, and PostgreSQL; migrations and demo catalog data are applied at startup.
 
 ## Explore the repository
 

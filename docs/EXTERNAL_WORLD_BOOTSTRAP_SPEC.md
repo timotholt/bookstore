@@ -208,7 +208,7 @@ owner_email = "timotholt@gmail.com"
 github_repo = "timotholt/bookstore"
 
 [environment.demo]
-public_base_url = "https://YOUR-RAILWAY-DOMAIN.up.railway.app"
+public_base_url = "https://www.chantelscorner.com"
 app_env = "production"
 
 [[providers]]
