@@ -1,0 +1,10 @@
+.git
+target
+.env
+.env.*
+setup/.secrets*.env
+setup/.state
+setup/artifacts
+setup/reports
+legacy-demo
+scratch

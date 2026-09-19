@@ -161,7 +161,7 @@ SESSION_SECRET=...
 PUBLIC_BASE_URL=https://...
 ```
 
-The current Rust runtime requires `DATABASE_URL`, accepts optional `ADDR`, and checks `APP_ENV=production` for secure cookies. `SESSION_SECRET`, `PUBLIC_BASE_URL`, and `PORT` are bootstrap/deployment design values here, not currently enforced runtime settings.
+The current Rust runtime requires `DATABASE_URL`, accepts optional `ADDR`, uses Railway's `PORT` on all interfaces when `ADDR` is unset, and checks `APP_ENV=production` for secure cookies. `SESSION_SECRET` and `PUBLIC_BASE_URL` are bootstrap/deployment design values here, not currently enforced runtime settings.
 
 Required when Stripe Checkout is enabled:
 
@@ -397,7 +397,7 @@ The exact scripts can evolve, but the final developer experience should be close
 The app should expose:
 
 - `GET /healthz`: process is up
-- `GET /readyz`: database is reachable and migrations are current
+- `GET /readyz`: database is reachable (the current endpoint does not inspect migration versions)
 
 Smoke test assertions:
 

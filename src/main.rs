@@ -41,12 +41,58 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = app::build_router(app::AppState { db });
 
     // Bind and start the server
-    let addr_str = std::env::var("ADDR").unwrap_or_else(|_| "127.0.0.1:8080".to_string());
-    let addr: SocketAddr = addr_str.parse()?;
+    let addr = listen_address(
+        std::env::var("ADDR").ok().as_deref(),
+        std::env::var("PORT").ok().as_deref(),
+    )?;
 
     tracing::info!("{} listening on http://{}", brand::STORE_NAME, addr);
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+fn listen_address(
+    addr: Option<&str>,
+    port: Option<&str>,
+) -> Result<SocketAddr, std::net::AddrParseError> {
+    let address = match (addr, port) {
+        (Some(addr), _) => addr.to_string(),
+        (None, Some(port)) => format!("0.0.0.0:{port}"),
+        (None, None) => "127.0.0.1:8080".to_string(),
+    };
+    address.parse()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::listen_address;
+
+    #[test]
+    fn railway_port_binds_all_interfaces() {
+        assert_eq!(
+            listen_address(None, Some("3000")).unwrap().to_string(),
+            "0.0.0.0:3000"
+        );
+    }
+
+    #[test]
+    fn explicit_address_overrides_port() {
+        assert_eq!(
+            listen_address(Some("127.0.0.1:8081"), Some("3000"))
+                .unwrap()
+                .to_string(),
+            "127.0.0.1:8081"
+        );
+    }
+
+    #[test]
+    fn local_default_remains_unchanged() {
+        assert_eq!(
+            listen_address(None, None).unwrap().to_string(),
+            "127.0.0.1:8080"
+        );
+        assert!(listen_address(None, Some("invalid")).is_err());
+    }
 }
