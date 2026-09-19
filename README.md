@@ -1,3 +1,5 @@
+**Live site: [www.chantelscorner.com](https://www.chantelscorner.com/)**
+
 <p align="center">
   <img src="docs/assets/repository-cover.png" alt="Chantel’s Corner — a thoughtfully built bookstore. Rust, Axum, Askama, HTMX, PostgreSQL." width="100%">
 </p>
