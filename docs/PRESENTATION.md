@@ -51,6 +51,8 @@ Set the homepage field to the public demo URL only after the deployment is verif
 
 ## Social preview
 
+The cover was uploaded and visually verified in GitHub repository settings on 2026-09-19. The project description and stack topics were also applied.
+
 Upload [social-preview.jpg](assets/social-preview.jpg) under repository **Settings → General → Social preview**. Merely committing an image does not configure the GitHub social preview.
 
 The exported image follows GitHub's [recommended 1280 × 640 size and under-1-MB limit](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/customizing-your-repositorys-social-media-preview). The README embeds the larger cover separately.
