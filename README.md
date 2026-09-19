@@ -14,6 +14,7 @@
 </p>
 
 <p align="center">
+  <a href="https://web-production-61bc2.up.railway.app/">Live demo</a> ·
   <a href="#product-tour">Product tour</a> ·
   <a href="#architecture">Architecture</a> ·
   <a href="#run-locally">Run locally</a> ·
@@ -23,8 +24,6 @@
 Browse new and used books, compare individual copies, filter the catalog, and build a reading stack. The application combines a Rust backend with HTML-first interactions and PostgreSQL persistence.
 
 **Portfolio demo:** the catalog is seeded sample data. Checkout reviews the cart; it does not place orders, take payments, or charge a card. Some storefront copy and ratings are illustrative. See [current scope](#current-scope) for implemented features and planned work.
-
-<!-- LIVE_DEMO: Add a verified public URL here after deployment. -->
 
 ## Product tour
 

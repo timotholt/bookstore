@@ -19,6 +19,8 @@ Try `/`, `/search`, a book linked from the homepage, `/cart`, `/signup`, and `/l
 
 ## Railway deployment
 
+[Live portfolio demo](https://web-production-61bc2.up.railway.app/) — homepage and database readiness verified on 2026-09-19. Checkout is a preview; no payment is collected.
+
 The repository includes a Dockerfile that builds the Rust binary and packages the static assets it serves from the working directory. Railway supplies `PORT`; when `ADDR` is unset, the app listens on `0.0.0.0:$PORT`. Set the following service variables in Railway:
 
 ```text
@@ -28,7 +30,7 @@ APP_ENV=production
 
 Use the connection string for the intended Neon database branch. Do not add it to GitHub or the Docker image. Configure Railway's deployment healthcheck path as `/readyz`; it checks that the app can query PostgreSQL. Pending SQLx migrations run **when the web process starts**, before the server listens. Test this against a separate Neon branch before connecting an existing database, because a failed first deploy can still have applied migrations. Do not configure a second pre-deploy migration command for this build.
 
-Connect the GitHub repository and the intended deployment branch in Railway. `.github/workflows/ci.yml` runs format, check, lint, build, tests against temporary PostgreSQL, and a Docker image build on pull requests and pushes to `main`. Enable Railway's **Wait for CI** setting before making `main` an automatic deployment source. Generate a Railway domain only after the service starts successfully, then smoke-test `/`, `/readyz`, `/styles.css`, `/assets/htmx.min.js`, signup/login, catalog, and cart. The Railway project and public demo have not yet been created.
+Connect the GitHub repository and the intended deployment branch in Railway. `.github/workflows/ci.yml` runs format, check, lint, build, tests against temporary PostgreSQL, and a Docker image build on pull requests and pushes to `main`. Enable Railway's **Wait for CI** setting before making `main` an automatic deployment source. Generate a Railway domain only after the service starts successfully, then smoke-test `/`, `/readyz`, `/styles.css`, `/assets/htmx.min.js`, signup/login, catalog, and cart. The public demo is available at the link above.
 
 ## Validate
 

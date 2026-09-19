@@ -47,7 +47,7 @@ Suggested description:
 
 Suggested topics: `rust`, `axum`, `askama`, `htmx`, `postgresql`, `sqlx`, `bookstore`, `portfolio`, `server-side-rendering`.
 
-Set the homepage field to the public demo URL only after the deployment is verified. Keep deployment status separate from local screenshot evidence.
+The About homepage links to the [verified public demo](https://web-production-61bc2.up.railway.app/). Public homepage and database readiness were independently checked on 2026-09-19. Screenshots and the walkthrough remain captures of the isolated local demo.
 
 ## Social preview
 
