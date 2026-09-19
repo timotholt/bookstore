@@ -1,89 +1,77 @@
-# Davis's Books
+# Chantel's Corner
 
-Server-rendered Rust/Axum storefront for Davis's Books, backed by an explicit Postgres `DATABASE_URL`.
+Chantel's Corner is a portfolio storefront for browsing a seeded collection of new and used books and merchandise. It is a server-rendered Rust application, not a live retail service. Visitors can search and filter the catalog, inspect individual copies, and use a database-backed cart and saved-for-later list. Email/password accounts and profile editing are implemented. Checkout currently **reviews a cart only**: it does not create an order, accept payment, or charge a card.
 
-The live application entrypoint is `src/main.rs`. The old Go server has been retired; Rust is the only supported backend path. The original static HTML/JS prototype remains archived in `legacy-demo/` for visual reference only and is not served by the Rust app.
+There is no verified public demo linked here. The supported way to try the application is to run it locally against PostgreSQL.
 
-## Run Locally
+## What you can demonstrate
+
+- A homepage with catalog shelves, product cards, copy-level pricing and stock, and book detail pages.
+- Search and filters rendered on the server, with HTMX replacing catalog results without a full-page reload. `/catalog` serves the HTMX fragment; `/search` is the normal full page.
+- Anonymous carts persisted in PostgreSQL, with quantity/stock limits, remove and restore, and saved-for-later actions. Cart state can be recovered from the browser cart cookie after session-store loss.
+- Email/password signup and login with Argon2 password hashing; PostgreSQL-backed sessions; account profile and shopping-preference forms.
+- A checkout **preview** showing cart lines and totals. The order-history page is an explicit empty state because no order is placed.
+- First-party click/search event collection in PostgreSQL, health/readiness endpoints, SQL migrations, and route-level tests.
+
+The catalog and product images are demo data committed with the project. These flows are demonstrable locally, but they are not evidence of real customers, live inventory, or production traffic.
+
+## Stack and structure
+
+| Layer | Implementation |
+| --- | --- |
+| Web server | Rust 2021, Axum, Tokio |
+| UI | Askama templates with reusable includes, CSS, small client-side JavaScript, vendored HTMX |
+| Data | PostgreSQL, `sqlx`, ordered migrations and seed catalog |
+| Identity | Argon2 password hashes and `tower-sessions` stored in PostgreSQL |
+| Operations | `tracing`, `/healthz`, `/readyz`, and an `xtask` for external-dependency checks |
+
+`src/app.rs` defines the routes. `src/handlers.rs` coordinates requests; `src/store.rs`, `src/cart.rs`, and `src/auth.rs` contain data access and domain operations. `src/ui/` prepares reusable view models for the Askama includes under `templates/components/`. `migrations_postgres/` creates and seeds the database. `legacy-demo/` is an archived static prototype, not the running app.
+
+## Run locally
+
+You need a Rust toolchain with Cargo and a reachable PostgreSQL database. The database role must be able to create tables and the `tower_sessions` schema. This project does **not** support SQLite or silently fall back to another database.
+
+From the repository root, set a real connection string in your shell or in an ignored `.env` / `.env.local` file:
 
 ```bash
-DATABASE_URL='postgresql://user:password@host/davis_books?sslmode=require' cargo run
+export DATABASE_URL='postgresql://USER:PASSWORD@HOST:5432/DATABASE'
+cargo run --locked
 ```
 
-The app listens on `http://127.0.0.1:8080` by default. `DATABASE_URL` is required and must use `postgres://` or `postgresql://`; the runtime never falls back to a different database if the configured one is missing or unreachable.
+`setup/secrets.example.env` lists example variable names; its values are placeholders, not credentials. Never commit a real connection string. On startup the app connects to PostgreSQL, applies pending `migrations_postgres/` migrations (including demo catalog data), initializes its SQL session store, and serves `http://127.0.0.1:8080`. Set `ADDR=127.0.0.1:8081` to choose another local address. Leave `APP_ENV` unset for HTTP localhost; `APP_ENV=production` marks session cookies secure and therefore requires HTTPS for normal browser use.
 
-Optional environment variables:
+Try `/`, `/search`, a book linked from the homepage, `/cart`, `/signup`, and `/login`. `/healthz` reports that the web process responds; `/readyz` also queries PostgreSQL. A checkout preview requires a nonempty cart.
+
+## Validate
 
 ```bash
-ADDR=127.0.0.1:8081
-DATABASE_URL='postgresql://...'
-APP_ENV=production
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo check --workspace --locked
+cargo build --workspace --locked
+cargo test --workspace --locked -- --test-threads=1
 ```
 
-## Test
+The application route tests require `DATABASE_URL`. They create and drop an isolated PostgreSQL schema, so the test role needs `CREATE` privilege on the database. They run serially because the suite shares a test-schema lock; a remote database can make the full run slow. Formatting, linting, checking, and building do not need a live database.
+
+For a basic HTTP smoke test after startup:
 
 ```bash
-cargo check
-cargo test
+curl -i http://127.0.0.1:8080/healthz
+curl -i http://127.0.0.1:8080/
+curl -i http://127.0.0.1:8080/search
+curl -i -H 'HX-Request: true' http://127.0.0.1:8080/catalog
+curl -i http://127.0.0.1:8080/cart
 ```
 
-## External World Bootstrap
+## Not implemented yet
 
-The project includes an `xtask` orchestrator for rebuilding and validating deploy-time external dependencies.
+- Stripe payment handoff, order creation, receipts, and real order history.
+- Anonymous-cart merge into a user-owned cart at login; current carts and saved items are session/browser keyed, not durable account-owned lists.
+- Customer review submission, voting, moderation, and verified-purchase status. Review tables and aggregate reads are groundwork, not a complete review feature.
+- Staff authentication and catalog/inventory management UI.
+- Google login, email verification, password reset, and a confirmed public deployment.
 
-```bash
-cargo setup-everything
-cargo validate-everything
-cargo xtask external doctor
-cargo xtask external plan --local-only
-cargo xtask external validate --local-only
-cargo xtask external validate --only neon --json
-cargo xtask external validate --local-only --json --write-report
-cargo xtask external validate --local-only --only database --json
-cargo xtask external install-deps
-cargo xtask external setup --install-deps --yes
-cargo xtask external repair --only neon --yes
-cargo xtask external repair --only database.migrations --yes
-cargo xtask external secrets import-email --from setup/recovery-email.example.txt
-```
+The [product architecture](docs/PRODUCT_ARCHITECTURE_SPEC.md), [infrastructure plan](docs/INFRASTRUCTURE_SPEC.md), [review design](docs/REVIEWS_SPEC.md), and [external setup design](docs/EXTERNAL_WORLD_BOOTSTRAP_SPEC.md) describe intended work as well as current code; they are not a list of shipped features. [AGENTS.md](AGENTS.md) contains repository engineering guidance.
 
-`cargo setup-everything` and `cargo validate-everything` are aliases for the external setup and validation flow. `doctor`, `plan`, and `validate` are read-only. Use `--only <selector>` to focus a report and `--write-report` to write ignored JSON to `setup/reports/latest.json` plus timestamped report artifacts. `install-deps` is dry-run by default and runs supported installers only with `--yes`. `setup --yes` can create or confirm Neon resources from `setup/setup.toml`, write the generated Postgres `DATABASE_URL` to ignored local secrets, apply migrations, then validate. `repair` requires `--only`; supported targets include `neon` and `database.migrations`. `secrets import-email` parses known keys from a pasted recovery note and writes `setup/.secrets.demo.env` only with `--yes`. See [docs/EXTERNAL_WORLD_BOOTSTRAP_SPEC.md](docs/EXTERNAL_WORLD_BOOTSTRAP_SPEC.md) for the desired-state, setup, validation, and provider adapter plan.
-
-## Current MVP
-
-- Rust `axum` router and Askama server-rendered templates.
-- Postgres schema and seed catalog through explicit `sqlx` migrations.
-- Server-rendered homepage shelves and catalog cards.
-- Include-based Askama component templates for covers, product tiles, catalog cards, and catalog results.
-- HTMX catalog search/filter fragments.
-- Session-backed cart drawer with quantity updates, stock caps, shipping math, and checkout placeholder.
-- Local vendored HTMX runtime at `/assets/htmx.min.js`.
-- Archived pre-migration demo under `legacy-demo/` for visual reference.
-
-## Next Production Integrations
-
-- Replace checkout placeholder with Stripe Checkout session creation and webhook handling.
-- Add staff auth and CMS inventory screens.
-- Move session persistence out of memory before production deployment.
-
-## Product Architecture
-
-See [docs/PRODUCT_ARCHITECTURE_SPEC.md](docs/PRODUCT_ARCHITECTURE_SPEC.md) for the canonical product architecture, feature order, auth/cart/review plan, styling rules, and implementation standards.
-
-See [docs/REVIEWS_SPEC.md](docs/REVIEWS_SPEC.md) for the review storage, aggregation, moderation, and verified-purchase design.
-
-See [docs/IMPLEMENTATION_SEQUENCE.md](docs/IMPLEMENTATION_SEQUENCE.md) for the current execution order.
-
-## Agent Guidance
-
-See [AGENTS.md](AGENTS.md) before making structural changes. It captures the repo rules for avoiding duplicate code, inline CSS, unnecessary dependencies, and legacy Go paths.
-
-## Infrastructure Plan
-
-See [docs/INFRASTRUCTURE_SPEC.md](docs/INFRASTRUCTURE_SPEC.md) for deployment, account ownership, secrets recovery, and production migration planning.
-
-See [docs/EXTERNAL_WORLD_BOOTSTRAP_SPEC.md](docs/EXTERNAL_WORLD_BOOTSTRAP_SPEC.md) for the planned setup/validation system that rebuilds and verifies provider accounts, database resources, deploy settings, auth callbacks, secrets, and other external dependencies.
-
-## Deprecated Docs
-
-[MIGRATION_PLAN.md](MIGRATION_PLAN.md) is deprecated and remains only as a historical pointer after the Rust migration.
+Some internal identifiers retain the earlier Davis's Books naming (for example the Cargo package, cart cookie, database examples, and repository path). They are kept for compatibility; the customer-facing project name is Chantel's Corner.

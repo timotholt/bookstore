@@ -1,8 +1,8 @@
-# Davis's Books External World Bootstrap Spec
+# Chantel's Corner External World Bootstrap Spec
 
 Status: proposed canonical deployment bootstrap and validation spec.
 
-This spec defines how Davis's Books should rebuild, validate, and explain every external dependency required for an interview-ready deployed demo. It extends [INFRASTRUCTURE_SPEC.md](INFRASTRUCTURE_SPEC.md) by treating provider accounts, SaaS configuration, environment variables, database state, auth callbacks, webhooks, and deployment settings as reproducible external state rather than dashboard memory.
+This proposed design defines how Chantel's Corner could rebuild, validate, and explain external dependencies for a future deployed demo. It extends [INFRASTRUCTURE_SPEC.md](INFRASTRUCTURE_SPEC.md) by treating provider accounts, SaaS configuration, environment variables, database state, auth callbacks, webhooks, and deployment settings as reproducible external state rather than dashboard memory. It does not establish that a public deployment exists.
 
 ## Objective
 
@@ -80,7 +80,7 @@ Use for:
 - Programmatic infrastructure workflows that need loops, conditionals, and composition.
 - Cases where provider SDKs are better than HCL.
 
-Do not adopt first unless needed. It adds a second infrastructure runtime, project files, state handling, and provider lifecycle. The first Davis's Books bootstrap can be simpler with `xtask` plus provider CLIs/APIs.
+Do not adopt first unless needed. It adds a second infrastructure runtime, project files, state handling, and provider lifecycle. The first Chantel's Corner bootstrap can be simpler with `xtask` plus provider CLIs/APIs.
 
 ### Ansible
 
@@ -88,7 +88,7 @@ Ansible is useful for desired-state automation and emphasizes idempotence: when 
 
 Use for:
 
-- Future VM/server configuration if Davis's Books leaves PaaS hosting.
+- Future VM/server configuration if Chantel's Corner leaves PaaS hosting.
 - Human-readable runbooks that execute local/remote commands.
 
 Do not use as the main orchestrator now because this project is mostly SaaS APIs, Rust app verification, and deployment provider state.
@@ -127,7 +127,7 @@ Browser automation must never be the validation source of truth when an API chec
 
 ## Recommended Project Decision
 
-Build a Davis's Books `xtask` orchestrator first.
+Build a Chantel's Corner `xtask` orchestrator first.
 
 The orchestrator should call provider CLIs/APIs directly and leave room for Terraform/OpenTofu, Pulumi, Ansible, and Playwright as provider adapter implementations. It should not start by adopting a heavyweight IaC engine as the only interface.
 
@@ -311,7 +311,7 @@ iac       Terraform/OpenTofu/Pulumi adapter
 browser   Playwright adapter
 manual    runbook-only adapter
 local     local files/toolchain/process adapter
-app       Davis's Books app health/smoke adapter
+app       Chantel's Corner app health/smoke adapter
 ```
 
 ## Command Semantics
@@ -528,7 +528,7 @@ reviews
   -> aggregation checks
 ```
 
-## Provider Strategy For Davis's Books
+## Provider Strategy For Chantel's Corner
 
 ### Phase 1: Local Orchestrator Skeleton
 

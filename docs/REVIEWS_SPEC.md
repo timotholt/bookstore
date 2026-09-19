@@ -1,6 +1,6 @@
-# Davis's Books Reviews Spec
+# Chantel's Corner Reviews Spec
 
-Status: design foundation. No public review UI is required yet.
+Status: design foundation. Review tables exist, but public submission, moderation, and verified-purchase flows are not implemented.
 
 ## Goals
 
@@ -22,7 +22,7 @@ Status: design foundation. No public review UI is required yet.
 `reviews` is the source of truth for submitted reviews.
 
 - `book_id`: stable product id from `books`.
-- `user_id`: required account id. It is text until the account table lands, then should become a foreign key or validated service contract.
+- `user_id`: required account id. It is stored as text without a user foreign key in the existing review migration; the `users` table now exists, so this contract still needs to be tightened before public review submission.
 - `rating`: integer 1-5.
 - `title` and `body`: optional user copy, stored as text. Rendering must escape by default through Askama.
 - `status`: `pending`, `published`, `rejected`, or `removed`.
@@ -96,9 +96,9 @@ If the product needs lower-friction local demos, development seed data may inser
 
 ## Migration Path
 
-The initial migration creates `reviews`, `review_votes`, and `review_aggregates` without foreign keys to users or orders because those tables do not exist yet.
+The existing migration creates `reviews`, `review_votes`, and `review_aggregates` without foreign keys to users or orders. The `users` table was added later; orders still do not exist.
 
-When account and order tables land:
+Before public review workflows and once order tables land:
 
 1. Tighten `reviews.user_id` and `review_votes.user_id` to the canonical user id contract.
 2. Tighten or validate `verified_order_id` against orders.

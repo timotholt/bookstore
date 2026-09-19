@@ -1,4 +1,4 @@
-# Davis's Books Tech Debt Register
+# Chantel's Corner Tech Debt Register
 
 Status: active working debt list.
 
@@ -14,9 +14,9 @@ This document tracks the highest-value debt we owe in the current Rust/Postgres 
 
 ### P0 - Remote Postgres latency on the hot path
 
-The local app is speaking to Neon over the network for every page and cart interaction. That means the browser is waiting on remote database round trips before HTML can render.
+When a local app instance uses remote Neon, every page and cart interaction waits on remote database round trips before HTML can render.
 
-Observed impact:
+Previously observed timings (historical measurements, not a current benchmark):
 
 - `GET /readyz` is around 70-110 ms.
 - `GET /` is around 375-455 ms.
@@ -33,30 +33,26 @@ Fix direction:
 - Run the app near Neon in deployment.
 - Use a local Postgres instance for fast local development when we want speed without changing the database contract.
 
-### P1 - Missing account foundation
+### P1 - Account-owned cart and identity follow-through
 
-The product architecture spec treats account identity as the foundation for persistent carts, saved items, reviews, verified purchases, and order history. We have not built that foundation yet.
+The `users`, `user_identities`, and `password_credentials` tables, email/password flows, account pages, and PostgreSQL-backed sessions now exist. Cart and saved-item rows are still selected by a browser/session key, not by the signed-in user.
 
-Missing pieces called for by the specs:
+Remaining pieces:
 
-- `users`
-- `user_identities`
-- `password_credentials`
-- email/password signup, login, and logout
-- SQL-backed session storage before account features go live
-- account header state
-- Google OAuth/OpenID Connect later, after password auth exists
+- Merge/adopt the anonymous cart at login and persist it by `users.id`.
+- Make saved items account-owned across devices.
+- Add recovery and verification flows before representing account security as complete.
+- Consider Google OAuth/OpenID Connect only after the password path is solid.
 
 Why it matters:
 
-- Several later features depend on a real user identity model.
-- Without this layer, carts, reviews, and order history stay fragmented.
+- The current cart and saved-items experience does not follow an account to another browser.
+- Orders and verified-purchase reviews need a dependable user-to-purchase link.
 
 Fix direction:
 
-- Land email/password auth first.
-- Keep the user root in `users`, with provider identities split out into `user_identities`.
-- Move session persistence onto Postgres before broadening the auth surface.
+- Add a tested transactional merge of anonymous cart rows into the user's cart at login.
+- Preserve stock caps and saved-item semantics during that merge.
 
 ### P1 - Checkout and orders are still placeholder-only
 
@@ -97,16 +93,14 @@ Fix direction:
 - Make the command return the updated cart view data or the changed line.
 - Reduce repeated cart-id and stock lookups inside one click path.
 
-### P2 - Reviews, helpful votes, and moderation are still unbuilt
+### P2 - Review workflows, helpful votes, and moderation are still unbuilt
 
-The review spec exists, but the actual review system is not in place yet.
+The review schema and aggregate read path exist, but there is no customer submission or moderation workflow.
 
 Missing pieces called for by the specs:
 
-- `reviews`
-- `review_votes`
 - `review_reports`
-- review aggregates / reviewer scores
+- aggregate maintenance and reviewer scores for submitted reviews
 - verified-purchase derivation from orders
 - one-review-per-user-per-book enforcement
 - review sorting by recent, highest, lowest, and most helpful
@@ -148,15 +142,14 @@ Fix direction:
 - Build the minimum staff auth surface first.
 - Add catalog CRUD behind the guard, then wire in cache invalidation.
 
-### P2 - Saved items are still missing
+### P2 - Saved items do not belong to accounts yet
 
-The product architecture spec includes saved items as a distinct concept from cart.
+The `saved_items` table and cart save/move/remove actions exist. They are session-keyed and do not yet follow a signed-in account across devices.
 
 Missing pieces called for by the specs:
 
-- `saved_items`
-- logged-in-only save and restore flows
-- save book or copy behavior, depending on product decision
+- Account ownership and login merge for existing saved copies.
+- An explicit product decision about book-level versus copy-level saves.
 
 Why it matters:
 
@@ -165,7 +158,7 @@ Why it matters:
 
 Fix direction:
 
-- Add them after account identity and persistent cart are stable.
+- Connect current copy-level saves to the authenticated account without losing anonymous saves.
 
 ### P2 - Later discovery features from the spec are still missing
 
@@ -262,7 +255,7 @@ Fix direction:
 If we are fixing one thing at a time, the order should be:
 
 1. Put the app and Postgres close together for the real deployment path.
-2. Land the account foundation: users, identities, password auth, and SQL-backed sessions.
+2. Make carts and saved items account-owned at login; the basic identity and SQL session foundation is already present.
 3. Convert checkout into real orders and order items.
 4. Collapse the cart command paths.
 5. Add reviews, review votes, moderation, and verified-purchase support.
@@ -270,5 +263,5 @@ If we are fixing one thing at a time, the order should be:
 7. Parallelize homepage and book-detail reads.
 8. Replace broad derived catalog reads with targeted queries.
 9. Add better timing instrumentation.
-10. Add saved items and the lower-priority Amazon-inspired follow-ons.
+10. Add the lower-priority discovery follow-ons.
 11. Decide whether behavioral analytics is actually worth the instrumentation cost.

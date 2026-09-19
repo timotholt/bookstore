@@ -1,10 +1,10 @@
-# Davis's Books Infrastructure, Accounts, and Secret Recovery Spec
+# Chantel's Corner Infrastructure, Accounts, and Secret Recovery Spec
 
-Status: active infrastructure spec. Product architecture, feature order, styling rules, and code organization standards live in [PRODUCT_ARCHITECTURE_SPEC.md](PRODUCT_ARCHITECTURE_SPEC.md).
+Status: target infrastructure design, not evidence that Railway, Stripe, or a public demo is currently deployed. Product architecture, feature order, styling rules, and code organization standards live in [PRODUCT_ARCHITECTURE_SPEC.md](PRODUCT_ARCHITECTURE_SPEC.md).
 
 ## Purpose
 
-This document defines how Davis's Books should be deployed as a credible full-stack demo project on Railway and Neon while staying portable enough to rebuild quickly if either provider becomes unusable.
+This document defines how Chantel's Corner could be deployed as a full-stack demo project on Railway and Neon while staying portable enough to rebuild if either provider becomes unusable. Existing resource identifiers may retain the earlier Davis's Books name for compatibility.
 
 The goal is not PCI-grade production commerce. The goal is a professional interview-ready stack that demonstrates real backend engineering: Rust/Axum server rendering, PostgreSQL persistence, migrations, sessions, Stripe Checkout handoff, staff auth, CMS inventory workflows, and a repeatable infrastructure story.
 
@@ -31,7 +31,7 @@ Responsibilities:
 - Build and run the Rust application.
 - Store application runtime environment variables.
 - Provide public HTTPS routing.
-- Run one web service for the Davis's Books storefront and admin panel.
+- Run one web service for the Chantel's Corner storefront and planned admin panel.
 - Optionally run release/migration commands before deploys.
 
 Expected Railway project resources:
@@ -151,7 +151,7 @@ Recommended safer format:
 
 The application should converge on the following environment contract.
 
-Required for production:
+Target production contract (not all variables are currently consumed by the application):
 
 ```text
 APP_ENV=production
@@ -160,6 +160,8 @@ DATABASE_URL=postgres://...
 SESSION_SECRET=...
 PUBLIC_BASE_URL=https://...
 ```
+
+The current Rust runtime requires `DATABASE_URL`, accepts optional `ADDR`, and checks `APP_ENV=production` for secure cookies. `SESSION_SECRET`, `PUBLIC_BASE_URL`, and `PORT` are bootstrap/deployment design values here, not currently enforced runtime settings.
 
 Required when Stripe Checkout is enabled:
 
@@ -300,7 +302,7 @@ For Railway single-service demo traffic, in-process caching is acceptable. If th
 
 ## Session Strategy
 
-Current session behavior can remain cookie/session-manager based, but production sessions should be database-backed.
+The current app uses `tower-sessions` with a PostgreSQL session store. The remaining items below are production-hardening requirements, not proof of a production deployment.
 
 Requirements:
 

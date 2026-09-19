@@ -245,30 +245,35 @@ pub async fn get_current_user(db: &PgPool, session: &Session) -> Result<Option<U
     }
 }
 
+pub struct ProfileUpdate<'a> {
+    pub first_name: &'a str,
+    pub last_name: &'a str,
+    pub email: &'a str,
+    pub phone_number: &'a str,
+    pub address_line1: &'a str,
+    pub address_line2: &'a str,
+    pub address_city: &'a str,
+    pub address_state: &'a str,
+    pub address_postal_code: &'a str,
+    pub marketing_opt_in: bool,
+}
+
 pub async fn update_user_profile(
     db: &PgPool,
     user_id: &str,
-    first_name: &str,
-    last_name: &str,
-    email: &str,
-    phone_number: &str,
-    address_line1: &str,
-    address_line2: &str,
-    address_city: &str,
-    address_state: &str,
-    address_postal_code: &str,
-    marketing_opt_in: bool,
+    input: ProfileUpdate<'_>,
 ) -> Result<User, AuthError> {
-    let email = normalize_email(email)?;
-    let first_name = optional_profile_text(first_name, 80, "First name")?;
-    let last_name = optional_profile_text(last_name, 80, "Last name")?;
+    let email = normalize_email(input.email)?;
+    let first_name = optional_profile_text(input.first_name, 80, "First name")?;
+    let last_name = optional_profile_text(input.last_name, 80, "Last name")?;
     let full_name = joined_full_name(first_name.as_deref(), last_name.as_deref());
-    let phone_number = optional_profile_text(phone_number, 40, "Phone number")?;
-    let address_line1 = optional_profile_text(address_line1, 120, "Address")?;
-    let address_line2 = optional_profile_text(address_line2, 120, "Apartment, suite, or unit")?;
-    let address_city = optional_profile_text(address_city, 80, "City")?;
-    let address_state = optional_state(address_state)?;
-    let address_postal_code = optional_profile_text(address_postal_code, 20, "ZIP code")?;
+    let phone_number = optional_profile_text(input.phone_number, 40, "Phone number")?;
+    let address_line1 = optional_profile_text(input.address_line1, 120, "Address")?;
+    let address_line2 =
+        optional_profile_text(input.address_line2, 120, "Apartment, suite, or unit")?;
+    let address_city = optional_profile_text(input.address_city, 80, "City")?;
+    let address_state = optional_state(input.address_state)?;
+    let address_postal_code = optional_profile_text(input.address_postal_code, 20, "ZIP code")?;
 
     let result = sqlx::query_as::<_, User>(
         r#"
@@ -313,7 +318,7 @@ pub async fn update_user_profile(
     .bind(address_city)
     .bind(address_state)
     .bind(address_postal_code)
-    .bind(marketing_opt_in)
+    .bind(input.marketing_opt_in)
     .fetch_one(db)
     .await;
 

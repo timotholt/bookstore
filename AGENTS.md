@@ -1,6 +1,6 @@
 # Agent Guidance
 
-This repository is a Rust/Axum, Askama, HTMX, SQLite storefront. The old Go server is retired. Do not reintroduce Go code or Go-era architecture.
+This repository is Chantel's Corner, a Rust/Axum, Askama, HTMX, PostgreSQL storefront. The old Go server and SQLite runtime are retired. Do not reintroduce Go code, Go-era architecture, or SQLite as an application database. Some internal identifiers retain the earlier Davis's Books name for compatibility; use Chantel's Corner for public-facing copy.
 
 ## Source Of Truth
 

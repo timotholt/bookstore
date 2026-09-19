@@ -648,11 +648,11 @@ async fn cart_page_content_template(
     };
 
     let mut checkout_button = ui::ButtonView::tracked(
-        "Proceed to Checkout",
+        "View Checkout Preview",
         "primary-button checkout-button checkout-button--page",
         "submit",
         "checkout",
-        "Proceed to checkout",
+        "View checkout preview",
         "checkout_started",
         "cart.page",
         "checkout",
@@ -1010,7 +1010,7 @@ pub async fn profile_action(
     headers: HeaderMap,
     Form(form): Form<ProfileForm>,
 ) -> Result<Response, AppError> {
-    use crate::auth::{update_user_profile, AuthError};
+    use crate::auth::{update_user_profile, AuthError, ProfileUpdate};
 
     restore_cart_session(&headers, &session).await?;
     let current_user = match current_user_or_login(&state.db, &session).await? {
@@ -1022,16 +1022,18 @@ pub async fn profile_action(
     match update_user_profile(
         &state.db,
         &current_user.id,
-        &form.first_name,
-        &form.last_name,
-        &form.email,
-        &form.phone_number,
-        &form.address_line1,
-        &form.address_line2,
-        &form.address_city,
-        &form.address_state,
-        &form.address_postal_code,
-        form.marketing_opt_in.is_some(),
+        ProfileUpdate {
+            first_name: &form.first_name,
+            last_name: &form.last_name,
+            email: &form.email,
+            phone_number: &form.phone_number,
+            address_line1: &form.address_line1,
+            address_line2: &form.address_line2,
+            address_city: &form.address_city,
+            address_state: &form.address_state,
+            address_postal_code: &form.address_postal_code,
+            marketing_opt_in: form.marketing_opt_in.is_some(),
+        },
     )
     .await
     {
@@ -1180,7 +1182,7 @@ pub async fn preferences_action(
     headers: HeaderMap,
     Form(form): Form<PreferencesForm>,
 ) -> Result<Response, AppError> {
-    use crate::auth::{update_user_profile, AuthError};
+    use crate::auth::{update_user_profile, AuthError, ProfileUpdate};
 
     restore_cart_session(&headers, &session).await?;
     let current_user = match current_user_or_login(&state.db, &session).await? {
@@ -1201,16 +1203,18 @@ pub async fn preferences_action(
     match update_user_profile(
         &state.db,
         &current_user.id,
-        &first_name,
-        &last_name,
-        &current_user.email,
-        &phone_number,
-        &address_line1,
-        &address_line2,
-        &address_city,
-        &address_state,
-        &address_postal_code,
-        form.marketing_opt_in.is_some(),
+        ProfileUpdate {
+            first_name: &first_name,
+            last_name: &last_name,
+            email: &current_user.email,
+            phone_number: &phone_number,
+            address_line1: &address_line1,
+            address_line2: &address_line2,
+            address_city: &address_city,
+            address_state: &address_state,
+            address_postal_code: &address_postal_code,
+            marketing_opt_in: form.marketing_opt_in.is_some(),
+        },
     )
     .await
     {

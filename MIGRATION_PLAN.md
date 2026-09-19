@@ -2,7 +2,7 @@
 
 Status: deprecated.
 
-Davis's Books has already migrated from the old Go server to the Rust/Axum application. This file remains only as a historical pointer so future work does not reopen the retired migration lane.
+Chantel's Corner (formerly Davis's Books) has already migrated from the old Go server to the Rust/Axum application. This file remains only as a historical pointer so future work does not reopen the retired migration lane.
 
 Use these current documents instead:
 

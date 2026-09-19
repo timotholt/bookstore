@@ -1,12 +1,12 @@
 # Implementation Sequence
 
-Status: active execution order.
+Status: roadmap and progress notes. Check the README and code for shipped behavior; some steps below predate completed work.
 
 This document turns the product architecture spec into the current build sequence. Follow this order unless a real blocker or product decision changes the lane.
 
-## Current Lane: Server Foundation
+## Server Foundation (completed)
 
-Before adding auth, persistent carts, reviews, analytics providers, Neon, or deployment work, harden the Rust server boundary from [PRODUCT_ARCHITECTURE_SPEC.md](PRODUCT_ARCHITECTURE_SPEC.md).
+The Rust server boundary, anonymous persistent cart, first-party analytics, and email/password auth are now present. The remaining major commerce lane is real checkout and orders; review workflows, account-owned cart merge, and staff tooling follow. See [PRODUCT_ARCHITECTURE_SPEC.md](PRODUCT_ARCHITECTURE_SPEC.md) for design and the README for what is demonstrable.
 
 The shared UI pattern is now in place for product cards, sections, links, purchase buttons, and cart drawer lines. The current goal is to make the server easy to test and operate before adding new database-backed product features.
 
@@ -60,7 +60,7 @@ Initial progress:
 Initial progress:
 
 - Cart drawer line controls use `CartLineView` and shared `ButtonView`.
-- Full cart page controls still need a dedicated page-fragment response before they can safely share drawer HTMX behavior.
+- Full cart page controls now use a dedicated page-fragment response.
 - Full cart page static layout and typography styles moved from inline attributes into `styles.css`.
 - Remaining cart inline styles are runtime values for cover color and progress width.
 
@@ -97,7 +97,7 @@ Initial progress:
 Initial progress:
 
 - Anonymous carts are stored in Postgres through `carts` and `cart_items`.
-- Cart rows are keyed by session today and include nullable `user_id` for future auth merge.
+- Cart rows are keyed by session today and include nullable `user_id`; merge to a user-owned cart on login remains unfinished.
 - Cart rules live in `src/cart.rs` instead of `handlers.rs`.
 - Add, increase, decrease, remove, cart page, checkout, and cart drawer rendering use the DB-backed cart.
 - Route tests prove anonymous cart persistence, later reads by session cookie, quantity updates, and stock caps.
@@ -108,12 +108,16 @@ Initial progress:
 - Add Google OAuth/OpenID Connect second.
 - Defer Apple login unless the project intentionally takes on Apple developer account requirements.
 
+Current progress: email/password signup and login, profile editing, and PostgreSQL-backed sessions are implemented. Google login and account-level cart merge are not.
+
 ### 9. Reviews, saved items, and orders
 
 - Add saved items.
 - Add reviews and review votes.
 - Add orders and order items.
 - Use orders for verified-purchase reviews.
+
+Current progress: session-keyed saved-for-later actions and review schema/aggregate reads exist. Customer review workflows, orders, and verified-purchase derivation do not.
 
 ### 10. Tracking provider and deployment
 

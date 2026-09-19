@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Secure Checkout | {{ self.store_name() }}</title>
-    <meta name="description" content="Review your {{ self.store_name() }} order before secure payment.">
+    <title>Checkout Preview | {{ self.store_name() }}</title>
+    <meta name="description" content="Preview your {{ self.store_name() }} cart. No order or payment is processed.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=optional">
@@ -17,8 +17,8 @@
       <a class="brand checkout-brand" href="/" aria-label="{{ self.store_name() }} home">
         <span>{{ self.store_name() }}</span>
       </a>
-      <h1>Secure Checkout</h1>
-      <div class="checkout-header-assurance">Encrypted checkout</div>
+      <h1>Checkout Preview</h1>
+      <div class="checkout-header-assurance">No order or payment is processed</div>
     </header>
 
     <main class="checkout-main">
@@ -31,14 +31,14 @@
           <section class="checkout-section checkout-delivery-section">
             <div class="checkout-section-heading">
               <div>
-                <p class="checkout-eyebrow">3. Review items and delivery</p>
-                <h2>Items in this order</h2>
-                <p>Arriving for pickup in 1-2 days</p>
+                <p class="checkout-eyebrow">3. Review cart</p>
+                <h2>Items in your cart</h2>
+                <p>Availability and pickup have not been confirmed.</p>
               </div>
-              <span class="checkout-status">Ready soon</span>
+              <span class="checkout-status">Preview only</span>
             </div>
 
-            <div class="checkout-items-list" aria-label="Items in this order">
+            <div class="checkout-items-list" aria-label="Items in your cart">
               {% for checkout_line in checkout_lines %}
               {% include "components/ui/checkout_line.html" %}
               {% endfor %}
@@ -51,15 +51,14 @@
               {% include "components/ui/button.html" %}
             </form>
             <div>
-              <h2>Order total: {{ summary.total_label }}</h2>
-              <p>By placing your order, you agree to {{ self.store_name() }} pickup, return, and privacy policies.</p>
+              <h2>Estimated total: {{ summary.total_label }}</h2>
+              <p>Order placement is not available in this preview. No purchase, reservation, or charge will occur.</p>
             </div>
           </section>
 
           <section class="checkout-help-section">
-            <p>Need help? Contact the shop before pickup and we can adjust your order.</p>
-            <p>Prices and availability reflect the latest copy condition and stock in your cart.</p>
-            <p>Payment processing and order creation will be connected through Stripe Checkout in the next checkout phase.</p>
+            <p>Prices and availability reflect the current demo catalog and cart.</p>
+            <p>Payment processing and order creation are planned future work.</p>
           </section>
         </div>
 
@@ -68,12 +67,12 @@
             {% let button = summary.place_order_button.clone() %}
             {% include "components/ui/button.html" %}
           </form>
-          <p>Review your order before payment. You will not be charged in this local demo.</p>
+          <p>Preview cart costs only. Taxes, payment, and order creation are not implemented.</p>
           {% include "components/ui/order_summary.html" %}
           <div class="checkout-summary-note">
-            <span>Secure checkout</span>
-            <span>Hand-inspected copies</span>
-            <span>Pickup support from {{ self.store_name() }}</span>
+            <span>Preview only</span>
+            <span>No payment collected</span>
+            <span>No order placed</span>
           </div>
         </aside>
       </div>

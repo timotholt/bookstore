@@ -217,17 +217,19 @@ impl ButtonView {
     }
 
     pub fn checkout_place_order(source: impl Into<String>) -> Self {
-        Self::tracked(
-            "Place your order",
+        let mut button = Self::tracked(
+            "Order placement unavailable",
             "primary-button checkout-place-order-button",
-            "submit",
+            "button",
             "place-order",
-            "Place your order",
+            "Order placement unavailable in this preview",
             "checkout_place_order_clicked",
             source,
             "checkout",
             "current",
-        )
+        );
+        button.disabled = true;
+        button
     }
 }
 
@@ -551,17 +553,17 @@ pub fn checkout_sections() -> Vec<CheckoutSectionView> {
     vec![
         CheckoutSectionView::informational(
             "checkout-address-section",
-            "1. Delivery",
-            "Delivering to La Habra, CA",
-            &format!("Store pickup at {}, {}.", brand::STORE_NAME, brand::STORE_ADDRESS),
-            "Ready in 1-2 days",
+            "1. Pickup preview",
+            "Store pickup in La Habra, CA",
+            format!("Potential pickup location: {}, {}. No reservation is created.", brand::STORE_NAME, brand::STORE_ADDRESS),
+            "Not reserved",
         ),
         CheckoutSectionView::informational(
             "",
-            "2. Payment",
-            "Secure card payment",
-            &format!("Stripe Checkout will collect card details in the next phase. No card data is stored by {}.", brand::STORE_NAME),
-            "Not charged yet",
+            "2. Payment preview",
+            "Payment not available",
+            "Stripe Checkout is planned, but this page does not collect card details or place an order.",
+            "No charge",
         ),
     ]
 }
@@ -581,7 +583,7 @@ pub fn order_summary(
         } else {
             format!("${:.2}", cart.shipping)
         },
-        tax_label: "Calculated at payment".to_string(),
+        tax_label: "Not calculated in preview".to_string(),
         total_label: format!("${:.2}", cart.total),
         place_order_button: ButtonView::checkout_place_order(source),
     }
@@ -589,11 +591,11 @@ pub fn order_summary(
 
 pub fn checkout_start_button(source: impl Into<String>, disabled: bool) -> ButtonView {
     let mut button = ButtonView::tracked(
-        "Checkout",
+        "Checkout Preview",
         "primary-button checkout-button",
         "submit",
         "checkout",
-        "Checkout",
+        "Checkout preview",
         "checkout_started",
         source,
         "checkout",

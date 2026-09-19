@@ -1,4 +1,4 @@
-Subject: Davis's Books demo recovery packet
+Subject: Chantel's Corner demo recovery packet
 
 These are fake example values used to test the external bootstrap parser.
 

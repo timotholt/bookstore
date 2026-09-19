@@ -1229,12 +1229,13 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
         let body = response_body(response).await;
-        assert!(body.contains("Secure Checkout"));
-        assert!(body.contains("Place your order"));
-        assert!(body.contains("Items in this order"));
-        assert!(body.contains("Arriving for pickup in 1-2 days"));
+        assert!(body.contains("Checkout Preview"));
+        assert!(body.contains("Order placement unavailable"));
+        assert!(body.contains("Items in your cart"));
+        assert!(body.contains("Availability and pickup have not been confirmed"));
         assert!(body.contains("Dune"));
-        assert!(body.contains("Encrypted checkout"));
+        assert!(body.contains("No order or payment is processed"));
+        assert!(body.contains("disabled aria-disabled=\"true\""));
         assert!(body.contains(
             r#"<a class="brand checkout-brand" href="/" aria-label="Chantel&#x27;s Corner home">"#
         ));

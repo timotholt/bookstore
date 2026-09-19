@@ -1,12 +1,12 @@
-# Davis's Books Product Architecture Spec
+# Chantel's Corner Product Architecture Spec
 
 Status: canonical product and application architecture spec.
 
-This spec supersedes the old migration plan. Davis's Books is a Rust/Axum, server-rendered commerce app for a used bookstore. The objective is to build a solid, interview-ready commerce system with real account, cart, review, and order foundations while staying simple enough to run locally without paid services.
+This spec supersedes the old migration plan. Chantel's Corner is a Rust/Axum, server-rendered portfolio storefront for a bookstore. It mixes implemented architecture with planned features; see the README for what can be demonstrated today. Internal names inherited from Davis's Books may remain where renaming would disrupt compatibility.
 
 ## Objective
 
-Build Davis's Books as a durable small-commerce storefront:
+Build Chantel's Corner as a durable small-commerce storefront:
 
 - Server-rendered Rust/Axum application.
 - Askama templates with reusable include components.
