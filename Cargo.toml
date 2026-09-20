@@ -28,6 +28,11 @@ uuid = { version = "1.7", features = ["v4", "serde"] }
 tower_governor = "0.4"
 chrono = { version = "0.4", features = ["serde"] }
 tower-sessions-sqlx-store = { version = "0.14.0", features = ["postgres"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+aes-gcm = "0.10"
+base64 = "0.22"
+hmac = "0.12"
+sha2 = "0.10"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

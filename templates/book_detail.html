@@ -18,7 +18,7 @@
     <div class="details-left-media">
       <div class="thumbnail-strip">
         <button class="thumb-btn is-active" type="button" aria-label="Cover front">
-          <img src="/assets/covers/{{ book.id }}.jpg" alt="Cover front" style="display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 2px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+          <img src="{{ book.cover_url }}" alt="Cover front" style="display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 2px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
           <span class="thumb-color-block front" style="background-color: {{ book.cover_color }}; display: none;"></span>
         </button>
         <button class="thumb-btn" type="button" aria-label="Cover spine">
@@ -68,6 +68,16 @@
           {% if !book.genre.is_empty() %}<span><strong>Genre:</strong> {{ book.genre }}</span>{% endif %}
         </div>
       </section>
+
+      {% if !book.description.is_empty() %}
+      <section class="detail-info-card details-description" aria-labelledby="bookDescriptionTitle">
+        <h2 id="bookDescriptionTitle">About this book</h2>
+        <p>{{ book.description }}</p>
+        {% if book.cover_url.starts_with("https://covers.openlibrary.org/") %}
+        <p><a href="https://openlibrary.org/isbn/{{ book.isbn }}">Book metadata and cover: Open Library</a></p>
+        {% endif %}
+      </section>
+      {% endif %}
 
       <section class="detail-info-card details-description" aria-labelledby="copyNotesTitle">
         <h2 id="copyNotesTitle">About this copy</h2>

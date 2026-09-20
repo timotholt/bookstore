@@ -1,96 +1,138 @@
-# Chantel's Corner
+<p align="center">
+  <img src="docs/assets/repository-cover.png" alt="Chantel’s Corner — a thoughtfully built bookstore. Rust, Axum, Askama, HTMX, PostgreSQL." width="100%">
+</p>
 
-Chantel's Corner is a portfolio storefront for browsing a seeded collection of new and used books and merchandise. It is a server-rendered Rust application, not a live retail service. Visitors can search and filter the catalog, inspect individual copies, and use a database-backed cart and saved-for-later list. Email/password accounts and profile editing are implemented. Checkout currently **reviews a cart only**: it does not create an order, accept payment, or charge a card.
+<h1 align="center">Chantel’s Corner</h1>
 
-There is no verified public demo linked here. The supported way to try the application is to run it locally against PostgreSQL.
+<p align="center">A bookstore portfolio project with server-rendered pages, responsive catalog interactions, and persistent shopping carts.</p>
 
-## What you can demonstrate
+<p align="center">
+  <a href="https://github.com/timotholt/bookstore/actions/workflows/ci.yml"><img src="https://github.com/timotholt/bookstore/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status"></a>
+  <img src="https://img.shields.io/badge/Rust-2021-b7410e?style=flat" alt="Rust 2021 edition">
+  <img src="https://img.shields.io/badge/UI-Askama%20%2B%20HTMX-17545b?style=flat" alt="Askama and HTMX UI">
+  <img src="https://img.shields.io/badge/Database-PostgreSQL-336791?style=flat" alt="PostgreSQL database">
+</p>
 
-- A homepage with catalog shelves, product cards, copy-level pricing and stock, and book detail pages.
-- Search and filters rendered on the server, with HTMX replacing catalog results without a full-page reload. `/catalog` serves the HTMX fragment; `/search` is the normal full page.
-- Anonymous carts persisted in PostgreSQL, with quantity/stock limits, remove and restore, and saved-for-later actions. Cart state can be recovered from the browser cart cookie after session-store loss.
-- Email/password signup and login with Argon2 password hashing; PostgreSQL-backed sessions; account profile and shopping-preference forms.
-- A checkout **preview** showing cart lines and totals. The order-history page is an explicit empty state because no order is placed.
-- First-party click/search event collection in PostgreSQL, health/readiness endpoints, SQL migrations, and route-level tests.
+<p align="center">
+  <a href="https://web-production-61bc2.up.railway.app/">Live demo</a> ·
+  <a href="#product-tour">Product tour</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="#run-locally">Run locally</a> ·
+  <a href="docs/README.md">Documentation</a>
+</p>
 
-The catalog and product images are demo data committed with the project. These flows are demonstrable locally, but they are not evidence of real customers, live inventory, or production traffic.
+Browse new and used books, compare individual copies, filter the catalog, and build a reading stack. The application combines a Rust backend with HTML-first interactions and PostgreSQL persistence.
 
-## Stack and structure
+**Portfolio demo:** the catalog is seeded sample data. Checkout reviews the cart; it does not place orders, take payments, or charge a card. Some storefront copy and ratings are illustrative. See [current scope](#current-scope) for implemented features and planned work.
 
-| Layer | Implementation |
+## Product tour
+
+### A bookstore, from the first page
+
+Curated shelves, category browsing, new arrivals, and copy-level prices give the catalog a familiar storefront experience.
+
+![Chantel’s Corner homepage with category browsing, featured books, and curated shelves](docs/assets/homepage.png)
+
+### Search → inspect → add to cart
+
+The walkthrough below was recorded from the running Rust application against an isolated local PostgreSQL database.
+
+![Product walkthrough: filter the catalog, inspect a book, and add it to the cart](docs/assets/shopping-walkthrough.gif)
+
+[Download the walkthrough video](docs/assets/shopping-walkthrough.mp4) · [Screenshot details and capture notes](docs/PRESENTATION.md)
+
+<table>
+  <tr>
+    <td width="50%"><a href="docs/assets/catalog.png"><img src="docs/assets/catalog.png" alt="Catalog results with genre, condition, price, and format filters"></a></td>
+    <td width="50%"><a href="docs/assets/book-detail.png"><img src="docs/assets/book-detail.png" alt="Book detail page showing copy options, condition, price, and availability"></a></td>
+  </tr>
+  <tr>
+    <td><strong>Find the next read.</strong> Search and filter with server-rendered results swapped into the page by HTMX.</td>
+    <td><strong>Choose a specific copy.</strong> Inspect format, condition notes, price, and stock before adding it.</td>
+  </tr>
+  <tr>
+    <td><a href="docs/assets/cart.png"><img src="docs/assets/cart.png" alt="Shopping cart with quantity controls, saved items, and an order summary"></a></td>
+    <td><a href="docs/assets/account.png"><img src="docs/assets/account.png" alt="Account area for a fictional demo reader"></a></td>
+  </tr>
+  <tr>
+    <td><strong>Keep a reading stack.</strong> Database-backed carts support quantity limits, removal, restore, and saved-for-later actions.</td>
+    <td><strong>Manage an account.</strong> Email/password authentication, profile editing, and shopping preferences.</td>
+  </tr>
+</table>
+
+## Architecture
+
+![Illustrated architecture: browser requests pass through Axum and Rust handlers, SQLx queries PostgreSQL, and Askama returns HTML for HTMX updates; Tokio runs asynchronous work](docs/study-assets/bookstore-stack-professional.png)
+
+**Request path:** browser → Axum handler → domain/data-access code → SQLx ↔ PostgreSQL → prepared view data → Askama HTML → browser.
+
+| Layer | Tools | Responsibility |
+| --- | --- | --- |
+| Application | Rust, Axum, Tokio | Typed application logic, routing, asynchronous I/O |
+| Presentation | Askama, HTMX, HTML, CSS | Server-rendered pages, reusable includes, targeted updates |
+| Persistence | PostgreSQL, SQLx | Catalog, carts, accounts, sessions, ordered migrations |
+| Identity | Argon2, tower-sessions | Password hashing and PostgreSQL-backed sessions |
+| Operations | tracing, GitHub Actions, Docker | Diagnostics, automated checks, portable packaging |
+
+### Engineering decisions
+
+- **HTML-first delivery.** Askama renders both pages and fragments. HTMX enhances interactions without a separate frontend application.
+- **Explicit persistent state.** Cart and session records live in PostgreSQL. SQLx migrations define the schema and seed catalog.
+- **Reusable UI patterns.** Rust view objects feed Askama include components and shared CSS class families. The [component contract](docs/PRODUCT_ARCHITECTURE_SPEC.md#ui-pattern-system) keeps repeated controls consistent.
+- **Focused application modules.** Route handlers coordinate requests; store, cart, and auth modules own data access and domain operations.
+- **Observable, reproducible builds.** CI checks formatting, compilation, linting, tests against PostgreSQL, and the Docker build. `/healthz` reports process health; `/readyz` checks database connectivity.
+
+[Read the architecture specification](docs/PRODUCT_ARCHITECTURE_SPEC.md) · [Learn the stack](docs/STACK_STUDY_GUIDE.md)
+
+## Current scope
+
+| Implemented | Planned |
 | --- | --- |
-| Web server | Rust 2021, Axum, Tokio |
-| UI | Askama templates with reusable includes, CSS, small client-side JavaScript, vendored HTMX |
-| Data | PostgreSQL, `sqlx`, ordered migrations and seed catalog |
-| Identity | Argon2 password hashes and `tower-sessions` stored in PostgreSQL |
-| Operations | `tracing`, `/healthz`, `/readyz`, and an `xtask` for external-dependency checks |
+| Search, filters, book details, and seeded merchandise | Staff inventory management |
+| PostgreSQL-backed carts and saved-for-later actions | Durable account-owned carts and login merge |
+| Email/password signup, login, profiles, preferences | Google login, email verification, password reset |
+| Cart review and checkout preview | Payment handoff, order creation, receipts |
+| Review schema and aggregate reads | Review submission, moderation, verified purchases |
+| First-party interaction events, health checks, CI | Additional deployment and operational hardening |
 
-`src/app.rs` defines the routes. `src/handlers.rs` coordinates requests; `src/store.rs`, `src/cart.rs`, and `src/auth.rs` contain data access and domain operations. `src/ui/` prepares reusable view models for the Askama includes under `templates/components/`. `migrations_postgres/` creates and seeds the database. `legacy-demo/` is an archived static prototype, not the running app.
-
-## Build from GitHub
-
-Open [Actions → CI](https://github.com/timotholt/bookstore/actions/workflows/ci.yml), click **Run workflow**, and choose a branch. The run builds and tests the workspace, checks the running Docker image, and provides downloadable image and log artifacts. The manual button is available after the workflow reaches the default branch.
-
-[Complete clean-checkout and one-button build instructions](docs/CLEAN_CHECKOUT.md) cover prerequisites, disposable PostgreSQL, local verification, artifacts, and cleanup.
+Cart identity is currently tied to the browser/session. Signing in does not yet merge it into a durable user-owned cart. The order-history screen is an explicit empty state because checkout does not create orders.
 
 ## Run locally
 
-You need a Rust toolchain with Cargo and a reachable PostgreSQL database. The database role must be able to create tables and the `tower_sessions` schema. This project does **not** support SQLite or silently fall back to another database.
-
-From the repository root, set a real connection string in your shell or in an ignored `.env` / `.env.local` file:
+Requires a Rust toolchain with Cargo and a reachable PostgreSQL database. The database role needs permission to create application tables and the `tower_sessions` schema.
 
 ```bash
+git clone https://github.com/timotholt/bookstore.git
+cd bookstore
 export DATABASE_URL='postgresql://USER:PASSWORD@HOST:5432/DATABASE'
 cargo run --locked
 ```
 
-`setup/secrets.example.env` lists example variable names; its values are placeholders, not credentials. Never commit a real connection string. On startup the app connects to PostgreSQL, applies pending `migrations_postgres/` migrations (including demo catalog data), initializes its SQL session store, and serves `http://127.0.0.1:8080`. Set `ADDR=127.0.0.1:8081` to choose another local address. Leave `APP_ENV` unset for HTTP localhost; `APP_ENV=production` marks session cookies secure and therefore requires HTTPS for normal browser use.
+Open **http://127.0.0.1:8080**. Startup applies pending migrations and seeds the demo catalog. Set `ADDR=127.0.0.1:8081` to use another port. Keep credentials in the shell or an ignored local environment file.
 
-Try `/`, `/search`, a book linked from the homepage, `/cart`, `/signup`, and `/login`. `/healthz` reports that the web process responds; `/readyz` also queries PostgreSQL. A checkout preview requires a nonempty cart.
+[Complete setup, testing, and deployment instructions](docs/DEVELOPMENT.md)
 
-## Railway deployment (not live yet)
+**Build from GitHub:** open [Actions → CI](https://github.com/timotholt/bookstore/actions/workflows/ci.yml), click **Run workflow**, and choose a branch. The run builds, tests, checks the packaged app, and provides downloadable image/log artifacts. [Details](docs/CLEAN_CHECKOUT.md#build-from-github-with-one-button).
 
-The repository includes a Dockerfile that builds the Rust binary and packages the static assets it serves from the working directory. Railway supplies `PORT`; when `ADDR` is unset, the app listens on `0.0.0.0:$PORT`. Set the following service variables in Railway:
+[Verify a clean checkout from GitHub](docs/CLEAN_CHECKOUT.md) — prerequisites, disposable PostgreSQL, full workspace build and tests, Docker packaging, runtime checks, and cleanup.
+
+## Explore the repository
 
 ```text
-DATABASE_URL=postgresql://.../...?sslmode=require
-APP_ENV=production
+src/
+  app.rs          Routes and shared application state
+  handlers.rs     Request and response coordination
+  store.rs        Catalog and data access
+  cart.rs         Cart and saved-item operations
+  auth.rs         Account and authentication operations
+  ui/             Reusable view models
+templates/        Askama pages, layouts, and include components
+styles.css        Shared styles and design tokens
+migrations_postgres/  Ordered database migrations and seed data
+.github/workflows/    Continuous integration
+docs/             Architecture, development, and product guides
 ```
 
-Use the connection string for the intended Neon database branch. Do not add it to GitHub or the Docker image. Configure Railway's deployment healthcheck path as `/readyz`; it checks that the app can query PostgreSQL. Pending SQLx migrations run **when the web process starts**, before the server listens. Test this against a separate Neon branch before connecting an existing database, because a failed first deploy can still have applied migrations. Do not configure a second pre-deploy migration command for this build.
+[Documentation index](docs/README.md) · [Development guide](docs/DEVELOPMENT.md) · [Infrastructure design](docs/INFRASTRUCTURE_SPEC.md) · [Technical debt](docs/TECH_DEBT.md)
 
-Connect the GitHub repository and the intended deployment branch in Railway. `.github/workflows/ci.yml` runs format, check, lint, build, tests against temporary PostgreSQL, and a Docker image build on pull requests and pushes to `main`. Enable Railway's **Wait for CI** setting before making `main` an automatic deployment source. Generate a Railway domain only after the service starts successfully, then smoke-test `/`, `/readyz`, `/styles.css`, `/assets/htmx.min.js`, signup/login, catalog, and cart. The Railway project and public demo have not yet been created.
-
-## Validate
-
-```bash
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo check --workspace --locked
-cargo build --workspace --locked
-cargo test --workspace --locked -- --test-threads=1
-```
-
-The application route tests require `DATABASE_URL`. They create and drop an isolated PostgreSQL schema, so the test role needs `CREATE` privilege on the database. They run serially because the suite shares a test-schema lock; a remote database can make the full run slow. Formatting, linting, checking, and building do not need a live database.
-
-For a basic HTTP smoke test after startup:
-
-```bash
-curl -i http://127.0.0.1:8080/healthz
-curl -i http://127.0.0.1:8080/
-curl -i http://127.0.0.1:8080/search
-curl -i -H 'HX-Request: true' http://127.0.0.1:8080/catalog
-curl -i http://127.0.0.1:8080/cart
-```
-
-## Not implemented yet
-
-- Stripe payment handoff, order creation, receipts, and real order history.
-- Anonymous-cart merge into a user-owned cart at login; current carts and saved items are session/browser keyed, not durable account-owned lists.
-- Customer review submission, voting, moderation, and verified-purchase status. Review tables and aggregate reads are groundwork, not a complete review feature.
-- Staff authentication and catalog/inventory management UI.
-- Google login, email verification, password reset, and a confirmed public deployment.
-
-The [product architecture](docs/PRODUCT_ARCHITECTURE_SPEC.md), [infrastructure plan](docs/INFRASTRUCTURE_SPEC.md), [review design](docs/REVIEWS_SPEC.md), and [external setup design](docs/EXTERNAL_WORLD_BOOTSTRAP_SPEC.md) describe intended work as well as current code; they are not a list of shipped features. [AGENTS.md](AGENTS.md) contains repository engineering guidance.
-
-The Cargo package and binary are named `chantels-corner`, and new carts use the `chantels_cart_key` browser cookie. The original applied migration, archived static prototype, and local repository path retain legacy naming for migration integrity or historical context. These are not the customer-facing brand.
+The active application is Rust and PostgreSQL. `legacy-demo/` preserves an archived static prototype. Architecture and infrastructure specifications include planned work; this README describes the current demo scope.

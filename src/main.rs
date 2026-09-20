@@ -1,11 +1,13 @@
 use std::net::SocketAddr;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+mod account_email;
 mod app;
 mod auth;
 mod brand;
 mod cart;
 mod db;
+mod email;
 mod errors;
 mod handlers;
 mod models;
@@ -15,6 +17,10 @@ mod ui;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::args().nth(1).as_deref() == Some("--render-email-previews") {
+        render_email_previews()?;
+        return Ok(());
+    }
     db::load_runtime_env();
 
     // Set up logging
@@ -38,7 +44,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     session_store.migrate().await?;
     tracing::info!("Session store migrated successfully");
 
-    let app = app::build_router(app::AppState { db });
+    let email = std::sync::Arc::new(email::EmailService::from_env(
+        std::env::var("APP_ENV").unwrap_or_default() == "production",
+    )?);
+    let _email_worker = email.clone().spawn_worker(db.clone());
+    let app = app::build_router(app::AppState { db, email });
 
     // Bind and start the server
     let addr = listen_address(
@@ -48,8 +58,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("{} listening on http://{}", brand::STORE_NAME, addr);
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
 
+    Ok(())
+}
+
+fn render_email_previews() -> Result<(), Box<dyn std::error::Error>> {
+    let output = std::path::Path::new("docs/email-previews");
+    std::fs::create_dir_all(output)?;
+    for (name, kind) in [
+        ("verification", email::EmailKind::Verification),
+        ("password-reset", email::EmailKind::PasswordReset),
+        ("password-changed", email::EmailKind::PasswordChanged),
+    ] {
+        let (html, plain) = email::render_preview(
+            kind,
+            "#preview-only",
+            "../../assets/email/chantels-corner-header.jpg",
+        )?;
+        std::fs::write(output.join(format!("{name}.html")), html)?;
+        std::fs::write(output.join(format!("{name}.txt")), plain)?;
+    }
+    println!("Email previews written to docs/email-previews; no email sent.");
     Ok(())
 }
 

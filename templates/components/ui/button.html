@@ -2,10 +2,12 @@
   type="{{ button.button_type }}"
   {% if !button.aria_label.is_empty() %}aria-label="{{ button.aria_label }}"{% endif %}
   {% if !button.data_action.is_empty() %}data-action="{{ button.data_action }}"{% endif %}
+  {% if !button.analytics.click_event.is_empty() %}
   data-book-id="{{ button.target_id }}"
   data-track-click="{{ button.analytics.click_event }}"
   data-source="{{ button.analytics.source }}"
   data-target-type="{{ button.analytics.target_type }}"
   data-target-id="{{ button.analytics.target_id }}"
+  {% endif %}
   {% if button.htmx.enabled %}hx-post="{{ button.htmx.post_url }}" {% if !button.htmx.vals.is_empty() %}hx-vals='{{ button.htmx.vals }}'{% endif %} {% if !button.htmx.headers.is_empty() %}hx-headers='{{ button.htmx.headers }}'{% endif %} {% if !button.htmx.sync.is_empty() %}hx-sync="{{ button.htmx.sync }}"{% endif %} hx-target="{{ button.htmx.target }}" hx-swap="{{ button.htmx.swap }}"{% endif %}
   {% if button.disabled %}disabled aria-disabled="true"{% endif %}>{{ button.label }}</button>

@@ -9,9 +9,13 @@ use tower_sessions::Session;
 use uuid::Uuid;
 
 const USER_SESSION_KEY: &str = "user_id";
+pub const PASSWORD_MIN_LENGTH: usize = 6;
+pub const PASSWORD_MAX_LENGTH: usize = 128;
 
 #[derive(thiserror::Error, Debug)]
 pub enum AuthError {
+    #[error("Email service unavailable")]
+    EmailUnavailable,
     #[error("Database error: {0}")]
     Db(#[from] sqlx::Error),
     #[error("Session error: {0}")]
@@ -27,34 +31,56 @@ pub enum AuthError {
 }
 
 pub async fn hash_password(password: Secret<String>) -> Result<String, AuthError> {
-    let salt = SaltString::generate(&mut OsRng);
-    let argon2 = Argon2::default();
-    let password_hash = argon2
-        .hash_password(password.expose_secret().as_bytes(), &salt)
-        .map_err(|e| AuthError::HashError(e.to_string()))?
-        .to_string();
-    Ok(password_hash)
+    static HASH_SLOTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(4);
+    let _slot = HASH_SLOTS
+        .acquire()
+        .await
+        .map_err(|_| AuthError::HashError("worker unavailable".into()))?;
+    tokio::task::spawn_blocking(move || {
+        Argon2::default()
+            .hash_password(
+                password.expose_secret().as_bytes(),
+                &SaltString::generate(&mut OsRng),
+            )
+            .map(|h| h.to_string())
+            .map_err(|_| AuthError::HashError("hash failed".into()))
+    })
+    .await
+    .map_err(|_| AuthError::HashError("worker failed".into()))?
 }
 
 pub async fn verify_password(
     password: Secret<String>,
     password_hash: &str,
 ) -> Result<bool, AuthError> {
-    let expected_password_hash =
-        PasswordHash::new(password_hash).map_err(|e| AuthError::HashError(e.to_string()))?;
-    let argon2 = Argon2::default();
-    Ok(argon2
-        .verify_password(password.expose_secret().as_bytes(), &expected_password_hash)
-        .is_ok())
+    static VERIFY_SLOTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(4);
+    let _slot = VERIFY_SLOTS
+        .acquire()
+        .await
+        .map_err(|_| AuthError::HashError("worker unavailable".into()))?;
+    let hash = password_hash.to_owned();
+    tokio::task::spawn_blocking(move || {
+        let parsed =
+            PasswordHash::new(&hash).map_err(|_| AuthError::HashError("invalid hash".into()))?;
+        Ok(Argon2::default()
+            .verify_password(password.expose_secret().as_bytes(), &parsed)
+            .is_ok())
+    })
+    .await
+    .map_err(|_| AuthError::HashError("worker failed".into()))?
 }
 
 pub async fn register_user(
     db: &PgPool,
+    mail: &crate::email::EmailService,
     first_name: &str,
     last_name: &str,
     email: &str,
     password: Secret<String>,
 ) -> Result<User, AuthError> {
+    if !mail.available() {
+        return Err(AuthError::EmailUnavailable);
+    }
     let first_name = required_profile_text(first_name, 80, "First name")?;
     let last_name = required_profile_text(last_name, 80, "Last name")?;
     let full_name = joined_full_name(Some(&first_name), Some(&last_name));
@@ -123,6 +149,9 @@ pub async fn register_user(
     .execute(&mut *tx)
     .await?;
 
+    crate::account_email::issue(&mut tx, mail, &id, "verify_email", &email, 0)
+        .await
+        .map_err(|_| AuthError::EmailUnavailable)?;
     tx.commit().await?;
 
     Ok(user)
@@ -150,6 +179,7 @@ pub async fn login_user(
             u.address_state,
             u.address_postal_code,
             u.marketing_opt_in,
+            u.auth_version,
             pc.password_hash
         FROM users u
         JOIN password_credentials pc ON pc.user_id = u.id
@@ -165,6 +195,7 @@ pub async fn login_user(
         None => return Err(AuthError::InvalidCredentials),
     };
 
+    let version: i64 = record.try_get("auth_version")?;
     let password_hash: String = record.try_get("password_hash")?;
     let id: String = record.try_get("id")?;
     let db_email: String = record.try_get("email")?;
@@ -198,14 +229,20 @@ pub async fn login_user(
         marketing_opt_in,
     };
 
-    sign_in_user(session, &user.id).await?;
+    let unchanged: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users u JOIN password_credentials p ON p.user_id=u.id WHERE u.id=$1 AND u.auth_version=$2 AND p.password_hash=$3)")
+        .bind(&user.id).bind(version).bind(&password_hash).fetch_one(db).await?;
+    if !unchanged {
+        return Err(AuthError::InvalidCredentials);
+    }
+    sign_in_user(session, &user.id, version).await?;
 
     Ok(user)
 }
 
-pub async fn sign_in_user(session: &Session, user_id: &str) -> Result<(), AuthError> {
+pub async fn sign_in_user(session: &Session, user_id: &str, version: i64) -> Result<(), AuthError> {
     session.cycle_id().await?;
     session.insert(USER_SESSION_KEY, user_id).await?;
+    session.insert("auth_version", version).await?;
     Ok(())
 }
 
@@ -214,6 +251,10 @@ pub async fn logout_user(session: &Session) {
 }
 
 pub async fn get_current_user(db: &PgPool, session: &Session) -> Result<Option<User>, sqlx::Error> {
+    let version: Option<i64> = session.get("auth_version").await.unwrap_or(None);
+    let Some(version) = version else {
+        return Ok(None);
+    };
     let user_id: Option<String> = session.get(USER_SESSION_KEY).await.unwrap_or(None);
     match user_id {
         Some(id) => {
@@ -233,10 +274,11 @@ pub async fn get_current_user(db: &PgPool, session: &Session) -> Result<Option<U
                     address_postal_code,
                     marketing_opt_in
                 FROM users
-                WHERE id = $1
+                WHERE id = $1 AND auth_version = $2
                 "#,
             )
             .bind(&id)
+            .bind(version)
             .fetch_optional(db)
             .await?;
             Ok(user)
@@ -264,6 +306,15 @@ pub async fn update_user_profile(
     input: ProfileUpdate<'_>,
 ) -> Result<User, AuthError> {
     let email = normalize_email(input.email)?;
+    let current: String = sqlx::query_scalar("SELECT email FROM users WHERE id=$1")
+        .bind(user_id)
+        .fetch_one(db)
+        .await?;
+    if email != current {
+        return Err(AuthError::Validation(
+            "Use Login & Security to confirm a new email address.".into(),
+        ));
+    }
     let first_name = optional_profile_text(input.first_name, 80, "First name")?;
     let last_name = optional_profile_text(input.last_name, 80, "Last name")?;
     let full_name = joined_full_name(first_name.as_deref(), last_name.as_deref());
@@ -291,7 +342,7 @@ pub async fn update_user_profile(
             address_postal_code = $11,
             marketing_opt_in = $12,
             updated_at = now()
-        WHERE id = $1
+        WHERE id = $1 AND email = $5
         RETURNING
             id,
             email,
@@ -329,18 +380,48 @@ pub async fn update_user_profile(
     }
 }
 
-fn normalize_email(email: &str) -> Result<String, AuthError> {
+pub fn normalize_email(email: &str) -> Result<String, AuthError> {
     let email = email.trim().to_lowercase();
-    if email.is_empty() || email.len() > 254 || !email.contains('@') {
+    if email.is_empty() || email.len() > 254 || !validator::validate_email(&email) {
         return Err(AuthError::Validation("Enter a valid email address.".into()));
     }
     Ok(email)
 }
 
-fn validate_password(password: &str) -> Result<(), AuthError> {
-    if password.len() < 8 {
+pub fn validate_password(password: &str) -> Result<(), AuthError> {
+    let length = password.chars().count();
+    if length < PASSWORD_MIN_LENGTH {
+        return Err(AuthError::Validation("Use at least 6 characters.".into()));
+    }
+    if length > PASSWORD_MAX_LENGTH {
+        return Err(AuthError::Validation("Use 128 characters or fewer.".into()));
+    }
+    let categories = [
+        password.chars().any(|c| c.is_ascii_uppercase()),
+        password.chars().any(|c| c.is_ascii_lowercase()),
+        password.chars().any(|c| c.is_ascii_digit()),
+        password.chars().any(|c| !c.is_alphanumeric()),
+    ]
+    .into_iter()
+    .filter(|present| *present)
+    .count();
+    if categories < 3 {
         return Err(AuthError::Validation(
-            "Password must be at least 8 characters.".into(),
+            "Use at least 3 of these: uppercase letters, lowercase letters, numbers, or symbols."
+                .into(),
+        ));
+    }
+    let compact = password.to_lowercase();
+    static BLOCKLIST: std::sync::OnceLock<std::collections::HashSet<&'static str>> =
+        std::sync::OnceLock::new();
+    let blocklist = BLOCKLIST.get_or_init(|| {
+        include_str!("../data/security/common-passwords.txt")
+            .lines()
+            .collect()
+    });
+    if blocklist.contains(compact.as_str()) {
+        return Err(AuthError::Validation(
+            "Choose a less common password.".into(),
         ));
     }
     Ok(())
@@ -390,5 +471,21 @@ fn joined_full_name(first_name: Option<&str>, last_name: Option<&str>) -> Option
         None
     } else {
         Some(name)
+    }
+}
+
+#[cfg(test)]
+mod password_policy_tests {
+    #[test]
+    fn password_limits_count_characters_and_explain_the_specific_problem() {
+        use super::{validate_password, AuthError};
+        assert!(
+            matches!(validate_password("short"), Err(AuthError::Validation(s)) if s == "Use at least 6 characters.")
+        );
+        assert!(validate_password("Amazon1!").is_ok());
+        assert!(validate_password("abcdef").is_err());
+        assert!(
+            matches!(validate_password(&"界".repeat(129)), Err(AuthError::Validation(s)) if s == "Use 128 characters or fewer.")
+        );
     }
 }

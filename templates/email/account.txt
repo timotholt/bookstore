@@ -1,0 +1,14 @@
+CHANTEL’S CORNER — YOUR ONLINE BOOKSTORE
+
+{{ heading }}
+
+{{ message }}
+{% if has_action %}
+{{ button }}: {{ action_url }}
+
+{{ expiry }}
+{% endif %}
+{{ safety }}
+
+Chantel’s Corner bookstore
+{{ base_url }}
