@@ -107,6 +107,7 @@ async fn signup_template_response(
     let current_user = crate::auth::get_current_user(db, session).await?;
 
     Ok(SignupTemplate {
+        csrf: crate::account_email::csrf(&session).await,
         error_message,
         email,
         first_name,
@@ -128,10 +129,22 @@ async fn login_template_response(
     error_message: Option<String>,
     email: String,
 ) -> Result<Response, AppError> {
+    let error_message = if session
+        .remove::<bool>("reset_completed")
+        .await
+        .ok()
+        .flatten()
+        == Some(true)
+    {
+        Some("Your password was reset. Other sessions have been signed out. Sign in with your new password.".into())
+    } else {
+        error_message
+    };
     let chrome = store_chrome(db, session).await?;
     let current_user = crate::auth::get_current_user(db, session).await?;
 
     Ok(LoginTemplate {
+        csrf: crate::account_email::csrf(&session).await,
         error_message,
         email,
         genres: chrome.genres,
@@ -766,6 +779,8 @@ pub async fn signup_page(
 
 #[derive(Deserialize)]
 pub struct SignupForm {
+    #[serde(default)]
+    pub csrf: String,
     pub first_name: String,
     pub last_name: String,
     pub email: String,
@@ -775,6 +790,8 @@ pub struct SignupForm {
 
 #[derive(Deserialize)]
 pub struct AuthForm {
+    #[serde(default)]
+    pub csrf: String,
     pub email: String,
     pub password: secrecy::Secret<String>,
 }
@@ -782,11 +799,15 @@ pub struct AuthForm {
 pub async fn signup_action(
     State(state): State<AppState>,
     session: Session,
+    peer: Option<axum::extract::ConnectInfo<std::net::SocketAddr>>,
     headers: HeaderMap,
     Form(form): Form<SignupForm>,
 ) -> Result<Response, AppError> {
     use crate::auth::{register_user, AuthError};
 
+    if !crate::account_email::check_csrf(&session, &headers, &form.csrf).await {
+        return Ok(axum::http::StatusCode::FORBIDDEN.into_response());
+    }
     restore_cart_session(&headers, &session).await?;
 
     if form.email.trim().is_empty() {
@@ -813,8 +834,26 @@ pub async fn signup_action(
         .await;
     }
 
+    if !crate::account_email::signup_allowed(
+        &state.db,
+        &form.email.trim().to_lowercase(),
+        peer.map(|p| p.0),
+    )
+    .await
+    {
+        return signup_template_response(
+            &state.db,
+            &session,
+            Some("Too many requests. Please try again later.".into()),
+            form.email,
+            form.first_name,
+            form.last_name,
+        )
+        .await;
+    }
     match register_user(
         &state.db,
+        &state.email,
         &form.first_name,
         &form.last_name,
         form.email.trim(),
@@ -823,10 +862,21 @@ pub async fn signup_action(
     .await
     {
         Ok(user) => {
-            crate::auth::sign_in_user(&session, &user.id)
+            crate::auth::sign_in_user(&session, &user.id, 0)
                 .await
                 .map_err(|err| AppError::Validation(err.to_string()))?;
             Ok(axum::response::Redirect::to("/account/profile").into_response())
+        }
+        Err(AuthError::EmailUnavailable) => {
+            signup_template_response(
+                &state.db,
+                &session,
+                Some("Email is temporarily unavailable. Please try again later.".into()),
+                form.email,
+                form.first_name,
+                form.last_name,
+            )
+            .await
         }
         Err(AuthError::UserExists) => {
             signup_template_response(
@@ -882,6 +932,9 @@ pub async fn login_action(
 ) -> Result<Response, AppError> {
     use crate::auth::{login_user, AuthError};
 
+    if !crate::account_email::check_csrf(&session, &headers, &form.csrf).await {
+        return Ok(axum::http::StatusCode::FORBIDDEN.into_response());
+    }
     restore_cart_session(&headers, &session).await?;
 
     if form.email.trim().is_empty() {
@@ -941,6 +994,8 @@ async fn current_user_or_login(
 
 #[derive(Deserialize)]
 pub struct ProfileForm {
+    #[serde(default)]
+    pub csrf: String,
     pub first_name: String,
     pub last_name: String,
     pub email: String,
@@ -990,6 +1045,7 @@ pub async fn profile_page(
     let chrome = store_chrome(&state.db, &session).await?;
 
     Ok(AccountProfileTemplate {
+        csrf: crate::account_email::csrf(&session).await,
         current_user: Some(user.clone()),
         user,
         genres: chrome.genres,
@@ -1012,6 +1068,9 @@ pub async fn profile_action(
 ) -> Result<Response, AppError> {
     use crate::auth::{update_user_profile, AuthError, ProfileUpdate};
 
+    if !crate::account_email::check_csrf(&session, &headers, &form.csrf).await {
+        return Ok(axum::http::StatusCode::FORBIDDEN.into_response());
+    }
     restore_cart_session(&headers, &session).await?;
     let current_user = match current_user_or_login(&state.db, &session).await? {
         Ok(user) => user,
@@ -1038,6 +1097,7 @@ pub async fn profile_action(
     .await
     {
         Ok(user) => Ok(AccountProfileTemplate {
+            csrf: crate::account_email::csrf(&session).await,
             current_user: Some(user.clone()),
             user,
             genres: chrome.genres,
@@ -1051,6 +1111,7 @@ pub async fn profile_action(
         }
         .into_response()),
         Err(AuthError::UserExists) => Ok(AccountProfileTemplate {
+            csrf: crate::account_email::csrf(&session).await,
             current_user: Some(current_user.clone()),
             user: current_user,
             genres: chrome.genres,
@@ -1064,6 +1125,7 @@ pub async fn profile_action(
         }
         .into_response()),
         Err(AuthError::Validation(message)) => Ok(AccountProfileTemplate {
+            csrf: crate::account_email::csrf(&session).await,
             current_user: Some(current_user.clone()),
             user: current_user,
             genres: chrome.genres,
@@ -1079,6 +1141,7 @@ pub async fn profile_action(
         Err(err) => {
             tracing::error!("Profile update error: {:?}", err);
             Ok(AccountProfileTemplate {
+                csrf: crate::account_email::csrf(&session).await,
                 current_user: Some(current_user.clone()),
                 user: current_user,
                 genres: chrome.genres,
@@ -1157,6 +1220,7 @@ pub async fn preferences_page(
     let chrome = store_chrome(&state.db, &session).await?;
 
     Ok(AccountPreferencesTemplate {
+        csrf: crate::account_email::csrf(&session).await,
         current_user: Some(user.clone()),
         user,
         genres: chrome.genres,
@@ -1173,6 +1237,8 @@ pub async fn preferences_page(
 
 #[derive(Deserialize)]
 pub struct PreferencesForm {
+    #[serde(default)]
+    pub csrf: String,
     pub marketing_opt_in: Option<String>,
 }
 
@@ -1184,6 +1250,9 @@ pub async fn preferences_action(
 ) -> Result<Response, AppError> {
     use crate::auth::{update_user_profile, AuthError, ProfileUpdate};
 
+    if !crate::account_email::check_csrf(&session, &headers, &form.csrf).await {
+        return Ok(axum::http::StatusCode::FORBIDDEN.into_response());
+    }
     restore_cart_session(&headers, &session).await?;
     let current_user = match current_user_or_login(&state.db, &session).await? {
         Ok(user) => user,
@@ -1219,6 +1288,7 @@ pub async fn preferences_action(
     .await
     {
         Ok(user) => Ok(AccountPreferencesTemplate {
+            csrf: crate::account_email::csrf(&session).await,
             current_user: Some(user.clone()),
             user,
             genres: chrome.genres,
@@ -1232,6 +1302,7 @@ pub async fn preferences_action(
         }
         .into_response()),
         Err(AuthError::Validation(message)) => Ok(AccountPreferencesTemplate {
+            csrf: crate::account_email::csrf(&session).await,
             current_user: Some(current_user.clone()),
             user: current_user,
             genres: chrome.genres,
@@ -1247,6 +1318,7 @@ pub async fn preferences_action(
         Err(err) => {
             tracing::error!("Preferences update error: {:?}", err);
             Ok(AccountPreferencesTemplate {
+                csrf: crate::account_email::csrf(&session).await,
                 current_user: Some(current_user.clone()),
                 user: current_user,
                 genres: chrome.genres,

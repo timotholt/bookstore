@@ -11,15 +11,53 @@ use crate::handlers;
 #[derive(Clone)]
 pub struct AppState {
     pub db: DbPool,
+    pub email: std::sync::Arc<crate::email::EmailService>,
 }
 
 pub fn build_router(state: AppState) -> Router {
     let session_store = tower_sessions_sqlx_store::PostgresStore::new(state.db.clone());
     let session_layer = SessionManagerLayer::new(session_store)
         .with_secure(std::env::var("APP_ENV").unwrap_or_default() == "production")
-        .with_same_site(SameSite::Lax);
+        .with_same_site(SameSite::Lax)
+        .with_expiry(tower_sessions::Expiry::OnInactivity(
+            tower_sessions::cookie::time::Duration::days(7),
+        ));
 
     Router::new()
+        .route(
+            "/webhooks/resend",
+            post(crate::account_email::resend_webhook)
+                .layer(axum::extract::DefaultBodyLimit::max(65536)),
+        )
+        .route(
+            "/forgot-password",
+            get(crate::account_email::forgot_get).post(crate::account_email::forgot_post),
+        )
+        .route(
+            "/reset-password",
+            get(crate::account_email::reset_get).post(crate::account_email::reset_post),
+        )
+        .route(
+            "/verify-email",
+            get(crate::account_email::verify_get).post(crate::account_email::verify_post),
+        )
+        .route(
+            "/confirm-email-change",
+            get(crate::account_email::change_get).post(crate::account_email::change_post),
+        )
+        .route(
+            "/account/verification",
+            get(crate::account_email::verification_get),
+        )
+        .route(
+            "/account/verification/resend",
+            post(crate::account_email::resend_post),
+        )
+        .route(
+            "/account/email-change",
+            get(crate::account_email::email_change_get)
+                .post(crate::account_email::email_change_post),
+        )
         .route("/healthz", get(handlers::healthz))
         .route("/readyz", get(handlers::readyz))
         .route("/events", post(handlers::record_event))
@@ -84,6 +122,7 @@ pub fn build_router(state: AppState) -> Router {
         .nest_service("/assets", ServeDir::new("assets"))
         .route_service("/app.js", ServeFile::new("app.js"))
         .route_service("/styles.css", ServeFile::new("styles.css"))
+        .layer(axum::extract::DefaultBodyLimit::max(16384))
         .layer(session_layer)
         .with_state(state)
 }
@@ -175,12 +214,51 @@ mod tests {
         format!("\"{}\"", ident.replace('"', "\"\""))
     }
 
+    async fn csrf_form(app: &Router, path: &str, cookie: Option<&str>) -> (String, String) {
+        let mut req = Request::builder().uri(path);
+        if let Some(c) = cookie {
+            req = req.header(header::COOKIE, c);
+        }
+        let response = app
+            .clone()
+            .oneshot(req.body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let new_cookie = response
+            .headers()
+            .get_all(header::SET_COOKIE)
+            .iter()
+            .filter_map(|v| v.to_str().ok())
+            .find(|v| v.starts_with("id="))
+            .map(|v| v.split(';').next().unwrap().to_owned())
+            .unwrap_or_else(|| cookie.unwrap_or("").to_owned());
+        let body = response_body(response).await;
+        let token = body
+            .split("name=\"csrf\" value=\"")
+            .nth(1)
+            .expect("CSRF input")
+            .split('"')
+            .next()
+            .unwrap()
+            .to_owned();
+        (new_cookie, token)
+    }
+
     fn test_app(db: DbPool) -> Router {
-        build_router(AppState { db })
+        build_router(AppState {
+            db,
+            email: std::sync::Arc::new(crate::email::EmailService::test_capture()),
+        })
     }
 
     fn test_app_with_db(db: DbPool) -> (Router, DbPool) {
-        (build_router(AppState { db: db.clone() }), db)
+        (
+            build_router(AppState {
+                db: db.clone(),
+                email: std::sync::Arc::new(crate::email::EmailService::test_capture()),
+            }),
+            db,
+        )
     }
 
     async fn response_body(response: axum::response::Response) -> String {
@@ -454,15 +532,18 @@ mod tests {
         let db = test_db.pool();
         let (app, db) = test_app_with_db(db);
 
+        let (signup_cookie, signup_csrf) = csrf_form(&app, "/signup", None).await;
         let signup_response = app
             .clone()
             .oneshot(
                 Request::builder()
                     .method("POST")
                     .uri("/signup")
+                    .header(header::COOKIE,signup_cookie)
+                    .header(header::ORIGIN,std::env::var("PUBLIC_BASE_URL").unwrap_or_else(|_| "https://www.chantelscorner.com".into()))
                     .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
                     .body(Body::from(
-                        "first_name=Taylor&last_name=Reader&email=reader%40example.com&password=correcthorse&password_confirm=correcthorse",
+                        format!("first_name=Taylor&last_name=Reader&email=reader%40example.com&password=uniquehorsebookstore27&password_confirm=uniquehorsebookstore27&csrf={signup_csrf}"),
                     ))
                     .unwrap(),
             )
@@ -496,15 +577,17 @@ mod tests {
         assert!(profile_body.contains("reader@example.com"));
         assert!(profile_body.contains("Profile"));
 
+        let (_, profile_csrf) = csrf_form(&app, "/account/profile", Some(&cookie)).await;
         let update_response = app
             .oneshot(
                 Request::builder()
                     .method("POST")
                     .uri("/account/profile")
+                    .header(header::ORIGIN,std::env::var("PUBLIC_BASE_URL").unwrap_or_else(|_| "https://www.chantelscorner.com".into()))
                     .header(header::COOKIE, cookie)
                     .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
                     .body(Body::from(
-                        "first_name=Taylor&last_name=Reader&email=taylor%40example.com&phone_number=555-0101&address_line1=123%20Book%20St&address_line2=Apt%204&address_city=La%20Habra&address_state=CA&address_postal_code=90631&marketing_opt_in=yes",
+                        format!("first_name=Taylor&last_name=Reader&email=reader%40example.com&phone_number=555-0101&address_line1=123%20Book%20St&address_line2=Apt%204&address_city=La%20Habra&address_state=CA&address_postal_code=90631&marketing_opt_in=yes&csrf={profile_csrf}"),
                     ))
                     .unwrap(),
             )
@@ -543,7 +626,7 @@ mod tests {
                 address_postal_code,
                 marketing_opt_in
             FROM users
-            WHERE email = 'taylor@example.com'
+            WHERE email = 'reader@example.com'
             "#,
         )
         .fetch_one(&db)
@@ -552,7 +635,7 @@ mod tests {
 
         assert_eq!(row.0.as_deref(), Some("Taylor"));
         assert_eq!(row.1.as_deref(), Some("Reader"));
-        assert_eq!(row.2, "taylor@example.com");
+        assert_eq!(row.2, "reader@example.com");
         assert_eq!(row.3.as_deref(), Some("555-0101"));
         assert_eq!(row.4.as_deref(), Some("123 Book St"));
         assert_eq!(row.5.as_deref(), Some("Apt 4"));
@@ -568,15 +651,18 @@ mod tests {
         let db = test_db.pool();
         let app = test_app(db);
 
+        let (signup_cookie, signup_csrf) = csrf_form(&app, "/signup", None).await;
         let signup_response = app
             .clone()
             .oneshot(
                 Request::builder()
                     .method("POST")
                     .uri("/signup")
+                    .header(header::COOKIE,signup_cookie)
+                    .header(header::ORIGIN,std::env::var("PUBLIC_BASE_URL").unwrap_or_else(|_| "https://www.chantelscorner.com".into()))
                     .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
                     .body(Body::from(
-                        "first_name=Account&last_name=Reader&email=account%40example.com&password=correcthorse&password_confirm=correcthorse",
+                        format!("first_name=Account&last_name=Reader&email=account%40example.com&password=uniquehorsebookstore27&password_confirm=uniquehorsebookstore27&csrf={signup_csrf}"),
                     ))
                     .unwrap(),
             )
@@ -624,6 +710,391 @@ mod tests {
             let body = response_body(response).await;
             assert!(body.contains(expected), "{uri}: {body}");
         }
+    }
+
+    async fn post_form(
+        app: &Router,
+        path: &str,
+        cookie: &str,
+        body: String,
+    ) -> axum::response::Response {
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(path)
+                    .header(header::COOKIE, cookie)
+                    .header(header::ORIGIN, std::env::var("PUBLIC_BASE_URL").unwrap_or_else(|_| "https://www.chantelscorner.com".into()))
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+    async fn challenge_cookie(app: &Router, path: &str, token: &str) -> (String, String) {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("{path}?token={token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        assert_eq!(response.headers()["location"], path);
+        assert_eq!(response.headers()["referrer-policy"], "no-referrer");
+        let cookie = session_cookie(&response);
+        csrf_form(app, path, Some(&cookie)).await
+    }
+    async fn test_token(db: &DbPool, user: &str, email: &str, purpose: &str) -> String {
+        use sha2::{Digest, Sha256};
+        let token = crate::account_email::random_secret();
+        sqlx::query("INSERT INTO account_tokens(id,user_id,purpose,token_hash,target_email,auth_version,expires_at) SELECT $1,id,$3,$4,$5,auth_version,now()+interval '1 hour' FROM users WHERE id=$2")
+            .bind(uuid::Uuid::new_v4()).bind(user).bind(purpose).bind(format!("{:x}",Sha256::digest(token.as_bytes()))).bind(email).execute(db).await.unwrap();
+        token
+    }
+    #[tokio::test]
+    async fn account_email_security_lifecycle() {
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let app = test_app(db.clone());
+        let svc = crate::email::EmailService::test_capture();
+        let user = crate::auth::register_user(
+            &db,
+            &svc,
+            "Email",
+            "Reader",
+            "secure@example.com",
+            secrecy::Secret::new("bookstore-unique-old-password".into()),
+        )
+        .await
+        .unwrap();
+        let queued: i64 = sqlx::query_scalar("SELECT count(*) FROM email_outbox")
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_eq!(queued, 1);
+        let reset = test_token(&db, &user.id, &user.email, "reset_password").await;
+        let verify = test_token(&db, &user.id, &user.email, "verify_email").await;
+        let (verify_cookie, verify_csrf) = challenge_cookie(&app, "/verify-email", &verify).await;
+        let verified: bool =
+            sqlx::query_scalar("SELECT email_verified_at IS NOT NULL FROM users WHERE id=$1")
+                .bind(&user.id)
+                .fetch_one(&db)
+                .await
+                .unwrap();
+        assert!(!verified, "scanner GET must not verify");
+        let rejected = post_form(&app, "/verify-email", &verify_cookie, "csrf=wrong".into()).await;
+        assert_eq!(rejected.status(), StatusCode::FORBIDDEN);
+        let (second_cookie,second_csrf)=challenge_cookie(&app,"/verify-email",&verify).await;
+        let (first,second)=tokio::join!(post_form(&app,"/verify-email",&verify_cookie,format!("csrf={verify_csrf}")),post_form(&app,"/verify-email",&second_cookie,format!("csrf={second_csrf}")));
+        let replies=[response_body(first).await,response_body(second).await];
+        assert_eq!(replies.iter().filter(|r|r.contains("Email confirmed")).count(),1);
+        assert_eq!(replies.iter().filter(|r|r.contains("invalid or expired")).count(),1);
+        let replay = post_form(
+            &app,
+            "/verify-email",
+            &verify_cookie,
+            format!("csrf={verify_csrf}"),
+        )
+        .await;
+        assert!(response_body(replay).await.contains("invalid or expired"));
+        let (login_cookie, login_csrf) = csrf_form(&app, "/login", None).await;
+        let login=post_form(&app,"/login",&login_cookie,format!("email=secure%40example.com&password=bookstore-unique-old-password&csrf={login_csrf}")).await;
+        assert_eq!(login.status(), StatusCode::SEE_OTHER);
+        let authenticated = session_cookie(&login);
+        let (c1, t1) = challenge_cookie(&app, "/reset-password", &reset).await;
+        let (c2, t2) = challenge_cookie(&app, "/reset-password", &reset).await;
+        let form1=format!("csrf={t1}&password=bookstore-unique-new-password&password_confirm=bookstore-unique-new-password");
+        let form2=format!("csrf={t2}&password=bookstore-unique-new-password&password_confirm=bookstore-unique-new-password");
+        let (a, b) = tokio::join!(
+            post_form(&app, "/reset-password", &c1, form1),
+            post_form(&app, "/reset-password", &c2, form2)
+        );
+        assert_eq!(
+            [a.status(), b.status()]
+                .iter()
+                .filter(|s| **s == StatusCode::SEE_OTHER)
+                .count(),
+            1
+        );
+        let bodies = [response_body(a).await, response_body(b).await];
+        assert_eq!(
+            bodies
+                .iter()
+                .filter(|b| b.contains("invalid or expired"))
+                .count(),
+            1
+        );
+        let stale = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/account/security")
+                    .header(header::COOKIE, &authenticated)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(stale.status(), StatusCode::SEE_OTHER);
+        assert_eq!(stale.headers()["location"], "/login");
+        let row:(String,i64)=sqlx::query_as("SELECT p.password_hash,u.auth_version FROM password_credentials p JOIN users u ON u.id=p.user_id WHERE u.id=$1").bind(&user.id).fetch_one(&db).await.unwrap();
+        assert_eq!(row.1, 1);
+        assert!(!crate::auth::verify_password(
+            secrecy::Secret::new("bookstore-unique-old-password".into()),
+            &row.0
+        )
+        .await
+        .unwrap());
+        assert!(crate::auth::verify_password(
+            secrecy::Secret::new("bookstore-unique-new-password".into()),
+            &row.0
+        )
+        .await
+        .unwrap());
+        let no_login = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/account/security")
+                    .header(header::COOKIE, &c1)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(no_login.headers()["location"], "/login");
+    }
+    #[tokio::test]
+    async fn recovery_is_generic_and_expired_wrong_purpose_tokens_fail() {
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let app = test_app(db.clone());
+        let user = crate::auth::register_user(
+            &db,
+            &crate::email::EmailService::test_capture(),
+            "Email",
+            "Reader",
+            "known@example.com",
+            secrecy::Secret::new("bookstore-unique-old-password".into()),
+        )
+        .await
+        .unwrap();
+        let (c, t) = csrf_form(&app, "/forgot-password", None).await;
+        let known = post_form(
+            &app,
+            "/forgot-password",
+            &c,
+            format!("csrf={t}&email=known%40example.com"),
+        )
+        .await;
+        let unknown = post_form(
+            &app,
+            "/forgot-password",
+            &c,
+            format!("csrf={t}&email=unknown%40example.com"),
+        )
+        .await;
+        assert_eq!(known.status(), unknown.status());
+        assert_eq!(response_body(known).await, response_body(unknown).await);
+        let wrong = test_token(&db, &user.id, &user.email, "verify_email").await;
+        let (c, t) = challenge_cookie(&app, "/reset-password", &wrong).await;
+        let r=post_form(&app,"/reset-password",&c,format!("csrf={t}&password=bookstore-unique-new-password&password_confirm=bookstore-unique-new-password")).await;
+        assert!(response_body(r).await.contains("invalid or expired"));
+        sqlx::query(
+            "UPDATE account_tokens SET expires_at=now()-interval '1 second' WHERE user_id=$1",
+        )
+        .bind(&user.id)
+        .execute(&db)
+        .await
+        .unwrap();
+        let (c, t) = challenge_cookie(&app, "/verify-email", &wrong).await;
+        let r = post_form(&app, "/verify-email", &c, format!("csrf={t}")).await;
+        assert!(response_body(r).await.contains("invalid or expired"));
+        // Direct profile writes cannot bypass ownership confirmation.
+        let r = crate::auth::update_user_profile(
+            &db,
+            &user.id,
+            crate::auth::ProfileUpdate {
+                first_name: "Email",
+                last_name: "Reader",
+                email: "attacker@example.com",
+                phone_number: "",
+                address_line1: "",
+                address_line2: "",
+                address_city: "",
+                address_state: "",
+                address_postal_code: "",
+                marketing_opt_in: false,
+            },
+        )
+        .await;
+        assert!(r.is_err());
+    }
+
+    #[tokio::test]
+    async fn email_change_requires_reauthentication_and_confirmed_ownership() {
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let app = test_app(db.clone());
+        let user = crate::auth::register_user(
+            &db,
+            &crate::email::EmailService::test_capture(),
+            "Email",
+            "Reader",
+            "old@example.com",
+            secrecy::Secret::new("bookstore-unique-old-password".into()),
+        )
+        .await
+        .unwrap();
+        let (c, t) = csrf_form(&app, "/login", None).await;
+        let r = post_form(
+            &app,
+            "/login",
+            &c,
+            format!("csrf={t}&email=old%40example.com&password=bookstore-unique-old-password"),
+        )
+        .await;
+        let signed = session_cookie(&r);
+        let (c, t) = csrf_form(&app, "/account/email-change", Some(&signed)).await;
+        let failed = post_form(
+            &app,
+            "/account/email-change",
+            &c,
+            format!("csrf={t}&email=new%40example.com&password=incorrect-password"),
+        )
+        .await;
+        assert!(response_body(failed)
+            .await
+            .contains("Reauthentication failed"));
+        sqlx::query("DELETE FROM account_email_rate_limits")
+            .execute(&db)
+            .await
+            .unwrap();
+        let sent = post_form(
+            &app,
+            "/account/email-change",
+            &c,
+            format!("csrf={t}&email=new%40example.com&password=bookstore-unique-old-password"),
+        )
+        .await;
+        assert!(response_body(sent).await.contains("Check the new address"));
+        let email: String = sqlx::query_scalar("SELECT email FROM users WHERE id=$1")
+            .bind(&user.id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_eq!(email, "old@example.com");
+        let token = test_token(&db, &user.id, "new@example.com", "change_email").await;
+        let (c, t) = challenge_cookie(&app, "/confirm-email-change", &token).await;
+        let confirmed = post_form(&app, "/confirm-email-change", &c, format!("csrf={t}")).await;
+        assert!(response_body(confirmed).await.contains("Email confirmed"));
+        let row: (String, bool, i64) = sqlx::query_as(
+            "SELECT email,email_verified_at IS NOT NULL,auth_version FROM users WHERE id=$1",
+        )
+        .bind(&user.id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        assert_eq!(row, ("new@example.com".into(), true, 1));
+        let stale = post_form(&app, "/confirm-email-change", &c, format!("csrf={t}")).await;
+        assert!(response_body(stale).await.contains("invalid or expired"));
+        crate::auth::register_user(&db,&crate::email::EmailService::test_capture(),"Other","Reader","occupied@example.com",secrecy::Secret::new("bookstore-unique-old-password".into())).await.unwrap();
+        let collision=test_token(&db,&user.id,"occupied@example.com","change_email").await;
+        let(c,t)=challenge_cookie(&app,"/confirm-email-change",&collision).await;
+        let denied=post_form(&app,"/confirm-email-change",&c,format!("csrf={t}")).await;
+        assert!(response_body(denied).await.contains("invalid or expired"));
+        let unchanged:String=sqlx::query_scalar("SELECT email FROM users WHERE id=$1").bind(&user.id).fetch_one(&db).await.unwrap();assert_eq!(unchanged,"new@example.com");
+    }
+
+    #[tokio::test]
+    async fn account_mail_rollback_and_database_rate_limits() {
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let app = test_app(db.clone());
+        sqlx::query("CREATE FUNCTION fail_mail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'intentional test failure'; END $$").execute(&db).await.unwrap();
+        sqlx::query("CREATE TRIGGER fail_mail BEFORE INSERT ON email_outbox FOR EACH ROW EXECUTE FUNCTION fail_mail()").execute(&db).await.unwrap();
+        let failed = crate::auth::register_user(
+            &db,
+            &crate::email::EmailService::test_capture(),
+            "Rollback",
+            "Reader",
+            "rollback@example.com",
+            secrecy::Secret::new("bookstore-unique-old-password".into()),
+        )
+        .await;
+        assert!(failed.is_err());
+        let users: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM users WHERE email='rollback@example.com'")
+                .fetch_one(&db)
+                .await
+                .unwrap();
+        assert_eq!(users, 0);
+        let tokens: i64 = sqlx::query_scalar("SELECT count(*) FROM account_tokens")
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_eq!(tokens, 0);
+        sqlx::query("DROP TRIGGER fail_mail ON email_outbox")
+            .execute(&db)
+            .await
+            .unwrap();
+        let user = crate::auth::register_user(
+            &db,
+            &crate::email::EmailService::test_capture(),
+            "Rate",
+            "Reader",
+            "rate@example.com",
+            secrecy::Secret::new("bookstore-unique-old-password".into()),
+        )
+        .await
+        .unwrap();
+        let (c, t) = csrf_form(&app, "/forgot-password", None).await;
+        let start = std::time::Instant::now();
+        let known = post_form(
+            &app,
+            "/forgot-password",
+            &c,
+            format!("csrf={t}&email=rate%40example.com"),
+        )
+        .await;
+        let known_time = start.elapsed();
+        let start = std::time::Instant::now();
+        let unknown = post_form(
+            &app,
+            "/forgot-password",
+            &c,
+            format!("csrf={t}&email=absent%40example.com"),
+        )
+        .await;
+        let unknown_time = start.elapsed();
+        assert_eq!(response_body(known).await, response_body(unknown).await);
+        assert!(
+            known_time.abs_diff(unknown_time) < std::time::Duration::from_millis(150),
+            "timing: {known_time:?} vs {unknown_time:?}"
+        );
+        let restarted = test_app(db.clone());
+        let _ = post_form(
+            &restarted,
+            "/forgot-password",
+            &c,
+            format!("csrf={t}&email=rate%40example.com"),
+        )
+        .await;
+        let resets: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM account_tokens WHERE user_id=$1 AND purpose='reset_password'",
+        )
+        .bind(&user.id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        assert_eq!(resets, 1, "recipient limiter survives router restart");
+        let raw:i64=sqlx::query_scalar("SELECT count(*) FROM account_email_rate_limits WHERE bucket LIKE '%example%' OR bucket LIKE '%127.%'").fetch_one(&db).await.unwrap();
+        assert_eq!(raw, 0);
     }
 
     #[tokio::test]
@@ -725,7 +1196,10 @@ mod tests {
             .await
             .unwrap();
         let cart_cookie = named_cookie(&add_response, cart::BROWSER_CART_KEY_COOKIE);
-        let restarted_app = build_router(AppState { db });
+        let restarted_app = build_router(AppState {
+            db,
+            email: std::sync::Arc::new(crate::email::EmailService::test_capture()),
+        });
 
         assert!(cart_cookie.starts_with("chantels_cart_key="));
         let legacy_cookie = cart_cookie.replacen("chantels_cart_key=", "davis_cart_key=", 1);
@@ -1132,7 +1606,10 @@ mod tests {
             .unwrap();
         assert_eq!(save_response.status(), StatusCode::OK);
 
-        let restarted_app = build_router(AppState { db: db.clone() });
+        let restarted_app = build_router(AppState {
+            db: db.clone(),
+            email: std::sync::Arc::new(crate::email::EmailService::test_capture()),
+        });
         let move_response = restarted_app
             .oneshot(
                 Request::builder()

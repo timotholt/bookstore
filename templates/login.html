@@ -14,6 +14,7 @@
     {% endif %}
 
     <form class="auth-form" method="post" action="/login">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
       <div class="auth-field">
         <label for="email">Email address</label>
         <input type="email" id="email" name="email" value="{{ email }}" required autocomplete="email" autofocus>
@@ -26,6 +27,7 @@
 
       <button type="submit" class="primary-button auth-submit">Sign In</button>
     </form>
+    <p><a href="/forgot-password">Forgot password?</a></p>
 
     <div class="auth-alt">
       <div class="auth-divider">

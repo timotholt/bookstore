@@ -135,6 +135,20 @@ pub struct ButtonView {
 }
 
 impl ButtonView {
+    pub fn form_submit(label: impl Into<String>) -> Self {
+        Self {
+            label: label.into(),
+            class_name: "primary-button auth-submit".into(),
+            button_type: "submit",
+            disabled: false,
+            data_action: String::new(),
+            target_id: String::new(),
+            aria_label: String::new(),
+            analytics: AnalyticsAttrs::click("", "", "", ""),
+            htmx: HtmxAttrs::none(),
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn tracked(
         label: impl Into<String>,

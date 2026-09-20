@@ -302,6 +302,7 @@ impl axum::response::IntoResponse for CatalogResultsTemplate {
 #[derive(Template)]
 #[template(path = "signup.html")]
 pub struct SignupTemplate {
+    pub csrf: String,
     pub error_message: Option<String>,
     pub email: String,
     pub first_name: String,
@@ -331,6 +332,7 @@ impl axum::response::IntoResponse for SignupTemplate {
 #[derive(Template)]
 #[template(path = "login.html")]
 pub struct LoginTemplate {
+    pub csrf: String,
     pub error_message: Option<String>,
     pub email: String,
     pub genres: Vec<String>,
@@ -358,6 +360,7 @@ impl axum::response::IntoResponse for LoginTemplate {
 #[derive(Template)]
 #[template(path = "account_profile.html")]
 pub struct AccountProfileTemplate {
+    pub csrf: String,
     pub user: crate::models::User,
     pub genres: Vec<String>,
     pub cart: CartView,
@@ -462,6 +465,7 @@ impl axum::response::IntoResponse for AccountOrdersTemplate {
 #[derive(Template)]
 #[template(path = "account_preferences.html")]
 pub struct AccountPreferencesTemplate {
+    pub csrf: String,
     pub user: crate::models::User,
     pub genres: Vec<String>,
     pub cart: CartView,

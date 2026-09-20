@@ -24,6 +24,7 @@
 
   <section class="account-panel">
     <form class="account-form" method="post" action="/account/preferences">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
       <label class="account-checkbox">
         <input type="checkbox" name="marketing_opt_in" value="yes" {% if user.marketing_opt_in %}checked{% endif %}>
         <span>Email me about used-book deals and pickup updates.</span>
