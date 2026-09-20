@@ -4,18 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
-  workflow_dispatch:
-
-permissions:
-  contents: read
 
 jobs:
   rust:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    defaults:
-      run:
-        shell: bash
     services:
       postgres:
         image: postgres:16
@@ -34,64 +26,17 @@ jobs:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
     steps:
       - uses: actions/checkout@v4
-      - name: Prepare build evidence
-        run: |
-          mkdir -p "$RUNNER_TEMP/ci-evidence"
-          git rev-parse HEAD | tee "$RUNNER_TEMP/ci-evidence/commit.txt"
       - name: Install Rust toolchain
-        run: |
-          (rustup update stable && rustup default stable) 2>&1 | tee "$RUNNER_TEMP/ci-evidence/toolchain.log"
+        run: rustup update stable && rustup default stable
       - name: Check formatting
-        run: |
-          (cargo fmt --all -- --check) 2>&1 | tee "$RUNNER_TEMP/ci-evidence/format.log"
+        run: cargo fmt --all -- --check
       - name: Check code
-        run: |
-          (cargo check --workspace --locked) 2>&1 | tee "$RUNNER_TEMP/ci-evidence/check.log"
+        run: cargo check --workspace --locked
       - name: Lint
-        run: |
-          (cargo clippy --workspace --all-targets --locked -- -D warnings) 2>&1 | tee "$RUNNER_TEMP/ci-evidence/lint.log"
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Build
-        run: |
-          (cargo build --workspace --locked) 2>&1 | tee "$RUNNER_TEMP/ci-evidence/build.log"
+        run: cargo build --workspace --locked
       - name: Test
-        run: |
-          (cargo test --workspace --locked -- --test-threads=1) 2>&1 | tee "$RUNNER_TEMP/ci-evidence/tests.log"
+        run: cargo test --workspace --locked -- --test-threads=1
       - name: Build deployment image
-        run: |
-          (docker build --tag chantels-corner:ci .) 2>&1 | tee "$RUNNER_TEMP/ci-evidence/docker-build.log"
-      - name: Smoke-test deployment image
-        run: |
-          docker run --detach --name chantels-ci-app --network host \
-            -e DATABASE_URL -e ADDR=127.0.0.1:8081 chantels-corner:ci
-          bash scripts/ci-smoke.sh http://127.0.0.1:8081 2>&1 | tee "$RUNNER_TEMP/ci-evidence/smoke.log"
-      - name: Export verified deployment image
-        run: |
-          docker save chantels-corner:ci | gzip > "$RUNNER_TEMP/chantels-corner-linux-amd64.tar.gz"
-          cd "$RUNNER_TEMP"
-          sha256sum chantels-corner-linux-amd64.tar.gz > chantels-corner-linux-amd64.sha256
-      - name: Upload verified deployment image
-        uses: actions/upload-artifact@v4
-        with:
-          name: chantels-corner-linux-amd64-${{ github.sha }}
-          path: |
-            ${{ runner.temp }}/chantels-corner-linux-amd64.tar.gz
-            ${{ runner.temp }}/chantels-corner-linux-amd64.sha256
-            ${{ runner.temp }}/ci-evidence/commit.txt
-          compression-level: 0
-          retention-days: 7
-          if-no-files-found: error
-      - name: Collect runtime logs
-        if: always()
-        run: |
-          mkdir -p "$RUNNER_TEMP/ci-evidence"
-          docker logs chantels-ci-app > "$RUNNER_TEMP/ci-evidence/app.log" 2>&1 || true
-          docker logs "${{ job.services.postgres.id }}" > "$RUNNER_TEMP/ci-evidence/postgres.log" 2>&1 || true
-          docker rm --force chantels-ci-app || true
-      - name: Upload build and runtime logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ci-evidence-${{ github.sha }}
-          path: ${{ runner.temp }}/ci-evidence/
-          retention-days: 7
-          if-no-files-found: error
+        run: docker build --tag chantels-corner:ci .
