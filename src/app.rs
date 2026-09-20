@@ -944,7 +944,32 @@ mod tests {
         assert_eq!(known.status(), unknown.status());
         assert_eq!(response_body(known).await, response_body(unknown).await);
         let wrong = test_token(&db, &user.id, &user.email, "verify_email").await;
-        let (c, t) = challenge_cookie(&app, "/reset-password", &wrong).await;
+        let landing = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/reset-password?token={wrong}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let cookie = session_cookie(&landing);
+        let rejected = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/reset-password")
+                    .header(header::COOKIE, &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let html = response_body(rejected).await;
+        assert!(html.contains("invalid or expired"));
+        assert!(!html.contains("name=\"password\""));
+        let (c, t) = csrf_form(&app, "/forgot-password", Some(&cookie)).await;
         let r=post_form(&app,"/reset-password",&c,format!("csrf={t}&password=bookstore-unique-new-password&password_confirm=bookstore-unique-new-password")).await;
         assert!(response_body(r).await.contains("invalid or expired"));
         sqlx::query(
