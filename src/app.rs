@@ -1116,6 +1116,8 @@ mod tests {
         .await;
         let unknown_time = start.elapsed();
         assert_eq!(response_body(known).await, response_body(unknown).await);
+        assert!(known_time >= std::time::Duration::from_secs(1));
+        assert!(unknown_time >= std::time::Duration::from_secs(1));
         assert!(
             known_time.abs_diff(unknown_time) < std::time::Duration::from_millis(150),
             "timing: {known_time:?} vs {unknown_time:?}"

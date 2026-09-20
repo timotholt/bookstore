@@ -351,6 +351,7 @@ pub async fn forgot_post(
         )
         .await;
     }
+    let started = tokio::time::Instant::now();
     let source = peer
         .map(|p| p.0.ip().to_string())
         .unwrap_or_else(|| "unknown".into());
@@ -358,9 +359,9 @@ pub async fn forgot_post(
         .await
         .unwrap_or(false)
     {
+        tokio::time::sleep_until(started + std::time::Duration::from_secs(1)).await;
         return message(&session, GENERIC).await;
     }
-    let started = tokio::time::Instant::now();
     // Commit before acknowledging. The encrypted outbox survives process termination.
     let result=async {
         let Ok(email)=crate::auth::normalize_email(&f.email) else{return Ok(());};
@@ -377,7 +378,8 @@ pub async fn forgot_post(
     if result.is_err() {
         tracing::warn!("Password recovery enqueue failed");
     }
-    tokio::time::sleep_until(started + std::time::Duration::from_millis(350)).await;
+    // Include source limiting and all database work in the same response floor.
+    tokio::time::sleep_until(started + std::time::Duration::from_secs(1)).await;
     message(&session, GENERIC).await
 }
 
