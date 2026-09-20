@@ -1,14 +1,14 @@
 use std::net::SocketAddr;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-mod app;
 mod account_email;
+mod app;
 mod auth;
 mod brand;
 mod cart;
 mod db;
-mod errors;
 mod email;
+mod errors;
 mod handlers;
 mod models;
 mod store;
@@ -58,7 +58,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("{} listening on http://{}", brand::STORE_NAME, addr);
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
 }

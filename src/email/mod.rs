@@ -373,7 +373,9 @@ impl EmailService {
             reply_to: self.reply_to.clone(),
             attachments: vec![InlineImage {
                 filename: "chantels-corner-header.jpg".into(),
-                content: STANDARD.encode(include_bytes!("../../assets/email/chantels-corner-header.jpg")),
+                content: STANDARD.encode(include_bytes!(
+                    "../../assets/email/chantels-corner-header.jpg"
+                )),
                 content_id: "chantels-corner-header".into(),
                 content_type: "image/jpeg".into(),
             }],

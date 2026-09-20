@@ -724,7 +724,11 @@ mod tests {
                     .method("POST")
                     .uri(path)
                     .header(header::COOKIE, cookie)
-                    .header(header::ORIGIN, std::env::var("PUBLIC_BASE_URL").unwrap_or_else(|_| "https://www.chantelscorner.com".into()))
+                    .header(
+                        header::ORIGIN,
+                        std::env::var("PUBLIC_BASE_URL")
+                            .unwrap_or_else(|_| "https://www.chantelscorner.com".into()),
+                    )
                     .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
                     .body(Body::from(body))
                     .unwrap(),
@@ -789,11 +793,36 @@ mod tests {
         assert!(!verified, "scanner GET must not verify");
         let rejected = post_form(&app, "/verify-email", &verify_cookie, "csrf=wrong".into()).await;
         assert_eq!(rejected.status(), StatusCode::FORBIDDEN);
-        let (second_cookie,second_csrf)=challenge_cookie(&app,"/verify-email",&verify).await;
-        let (first,second)=tokio::join!(post_form(&app,"/verify-email",&verify_cookie,format!("csrf={verify_csrf}")),post_form(&app,"/verify-email",&second_cookie,format!("csrf={second_csrf}")));
-        let replies=[response_body(first).await,response_body(second).await];
-        assert_eq!(replies.iter().filter(|r|r.contains("Email confirmed")).count(),1);
-        assert_eq!(replies.iter().filter(|r|r.contains("invalid or expired")).count(),1);
+        let (second_cookie, second_csrf) = challenge_cookie(&app, "/verify-email", &verify).await;
+        let (first, second) = tokio::join!(
+            post_form(
+                &app,
+                "/verify-email",
+                &verify_cookie,
+                format!("csrf={verify_csrf}")
+            ),
+            post_form(
+                &app,
+                "/verify-email",
+                &second_cookie,
+                format!("csrf={second_csrf}")
+            )
+        );
+        let replies = [response_body(first).await, response_body(second).await];
+        assert_eq!(
+            replies
+                .iter()
+                .filter(|r| r.contains("Email confirmed"))
+                .count(),
+            1
+        );
+        assert_eq!(
+            replies
+                .iter()
+                .filter(|r| r.contains("invalid or expired"))
+                .count(),
+            1
+        );
         let replay = post_form(
             &app,
             "/verify-email",
@@ -1003,12 +1032,26 @@ mod tests {
         assert_eq!(row, ("new@example.com".into(), true, 1));
         let stale = post_form(&app, "/confirm-email-change", &c, format!("csrf={t}")).await;
         assert!(response_body(stale).await.contains("invalid or expired"));
-        crate::auth::register_user(&db,&crate::email::EmailService::test_capture(),"Other","Reader","occupied@example.com",secrecy::Secret::new("bookstore-unique-old-password".into())).await.unwrap();
-        let collision=test_token(&db,&user.id,"occupied@example.com","change_email").await;
-        let(c,t)=challenge_cookie(&app,"/confirm-email-change",&collision).await;
-        let denied=post_form(&app,"/confirm-email-change",&c,format!("csrf={t}")).await;
+        crate::auth::register_user(
+            &db,
+            &crate::email::EmailService::test_capture(),
+            "Other",
+            "Reader",
+            "occupied@example.com",
+            secrecy::Secret::new("bookstore-unique-old-password".into()),
+        )
+        .await
+        .unwrap();
+        let collision = test_token(&db, &user.id, "occupied@example.com", "change_email").await;
+        let (c, t) = challenge_cookie(&app, "/confirm-email-change", &collision).await;
+        let denied = post_form(&app, "/confirm-email-change", &c, format!("csrf={t}")).await;
         assert!(response_body(denied).await.contains("invalid or expired"));
-        let unchanged:String=sqlx::query_scalar("SELECT email FROM users WHERE id=$1").bind(&user.id).fetch_one(&db).await.unwrap();assert_eq!(unchanged,"new@example.com");
+        let unchanged: String = sqlx::query_scalar("SELECT email FROM users WHERE id=$1")
+            .bind(&user.id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_eq!(unchanged, "new@example.com");
     }
 
     #[tokio::test]
