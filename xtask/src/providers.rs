@@ -71,7 +71,7 @@ pub fn plan_neon_setup(
             "neon",
             "missing",
             "Neon setup cannot inspect or rebuild provider resources without NEON_API_KEY.",
-            "Add NEON_API_KEY to setup/.secrets.demo.env or import it from a recovery email with `cargo xtask external secrets import-email --from <path> --yes`.",
+            "Add NEON_API_KEY to .env or import it from a recovery email with `cargo xtask external secrets import-email --from <path> --yes`.",
         ));
         return report;
     }
@@ -164,7 +164,7 @@ fn apply_neon_setup(
         "neon.database_url.write",
         "neon",
         "written",
-        "Wrote Neon DATABASE_URL to setup/.secrets.demo.env.",
+        "Wrote Neon DATABASE_URL to .env.",
         "Value redacted.",
     ));
 
@@ -676,7 +676,7 @@ fn neon_post_json(api_key: &str, path: &str, body: &Value) -> Result<Value, Stri
 }
 
 fn write_demo_secret(root: &Path, key: &str, value: &str) -> Result<(), String> {
-    let path = root.join("setup/.secrets.demo.env");
+    let path = root.join(".env");
     let mut lines = match fs::read_to_string(&path) {
         Ok(contents) => contents
             .lines()
@@ -823,7 +823,7 @@ fn validate_neon_readiness(env_store: &EnvStore) -> Vec<Finding> {
             "neon",
             "missing",
             "NEON_API_KEY is missing.",
-            "Add NEON_API_KEY to setup/.secrets.demo.env before enabling Neon API setup.",
+            "Add NEON_API_KEY to .env before enabling Neon API setup.",
         ));
     }
 
@@ -898,7 +898,7 @@ fn validate_railway_readiness(env_store: &EnvStore) -> Vec<Finding> {
             "railway",
             "missing",
             "RAILWAY_TOKEN is missing.",
-            "Add RAILWAY_TOKEN to setup/.secrets.demo.env before enabling Railway API setup.",
+            "Add RAILWAY_TOKEN to .env before enabling Railway API setup.",
         ));
     }
 
@@ -1060,13 +1060,13 @@ mod tests {
         let root = temp_dir("write_demo_secret");
         fs::create_dir_all(root.join("setup")).unwrap();
         fs::write(
-            root.join("setup/.secrets.demo.env"),
+            root.join(".env"),
             "NEON_API_KEY=redacted\nDATABASE_URL=old\n",
         )
         .unwrap();
 
         write_demo_secret(&root, "DATABASE_URL", "postgresql://new?sslmode=require").unwrap();
-        let contents = fs::read_to_string(root.join("setup/.secrets.demo.env")).unwrap();
+        let contents = fs::read_to_string(root.join(".env")).unwrap();
 
         assert_eq!(contents.matches("DATABASE_URL=").count(), 1);
         assert!(contents.contains("DATABASE_URL=postgresql://new?sslmode=require"));

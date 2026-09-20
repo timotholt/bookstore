@@ -14,7 +14,7 @@ The external setup and validation automation model is defined in [EXTERNAL_WORLD
 
 1. The repository must contain the full system shape: application code, migrations, examples, bootstrap scripts, smoke tests, and runbooks.
 2. The repository must never contain plaintext passwords, API keys, connection strings, session keys, Stripe secrets, or provider tokens.
-3. Runtime secrets live in the systems that need them: Railway environment variables, Neon project credentials, Stripe webhook secrets, and local `.env.local` files.
+3. Runtime secrets live in the systems that need them: Railway environment variables, Neon project credentials, Stripe webhook secrets, and the local ignored `.env` file.
 4. Account ownership belongs to `timotholt@gmail.com`.
 5. Recovery material must be simple enough to use under pressure. If Railway or Neon needs to be replaced, the repo plus the recovery packet should be enough to rebuild.
 6. The demo should be reproducible in under 10 minutes after accounts and CLI authentication already exist.
@@ -104,7 +104,7 @@ Allowed:
 - Railway environment variables
 - Neon provider dashboard
 - Stripe dashboard
-- Local `.env.local`, ignored by Git
+- Local `.env`, ignored by Git
 - User-owned recovery packet outside the repository
 - Email sent by the account owner to themselves, if that is the chosen personal recovery system
 
@@ -371,7 +371,7 @@ The target rebuild workflow after accounts and CLIs are authenticated:
    - Railway CLI
    - Neon CLI, if used
    - Stripe CLI, optional for webhook testing
-3. Copy `infra/env.example` to `.env.local` for local work.
+3. Copy `infra/env.example` to `.env` for local work.
 4. Create or select Neon project/database.
 5. Run migrations.
 6. Create or select Railway project/service.

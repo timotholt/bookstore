@@ -29,31 +29,38 @@ fn unique_genres(books: &[BookCard]) -> Vec<String> {
     genres
 }
 
-fn unique_conditions(books: &[BookCard]) -> Vec<String> {
-    let mut conditions = Vec::new();
-    for b in books {
-        if !b.condition.is_empty() && !conditions.contains(&b.condition) {
-            conditions.push(b.condition.clone());
-        }
-    }
-    conditions.sort();
-    conditions
-}
-
-fn unique_formats(books: &[BookCard]) -> Vec<String> {
-    let mut formats = Vec::new();
-    for b in books {
-        if !b.format.is_empty() && !formats.contains(&b.format) {
-            formats.push(b.format.clone());
-        }
-    }
-    formats.sort();
-    formats
-}
-
 fn result_filters(filters: CatalogFilters, count: usize, total: usize) -> CatalogFilters {
     let mut out = filters;
-    out.result_text = format!("{} of {} items shown", count, total);
+    let per_page = out
+        .per_page
+        .filter(|value| matches!(value, 24 | 48 | 96))
+        .unwrap_or(24);
+    let total_pages = if total == 0 {
+        1
+    } else {
+        ((total as u32) + per_page - 1) / per_page
+    };
+    let page = out.page.unwrap_or(1).max(1).min(total_pages);
+    let first = if total == 0 {
+        0
+    } else {
+        ((page - 1) as usize * per_page as usize) + 1
+    };
+    let last = if total == 0 {
+        0
+    } else {
+        first + count.saturating_sub(1)
+    };
+    out.result_text = if total == 0 {
+        "No results".to_string()
+    } else if total == 1 {
+        "Showing 1 result".to_string()
+    } else {
+        format!("Showing {}–{} of {} results", first, last.min(total), total)
+    };
+    out.total_items = total;
+    out.total_pages = total_pages;
+    out.page = Some(page);
     out
 }
 
@@ -336,16 +343,23 @@ pub async fn home(
 pub async fn catalog(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Query(filters): Query<CatalogFilters>,
+    Query(mut filters): Query<CatalogFilters>,
 ) -> Result<impl IntoResponse, AppError> {
     let db = &state.db;
+    filters.page = Some(filters.page.unwrap_or(1).max(1));
+    filters.per_page = Some(
+        filters
+            .per_page
+            .filter(|value| matches!(value, 24 | 48 | 96))
+            .unwrap_or(24),
+    );
     let books = store::list_books(db, &filters).await?;
-    let all_books = store::list_books(db, &CatalogFilters::default()).await?;
+    let total = store::count_books(db, &filters).await? as usize;
 
     if headers.get("HX-Request").and_then(|v| v.to_str().ok()) == Some("true") {
         let template = CatalogResultsTemplate {
             catalog_cards: ui::product_cards(books.clone(), "catalog.results"),
-            filters: result_filters(filters, books.len(), all_books.len()),
+            filters: result_filters(filters, books.len(), total),
         };
         Ok(template.into_response())
     } else {
@@ -358,12 +372,20 @@ pub async fn search_page(
     State(state): State<AppState>,
     session: Session,
     headers: HeaderMap,
-    Query(filters): Query<CatalogFilters>,
+    Query(mut filters): Query<CatalogFilters>,
 ) -> Result<impl IntoResponse, AppError> {
     restore_cart_session(&headers, &session).await?;
     let db = &state.db;
+    filters.page = Some(filters.page.unwrap_or(1).max(1));
+    filters.per_page = Some(
+        filters
+            .per_page
+            .filter(|value| matches!(value, 24 | 48 | 96))
+            .unwrap_or(24),
+    );
     let books = store::list_books(db, &filters).await?;
-    let all_books = store::list_books(db, &CatalogFilters::default()).await?;
+    let total = store::count_books(db, &filters).await? as usize;
+    let (genres, conditions, formats) = store::catalog_facets(db).await?;
     let cart = cart::view(db, &session).await?;
     let cart_lines = ui::cart_lines(cart.lines.clone(), "#cartDrawer");
     let removed_notice = ui::removed_notice(
@@ -387,9 +409,9 @@ pub async fn search_page(
             )
         },
         query,
-        genres: unique_genres(&all_books),
-        conditions: unique_conditions(&all_books),
-        formats: unique_formats(&all_books),
+        genres,
+        conditions,
+        formats,
         show_new_checked,
         show_used_checked,
         min_rating,
@@ -399,7 +421,7 @@ pub async fn search_page(
         cart,
         cart_lines,
         removed_notice,
-        filters: result_filters(filters, books.len(), all_books.len()),
+        filters: result_filters(filters, books.len(), total),
         current_user: crate::auth::get_current_user(db, &session)
             .await
             .unwrap_or(None),

@@ -6,7 +6,7 @@
 
 You need a Rust toolchain with Cargo and a reachable PostgreSQL database. The database role must be able to create tables and the `tower_sessions` schema. This project does **not** support SQLite or silently fall back to another database.
 
-From the repository root, set a real connection string in your shell or in an ignored `.env` / `.env.local` file:
+From the repository root, set a real connection string in the ignored `.env` file:
 
 ```bash
 export DATABASE_URL='postgresql://USER:PASSWORD@HOST:5432/DATABASE'

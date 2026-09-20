@@ -12,8 +12,6 @@ pub struct EnvValue {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EnvSource {
     Process,
-    SecretsDemo,
-    DotEnvLocal,
     DotEnv,
 }
 
@@ -21,8 +19,6 @@ impl EnvSource {
     pub fn label(&self) -> &'static str {
         match self {
             EnvSource::Process => "process environment",
-            EnvSource::SecretsDemo => "setup/.secrets.demo.env",
-            EnvSource::DotEnvLocal => ".env.local",
             EnvSource::DotEnv => ".env",
         }
     }
@@ -36,16 +32,6 @@ impl EnvStore {
     pub fn load(root: &Path) -> Self {
         let mut values = BTreeMap::new();
         load_file(&root.join(".env"), EnvSource::DotEnv, &mut values);
-        load_file(
-            &root.join(".env.local"),
-            EnvSource::DotEnvLocal,
-            &mut values,
-        );
-        load_file(
-            &root.join("setup/.secrets.demo.env"),
-            EnvSource::SecretsDemo,
-            &mut values,
-        );
 
         for (name, value) in env::vars() {
             values.insert(
@@ -140,20 +126,20 @@ mod tests {
     }
 
     #[test]
-    fn secrets_file_overrides_dotenv() {
+    fn dotenv_is_the_only_file_source() {
         let dir = temp_dir("dotenv_priority");
         fs::create_dir_all(dir.join("setup")).unwrap();
         fs::write(dir.join(".env"), "SESSION_SECRET=from-env\n").unwrap();
         fs::write(
             dir.join("setup/.secrets.demo.env"),
-            "SESSION_SECRET=from-secrets\n",
+            "SESSION_SECRET=from-old-file\n",
         )
         .unwrap();
 
         let store = EnvStore::load(&dir);
         let value = store.get("SESSION_SECRET").unwrap();
-        assert_eq!(value.value, "from-secrets");
-        assert_eq!(value.source, EnvSource::SecretsDemo);
+        assert_eq!(value.value, "from-env");
+        assert_eq!(value.source, EnvSource::DotEnv);
 
         let _ = fs::remove_dir_all(dir);
     }

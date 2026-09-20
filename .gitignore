@@ -11,5 +11,6 @@ data/*.db-*
 !.env.example
 setup/.state/
 setup/.secrets*.env
+setup/.secrets*._env
 setup/artifacts/
 setup/reports/

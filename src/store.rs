@@ -161,10 +161,142 @@ pub async fn list_books(
         }
     }
 
+    if filters.page.is_some() || filters.per_page.is_some() {
+        let per_page = filters
+            .per_page
+            .filter(|value| matches!(value, 24 | 48 | 96))
+            .unwrap_or(24) as i64;
+        let page = filters.page.unwrap_or(1).max(1) as i64;
+        query_builder
+            .push(" LIMIT ")
+            .push_bind(per_page)
+            .push(" OFFSET ")
+            .push_bind((page - 1) * per_page);
+    }
+
     query_builder
         .build_query_as::<BookCard>()
         .fetch_all(db)
         .await
+}
+
+pub async fn count_books(db: &DbPool, filters: &CatalogFilters) -> Result<i64, sqlx::Error> {
+    let mut query_builder: QueryBuilder<Db> = QueryBuilder::new(
+        "SELECT COUNT(*) FROM books b LEFT JOIN authors a ON a.id = b.primary_author_id LEFT JOIN genres g ON g.id = b.primary_genre_id JOIN book_copies c ON c.book_id = b.id LEFT JOIN review_aggregates ra ON ra.book_id = b.id WHERE c.is_sold = false",
+    );
+
+    query_builder.push(" AND c.id = (SELECT c2.id FROM book_copies c2 WHERE c2.book_id = b.id AND c2.is_sold = false ORDER BY c2.price ASC LIMIT 1)");
+
+    if let Some(ref q) = filters.q {
+        let q = q.trim();
+        if !q.is_empty() {
+            let q = q.to_lowercase();
+            query_builder
+                .push(" AND (lower(b.search_text) LIKE ")
+                .push_bind(format!("%{q}%"));
+            query_builder
+                .push(" OR lower(a.name) LIKE ")
+                .push_bind(format!("%{q}%"));
+            query_builder
+                .push(" OR lower(g.name) LIKE ")
+                .push_bind(format!("%{q}%"));
+            query_builder
+                .push(" OR b.isbn LIKE ")
+                .push_bind(format!("%{}%", q.trim()));
+            query_builder
+                .push(" OR lower(b.tags) LIKE ")
+                .push_bind(format!("%{q}%"));
+            query_builder.push(")");
+        }
+    }
+    if let Some(ref author) = filters.author {
+        if !author.is_empty() {
+            query_builder
+                .push(" AND (a.slug = ")
+                .push_bind(author)
+                .push(" OR a.name = ")
+                .push_bind(author)
+                .push(")");
+        }
+    }
+    if let Some(ref genre) = filters.genre {
+        if !genre.is_empty() && genre != "All" {
+            query_builder
+                .push(" AND (g.slug = ")
+                .push_bind(genre)
+                .push(" OR g.name = ")
+                .push_bind(genre)
+                .push(")");
+        }
+    }
+    if let Some(ref condition) = filters.condition {
+        if !condition.is_empty() && condition != "All" {
+            query_builder
+                .push(" AND c.condition = ")
+                .push_bind(condition);
+        }
+    }
+    match filters.listing.as_deref().unwrap_or("").trim() {
+        "new" => {
+            query_builder.push(" AND c.is_new = true");
+        }
+        "used" => {
+            query_builder.push(" AND c.is_new = false");
+        }
+        _ => {}
+    }
+    if let Some(ref format) = filters.format {
+        if !format.is_empty() && format != "All" {
+            query_builder.push(" AND c.format = ").push_bind(format);
+        }
+    }
+    if let Some(ref max_price) = filters.max_price {
+        if let Ok(max_price) = max_price.parse::<f64>() {
+            if max_price > 0.0 {
+                query_builder.push(" AND c.price <= ").push_bind(max_price);
+            }
+        }
+    }
+    if let Some(ref min_rating) = filters.min_rating {
+        if let Ok(min_rating) = min_rating.parse::<f64>() {
+            if (1.0..=5.0).contains(&min_rating) {
+                query_builder.push(
+                    " AND (ra.book_id IS NULL OR ra.published_count = 0 OR ra.average_rating ",
+                );
+                if min_rating >= 5.0 {
+                    query_builder.push("> ").push_bind(Decimal::from(4));
+                } else {
+                    query_builder
+                        .push(">= ")
+                        .push_bind(Decimal::from(min_rating as i32));
+                }
+                query_builder.push(")");
+            }
+        }
+    }
+    let row: (i64,) = query_builder.build_query_as().fetch_one(db).await?;
+    Ok(row.0)
+}
+
+pub async fn catalog_facets(
+    db: &DbPool,
+) -> Result<(Vec<String>, Vec<String>, Vec<String>), sqlx::Error> {
+    let genres = sqlx::query_scalar::<Db, String>(
+        "SELECT DISTINCT g.name FROM genres g JOIN books b ON b.primary_genre_id = g.id WHERE g.name <> '' ORDER BY g.name",
+    )
+    .fetch_all(db)
+    .await?;
+    let conditions = sqlx::query_scalar::<Db, String>(
+        "SELECT DISTINCT c.condition FROM book_copies c WHERE c.is_sold = false AND c.condition <> '' ORDER BY c.condition",
+    )
+    .fetch_all(db)
+    .await?;
+    let formats = sqlx::query_scalar::<Db, String>(
+        "SELECT DISTINCT c.format FROM book_copies c WHERE c.is_sold = false AND COALESCE(c.format, '') <> '' ORDER BY c.format",
+    )
+    .fetch_all(db)
+    .await?;
+    Ok((genres, conditions, formats))
 }
 
 pub async fn collection_books(

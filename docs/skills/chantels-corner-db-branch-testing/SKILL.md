@@ -17,8 +17,8 @@ Use this local skill for DB-backed verification that would otherwise touch the l
 
 ## Workflow
 
-1. Inspect `git status`, the current branch, relevant specs, and the existing `setup/.secrets.demo.env`. Do not source that file blindly: unquoted values may contain `&`. Extract individual values safely, or use a parser that honors its quoting.
-2. Read `NEON_API_KEY` from the ignored secrets file without printing it. Query `https://console.neon.tech/api/v2/projects` and identify the existing `bookstore` project. Query its branches and identify the production parent.
+1. Inspect `git status`, the current branch, relevant specs, and the ignored `.env` file. Do not source that file blindly: unquoted values may contain `&`. Extract individual values safely, or use a parser that honors its quoting.
+2. Read `NEON_API_KEY` from the ignored `.env` file without printing it. Query `https://console.neon.tech/api/v2/projects` and identify the existing `bookstore` project. Query its branches and identify the production parent.
 3. Create a uniquely named temporary branch, for example `codex-auth-test-YYYYMMDD`, from production with a read/write endpoint. Record only the branch id and non-secret name in local process state.
 4. Obtain a non-pooled branch connection URI from Neon’s `connection_uri` endpoint. Pass it as an environment variable only; never write it to tracked files or output it.
 5. Run the narrowest meaningful checks first:

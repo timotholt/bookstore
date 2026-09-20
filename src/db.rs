@@ -9,7 +9,7 @@ pub fn load_runtime_env() {
         .map(|(name, _)| name)
         .collect::<HashSet<_>>();
 
-    for path in [".env", ".env.local", "setup/.secrets.demo.env"] {
+    for path in [".env"] {
         let Ok(iter) = dotenvy::from_path_iter(path) else {
             continue;
         };

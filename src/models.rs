@@ -53,8 +53,14 @@ pub struct CatalogFilters {
     pub format: Option<String>,
     pub min_rating: Option<String>,
     pub sort: Option<String>,
+    pub page: Option<u32>,
+    pub per_page: Option<u32>,
     #[serde(skip)]
     pub result_text: String,
+    #[serde(skip)]
+    pub total_items: usize,
+    #[serde(skip)]
+    pub total_pages: u32,
 }
 
 #[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize, Default)]

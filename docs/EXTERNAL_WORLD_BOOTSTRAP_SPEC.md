@@ -257,7 +257,7 @@ The manifest stores identifiers, expected names, expected callback URLs, require
 The project supports three secret sources:
 
 1. Provider-managed secrets, such as Railway variables or Stripe webhook secrets.
-2. Local ignored files, such as `.env.local` or `setup/.secrets.demo.env`.
+2. The local ignored `.env` file.
 3. Owner-controlled recovery email or note, optionally plaintext for interview-demo convenience.
 
 Committed files may contain:
@@ -393,7 +393,7 @@ Rules:
 
 Current implemented repair targets:
 
-- `neon`: idempotently creates or confirms the Neon project, branch, role, and database declared in `setup/setup.toml`, then writes the generated Postgres `DATABASE_URL` to `setup/.secrets.demo.env`.
+- `neon`: idempotently creates or confirms the Neon project, branch, role, and database declared in `setup/setup.toml`, then writes the generated Postgres `DATABASE_URL` to `.env`.
 - `database.migrations`: applies the Postgres migrations in `migrations_postgres/` against the configured `DATABASE_URL`.
 
 ## Validation Finding Model
@@ -665,7 +665,7 @@ The project acknowledges the owner's stated demo reality: secrets may live in pl
 The repository still must not commit real secrets. This keeps the public Git history clean while allowing practical local bootstrap:
 
 ```text
-private email / local ignored file -> parser -> setup/.secrets.demo.env -> provider setup
+private email / local ignored file -> parser -> .env -> provider setup
 ```
 
 Validation should warn if secrets appear committed or if `.env` files are not ignored.

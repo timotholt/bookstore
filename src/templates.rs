@@ -16,6 +16,13 @@ pub fn is_selected(current: Option<&str>, option: &str) -> bool {
 }
 
 pub trait TemplateHelpers {
+    fn catalog_url(&self, filters: &CatalogFilters, page: u32) -> String {
+        let mut query = filters.clone();
+        query.page = Some(page);
+        serde_urlencoded::to_string(query)
+            .map(|value| format!("/search?{}", value))
+            .unwrap_or_else(|_| "/search".to_string())
+    }
     fn store_name(&self) -> &'static str {
         crate::brand::STORE_NAME
     }

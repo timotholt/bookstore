@@ -15,6 +15,7 @@
 
     <div class="catalog-layout">
       <form class="filters" id="catalogFilters" action="/search" method="get" aria-label="Search filters">
+        <input type="hidden" name="page" value="1">
         <input id="listingFilter" name="listing" type="hidden" value="{{ filters.listing.as_deref().unwrap_or("") }}">
         <div class="filter-block">
           <label for="sidebarSearchInput">Keyword Search</label>

@@ -679,14 +679,7 @@ fn check_gitignore(root: &Path, report: &mut Report) {
 }
 
 fn check_env_files(root: &Path, report: &mut Report) {
-    let env_paths = [
-        (".env", root.join(".env")),
-        (".env.local", root.join(".env.local")),
-        (
-            "setup/.secrets.demo.env",
-            root.join("setup/.secrets.demo.env"),
-        ),
-    ];
+    let env_paths = [(".env", root.join(".env"))];
 
     let present: Vec<&str> = env_paths
         .iter()
@@ -707,7 +700,7 @@ fn check_env_files(root: &Path, report: &mut Report) {
             "local",
             "missing",
             "No local env file is present.",
-            "Copy setup/secrets.example.env to .env or setup/.secrets.demo.env when you are ready to run against provider resources.",
+            "Copy setup/secrets.example.env to .env when you are ready to run against provider resources.",
         ));
     }
 }
@@ -858,13 +851,7 @@ fn check_manifest_content(root: &Path, report: &mut Report) {
 
 fn check_git_tracking(root: &Path, report: &mut Report) {
     let tracked_env = Command::new("git")
-        .args([
-            "ls-files",
-            ".env",
-            ".env.local",
-            "setup/.secrets.demo.env",
-            "setup/.secrets.local.env",
-        ])
+        .args(["ls-files", ".env"])
         .current_dir(root)
         .output();
 
@@ -930,13 +917,10 @@ fn check_env_contract(root: &Path, env_store: &EnvStore, report: &mut Report) {
                 "Set an explicit value before validating a deployed environment.",
             ));
         } else {
-            let local_hint = if root.join(".env").exists()
-                || root.join(".env.local").exists()
-                || root.join("setup/.secrets.demo.env").exists()
-            {
+            let local_hint = if root.join(".env").exists() {
                 "A local env file exists, but this value was not found in recognized env sources."
             } else {
-                "Copy setup/secrets.example.env to .env or setup/.secrets.demo.env."
+                "Copy setup/secrets.example.env to .env."
             };
             report.findings.push(Finding::fail(
                 "env.runtime",
@@ -1138,6 +1122,6 @@ fn print_help() {
 
 fn print_external_help() {
     println!(
-        "External world commands:\n  doctor        Read-only local bootstrap readiness check\n  plan          Read-only action planning scaffold\n  validate      Read-only local/provider validation report\n  setup         First-slice setup orchestration\n  repair        Targeted repair scaffold; requires --only\n  install-deps  Install supported local dependencies when passed --yes\n  secrets import-email --from <path>\n                Parse a pasted recovery email/note into setup/.secrets.demo.env with --yes\n\nFlags:\n  --json                 Emit machine-readable JSON\n  --local-only           Skip provider checks\n  --only <selector>      Show matching finding IDs/providers only\n  --from <path>          Read a local input file\n  --write-report         Write setup/reports/latest.json\n  --install-deps         Include dependency checks in setup; combine with --yes to install\n  --yes, -y              Apply supported installers/writes\n"
+        "External world commands:\n  doctor        Read-only local bootstrap readiness check\n  plan          Read-only action planning scaffold\n  validate      Read-only local/provider validation report\n  setup         First-slice setup orchestration\n  repair        Targeted repair scaffold; requires --only\n  install-deps  Install supported local dependencies when passed --yes\n  secrets import-email --from <path>\n                Parse a pasted recovery email/note into .env with --yes\n\nFlags:\n  --json                 Emit machine-readable JSON\n  --local-only           Skip provider checks\n  --only <selector>      Show matching finding IDs/providers only\n  --from <path>          Read a local input file\n  --write-report         Write setup/reports/latest.json\n  --install-deps         Include dependency checks in setup; combine with --yes to install\n  --yes, -y              Apply supported installers/writes\n"
     );
 }
