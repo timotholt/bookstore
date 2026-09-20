@@ -837,6 +837,19 @@ mod tests {
         let authenticated = session_cookie(&login);
         let (c1, t1) = challenge_cookie(&app, "/reset-password", &reset).await;
         let (c2, t2) = challenge_cookie(&app, "/reset-password", &reset).await;
+        let invalid = post_form(
+            &app,
+            "/reset-password",
+            &c1,
+            format!("csrf={t1}&password=short&password_confirm=short"),
+        )
+        .await;
+        let html = response_body(invalid).await;
+        assert!(html.contains("Use at least 15 characters."));
+        assert!(html.contains("action=\"/reset-password\""));
+        assert!(!html.contains("Validation error:"));
+        assert!(!html.contains("href=\"/forgot-password\""));
+        assert!(!html.contains("href=\"/account/verification\""));
         let form1=format!("csrf={t1}&password=bookstore-unique-new-password&password_confirm=bookstore-unique-new-password");
         let form2=format!("csrf={t2}&password=bookstore-unique-new-password&password_confirm=bookstore-unique-new-password");
         let (a, b) = tokio::join!(
@@ -1058,6 +1071,20 @@ mod tests {
     async fn account_forms_preserve_origin_without_referring_token_urls() {
         let test_db = postgres_test_db().await;
         let app = test_app(test_db.pool.clone());
+        let missing = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/reset-password")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let missing = response_body(missing).await;
+        assert!(missing.contains("Link expired or unavailable"));
+        assert!(missing.contains("href=\"/forgot-password\""));
+        assert!(!missing.contains("name=\"password\""));
         let response = app
             .clone()
             .oneshot(

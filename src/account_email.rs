@@ -160,6 +160,7 @@ struct EmailPage {
     title: String,
     message: String,
     action: String,
+    recovery_path: String,
     csrf: String,
     fields: Vec<Field>,
     button: crate::ui::ButtonView,
@@ -198,15 +199,19 @@ async fn page(
     fields: Vec<Field>,
     button: &str,
 ) -> Response {
-    use askama::Template;
     let t = EmailPage {
         title: title.into(),
         message: message.into(),
         action: action.into(),
+        recovery_path: String::new(),
         csrf: csrf(session).await,
         fields,
         button: crate::ui::ButtonView::form_submit(button),
     };
+    render_page(t)
+}
+fn render_page(t: EmailPage) -> Response {
+    use askama::Template;
     match t.render() {
         Ok(s) => {
             let mut response = secure(axum::response::Html(s).into_response());
@@ -220,12 +225,48 @@ async fn page(
         Err(_) => secure(StatusCode::INTERNAL_SERVER_ERROR.into_response()),
     }
 }
+async fn invalid_link(session: &Session, purpose: &str) -> Response {
+    let recovery = if purpose == "reset_password" {
+        "/forgot-password"
+    } else {
+        "/account/verification"
+    };
+    render_page(EmailPage {
+        title: "Link expired or unavailable".into(),
+        message: INVALID.into(),
+        action: String::new(),
+        recovery_path: recovery.into(),
+        csrf: csrf(session).await,
+        fields: vec![],
+        button: crate::ui::ButtonView::form_submit(""),
+    })
+}
 async fn message(session: &Session, text: &str) -> Response {
     page(session, "Account security", text, "", vec![], "").await
 }
 const INVALID: &str = "This link is invalid or expired. Request a new link and try again.";
 const GENERIC: &str =
     "If an eligible account exists for that address, we’ll email password reset instructions.";
+
+async fn reset_form(session: &Session, message: &str) -> Response {
+    page(
+        session,
+        "Reset your password",
+        message,
+        "/reset-password",
+        vec![
+            field("password", "New password", "password", "new-password"),
+            field(
+                "password_confirm",
+                "Confirm new password",
+                "password",
+                "new-password",
+            ),
+        ],
+        "Reset password",
+    )
+    .await
+}
 
 async fn landing(session: Session, q: Landing, purpose: &str, path: &str) -> Response {
     if let Some(token) = q.token {
@@ -235,7 +276,7 @@ async fn landing(session: Session, q: Landing, purpose: &str, path: &str) -> Res
                 .map(|x| x.len() != 32)
                 .unwrap_or(true)
         {
-            return message(&session, INVALID).await;
+            return invalid_link(&session, purpose).await;
         }
         let c = Challenge {
             hash: digest(&token),
@@ -252,21 +293,9 @@ async fn landing(session: Session, q: Landing, purpose: &str, path: &str) -> Res
         return secure(Redirect::to(path).into_response());
     }
     if purpose == "reset_password" {
-        page(
+        reset_form(
             &session,
-            "Reset your password",
-            "Choose a unique password of at least 15 characters.",
-            path,
-            vec![
-                field("password", "New password", "password", "new-password"),
-                field(
-                    "password_confirm",
-                    "Confirm new password",
-                    "password",
-                    "new-password",
-                ),
-            ],
-            "Reset password",
+            "Use 15–128 characters. A few unrelated words work well.",
         )
         .await
     } else {
@@ -284,7 +313,28 @@ async fn landing(session: Session, q: Landing, purpose: &str, path: &str) -> Res
 pub async fn verify_get(session: Session, Query(q): Query<Landing>) -> Response {
     landing(session, q, "verify_email", "/verify-email").await
 }
-pub async fn reset_get(session: Session, Query(q): Query<Landing>) -> Response {
+pub async fn reset_get(
+    State(s): State<AppState>,
+    session: Session,
+    Query(q): Query<Landing>,
+) -> Response {
+    if q.token.is_none() {
+        let challenge = session
+            .get::<Challenge>("challenge:reset_password")
+            .await
+            .ok()
+            .flatten();
+        let valid = if let Some(c) = challenge {
+            c.purpose == "reset_password"
+                && c.expires > Utc::now().timestamp()
+                && matches!(token(&s.db, &c.hash, "reset_password").await, Ok(Some(_)))
+        } else {
+            false
+        };
+        if !valid {
+            return invalid_link(&session, "reset_password").await;
+        }
+    }
     landing(session, q, "reset_password", "/reset-password").await
 }
 pub async fn change_get(session: Session, Query(q): Query<Landing>) -> Response {
@@ -468,24 +518,26 @@ async fn confirm(
         .get::<Challenge>(&format!("challenge:{purpose}"))
         .await
     else {
-        return message(&session, INVALID).await;
+        return invalid_link(&session, purpose).await;
     };
     if c.purpose != purpose || c.expires <= Utc::now().timestamp() {
-        return message(&session, INVALID).await;
+        return invalid_link(&session, purpose).await;
     }
     let Ok(Some(row)) = token(&s.db, &c.hash, purpose).await else {
-        return message(&session, INVALID).await;
+        return invalid_link(&session, purpose).await;
     };
     let hash = if purpose == "reset_password" {
         if f.password != f.password_confirm {
-            return message(
+            return reset_form(
                 &session,
-                "Passwords must match. Reopen the clean reset page to try again.",
+                "Those passwords don’t match. Enter the same password in both fields.",
             )
             .await;
         }
-        if let Err(e) = crate::auth::validate_password(&f.password) {
-            return message(&session, &e.to_string()).await;
+        if let Err(crate::auth::AuthError::Validation(reason)) =
+            crate::auth::validate_password(&f.password)
+        {
+            return reset_form(&session, &reason).await;
         }
         match crate::auth::hash_password(secrecy::Secret::new(f.password)).await {
             Ok(h) => Some(h),
@@ -542,7 +594,7 @@ async fn confirm(
                 .await
             }
         }
-        _ => message(&session, INVALID).await,
+        _ => invalid_link(&session, purpose).await,
     }
 }
 pub async fn verify_post(

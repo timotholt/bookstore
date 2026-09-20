@@ -1,1 +1,1 @@
-<div class="auth-field"><label for="{{ field.name }}">{{ field.label }}</label><input id="{{ field.name }}" name="{{ field.name }}" type="{{ field.kind }}" autocomplete="{{ field.autocomplete }}" maxlength="1024" required></div>
+<div class="auth-field"><label for="{{ field.name }}">{{ field.label }}</label><input id="{{ field.name }}" name="{{ field.name }}" type="{{ field.kind }}" autocomplete="{{ field.autocomplete }}" {% if field.autocomplete == "new-password" %}minlength="15" maxlength="128"{% else %}maxlength="1024"{% endif %} required></div>

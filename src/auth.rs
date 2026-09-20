@@ -387,10 +387,14 @@ pub fn normalize_email(email: &str) -> Result<String, AuthError> {
 }
 
 pub fn validate_password(password: &str) -> Result<(), AuthError> {
-    if password.chars().count() < 15 || password.len() > 1024 {
+    let length = password.chars().count();
+    if length < 15 {
         return Err(AuthError::Validation(
-            "Use at least 15 characters and at most 1024 bytes.".into(),
+            "Use at least 15 characters. Try a few unrelated words.".into(),
         ));
+    }
+    if length > 128 {
+        return Err(AuthError::Validation("Use 128 characters or fewer.".into()));
     }
     let compact = password.to_lowercase();
     static BLOCKLIST: std::sync::OnceLock<std::collections::HashSet<&'static str>> =
@@ -452,5 +456,20 @@ fn joined_full_name(first_name: Option<&str>, last_name: Option<&str>) -> Option
         None
     } else {
         Some(name)
+    }
+}
+
+#[cfg(test)]
+mod password_policy_tests {
+    #[test]
+    fn password_limits_count_characters_and_explain_the_specific_problem() {
+        use super::{validate_password, AuthError};
+        assert!(
+            matches!(validate_password("too short"), Err(AuthError::Validation(s)) if s.starts_with("Use at least 15 characters."))
+        );
+        assert!(validate_password(&"界".repeat(128)).is_ok());
+        assert!(
+            matches!(validate_password(&"界".repeat(129)), Err(AuthError::Validation(s)) if s == "Use 128 characters or fewer.")
+        );
     }
 }
