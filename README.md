@@ -27,6 +27,12 @@ The catalog and product images are demo data committed with the project. These f
 
 `src/app.rs` defines the routes. `src/handlers.rs` coordinates requests; `src/store.rs`, `src/cart.rs`, and `src/auth.rs` contain data access and domain operations. `src/ui/` prepares reusable view models for the Askama includes under `templates/components/`. `migrations_postgres/` creates and seeds the database. `legacy-demo/` is an archived static prototype, not the running app.
 
+## Build from GitHub
+
+Open [Actions → CI](https://github.com/timotholt/bookstore/actions/workflows/ci.yml), click **Run workflow**, and choose a branch. The run builds and tests the workspace, checks the running Docker image, and provides downloadable image and log artifacts. The manual button is available after the workflow reaches the default branch.
+
+[Complete clean-checkout and one-button build instructions](docs/CLEAN_CHECKOUT.md) cover prerequisites, disposable PostgreSQL, local verification, artifacts, and cleanup.
+
 ## Run locally
 
 You need a Rust toolchain with Cargo and a reachable PostgreSQL database. The database role must be able to create tables and the `tower_sessions` schema. This project does **not** support SQLite or silently fall back to another database.
