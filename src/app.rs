@@ -837,6 +837,19 @@ mod tests {
         let authenticated = session_cookie(&login);
         let (c1, t1) = challenge_cookie(&app, "/reset-password", &reset).await;
         let (c2, t2) = challenge_cookie(&app, "/reset-password", &reset).await;
+        let invalid = post_form(
+            &app,
+            "/reset-password",
+            &c1,
+            format!("csrf={t1}&password=short&password_confirm=short"),
+        )
+        .await;
+        let html = response_body(invalid).await;
+        assert!(html.contains("Use at least 15 characters."));
+        assert!(html.contains("action=\"/reset-password\""));
+        assert!(!html.contains("Validation error:"));
+        assert!(!html.contains("href=\"/forgot-password\""));
+        assert!(!html.contains("href=\"/account/verification\""));
         let form1=format!("csrf={t1}&password=bookstore-unique-new-password&password_confirm=bookstore-unique-new-password");
         let form2=format!("csrf={t2}&password=bookstore-unique-new-password&password_confirm=bookstore-unique-new-password");
         let (a, b) = tokio::join!(
@@ -931,7 +944,32 @@ mod tests {
         assert_eq!(known.status(), unknown.status());
         assert_eq!(response_body(known).await, response_body(unknown).await);
         let wrong = test_token(&db, &user.id, &user.email, "verify_email").await;
-        let (c, t) = challenge_cookie(&app, "/reset-password", &wrong).await;
+        let landing = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/reset-password?token={wrong}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let cookie = session_cookie(&landing);
+        let rejected = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/reset-password")
+                    .header(header::COOKIE, &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let html = response_body(rejected).await;
+        assert!(html.contains("invalid or expired"));
+        assert!(!html.contains("name=\"password\""));
+        let (c, t) = csrf_form(&app, "/forgot-password", Some(&cookie)).await;
         let r=post_form(&app,"/reset-password",&c,format!("csrf={t}&password=bookstore-unique-new-password&password_confirm=bookstore-unique-new-password")).await;
         assert!(response_body(r).await.contains("invalid or expired"));
         sqlx::query(
@@ -1058,6 +1096,20 @@ mod tests {
     async fn account_forms_preserve_origin_without_referring_token_urls() {
         let test_db = postgres_test_db().await;
         let app = test_app(test_db.pool.clone());
+        let missing = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/reset-password")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let missing = response_body(missing).await;
+        assert!(missing.contains("Link expired or unavailable"));
+        assert!(missing.contains("href=\"/forgot-password\""));
+        assert!(!missing.contains("name=\"password\""));
         let response = app
             .clone()
             .oneshot(
