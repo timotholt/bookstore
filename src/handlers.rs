@@ -163,6 +163,20 @@ pub async fn healthz() -> &'static str {
     "ok"
 }
 
+pub async fn version() -> axum::Json<serde_json::Value> {
+    axum::Json(serde_json::json!({
+        "service": "chantels-corner",
+        "version": env!("CARGO_PKG_VERSION"),
+        "commit": std::env::var("RAILWAY_GIT_COMMIT_SHA")
+            .or_else(|_| std::env::var("BUILD_COMMIT"))
+            .unwrap_or_else(|_| "unknown".into()),
+        "deployment": std::env::var("RAILWAY_DEPLOYMENT_ID")
+            .unwrap_or_else(|_| "unknown".into()),
+        "built_at": std::env::var("BUILD_TIMESTAMP")
+            .unwrap_or_else(|_| "unknown".into()),
+    }))
+}
+
 pub async fn readyz(State(state): State<AppState>) -> Result<&'static str, AppError> {
     sqlx::query("SELECT 1").execute(&state.db).await?;
     Ok("ready")

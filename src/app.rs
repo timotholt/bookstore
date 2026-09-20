@@ -60,6 +60,7 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/healthz", get(handlers::healthz))
         .route("/readyz", get(handlers::readyz))
+        .route("/version", get(handlers::version))
         .route("/events", post(handlers::record_event))
         .route("/", get(handlers::home))
         .route(
