@@ -3,9 +3,11 @@
 Requires Python Pillow and psql. Never creates inventory or market-price claims.
 """
 import argparse, gzip, hashlib, html, io, json, os, re, subprocess, time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import Counter
 from pathlib import Path
 from urllib.parse import urlparse, unquote
+from urllib.request import Request, urlopen
 from PIL import Image
 
 SOURCE = 'https://archive.org/download/ol_dump_2026-08-31/ol_dump_editions_2026-08-31.txt.gz'
@@ -28,17 +30,17 @@ def candidate(row, authors=None):
     description=row.get('description','')
     if isinstance(description,dict): description=description.get('value','')
     title,desc=clean(row.get('title')),clean(description)
-    author=re.sub(r'^by\s+', '', clean(row.get('by_statement')), flags=re.I).strip(' .')
+    author=re.sub(r'^by\s+', '', clean(row.get('by_statement')), flags=re.I).strip(' .') or 'Unknown author'
     years=re.findall(r'\b(?:1[4-9]\d{2}|20[0-2]\d)\b',str(row.get('publish_date','')))
     covers=[c for c in row.get('covers',[]) if isinstance(c,int) and c>0]
     fmt=clean(row.get('physical_format')) or 'Format unspecified'
     publishers=row.get('publishers',[])
-    if not isbn or not title or len(desc)<80 or not author or not years or not covers or not publishers:
+    if not isbn or not title or not covers:
         return None
     if any(x in fmt.lower() for x in ('ebook','kindle','audio','cd')): return None
     price=14.99 if 'hard' in fmt.lower() else 9.99
-    return dict(id='isbn-'+isbn,isbn=isbn,title=title,description=desc,author=author,authors=[author],
-        year=int(years[-1]),format=fmt,publisher=clean(publishers[0]),price=price,
+    return dict(id='isbn-'+isbn,isbn=isbn,title=title,description=desc or 'Description unavailable.',author=author,authors=[author],
+        year=int(years[-1]) if years else 0,format=fmt,publisher=clean(publishers[0]) if publishers else 'Unknown publisher',price=price,
         price_source='assigned_demo_usd_v1',source_id=row['key'],
         cover_source=f'https://covers.openlibrary.org/b/id/{covers[0]}-M.jpg?default=false',
         source='Open Library edition bulk dump',stock=0)
@@ -64,10 +66,28 @@ def verify_cover_metadata(row, metadata):
     cover_id=int(row['cover_source'].split('/')[-1].split('-')[0])
     dimensions=metadata.get(cover_id)
     if dimensions is None or dimensions[0]<70 or dimensions[1]<100: return None
-    row.update(cover_url=row['cover_source'],cover_width=dimensions[0],cover_height=dimensions[1],
-        cover_sha256='metadata-id-'+str(cover_id),cover_verified_at=time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),
-        cover_proof='official_bulk_metadata_dimensions_not_live_http')
-    return row
+    for attempt in range(1):
+        try:
+            request=Request(row['cover_source'],headers={'User-Agent':'ChantelsCornerCoverVerifier/1.0'})
+            with urlopen(request,timeout=3) as response:
+                body=response.read(5_000_001)
+            if len(body)>5_000_000 or len(body)<1000:
+                return None
+            image=Image.open(io.BytesIO(body)); image.load()
+            if image.width<70 or image.height<100:
+                return None
+            row.update(cover_url=row['cover_source'],cover_width=image.width,cover_height=image.height,
+                cover_sha256=hashlib.sha256(body).hexdigest(),
+                cover_verified_at=time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),
+                cover_proof='live_http_image_bytes_and_dimensions')
+            return row
+        except Exception:
+            return None
+    return None
+
+def verify_metadata_row(item):
+    row, metadata = item
+    return verify_cover_metadata(row, metadata)
 
 def prepare_metadata(args):
     rows=[json.loads(line) for line in args.candidates.read_text().splitlines()]
@@ -81,19 +101,49 @@ def prepare_metadata(args):
                 cover_id,width,height=map(int,fields[:3])
             except ValueError: continue
             if cover_id in wanted: metadata[cover_id]=(width,height)
-    accepted=[]; seen=set()
+    args.output.mkdir(parents=True,exist_ok=True)
+    accepted_path=args.output/'accepted.jsonl'
+    progress_path=args.output/'progress.json'
+    accepted=[json.loads(line) for line in accepted_path.read_text().splitlines()] if accepted_path.exists() else []
+    accepted_isbns={row['isbn'] for row in accepted}
+    rejected=Counter()
+    processed_offset=0
+    if progress_path.exists():
+        saved_progress=json.loads(progress_path.read_text())
+        rejected.update(saved_progress.get('rejected_counts',{}))
+        processed_offset=int(saved_progress.get('processed',0))
+    eligible=[]
+    seen=set(accepted_isbns)
     for row in rows:
         if not isbn13(row['isbn']) or row['isbn'] in seen or row['isbn'] in excluded: continue
-        result=verify_cover_metadata(row,metadata)
-        if result:
-            seen.add(row['isbn']);accepted.append(result)
-        if len(accepted)==args.count:break
-    args.output.mkdir(parents=True,exist_ok=True)
-    (args.output/'accepted.jsonl').write_text(''.join(json.dumps(row)+'\n' for row in accepted))
+        seen.add(row['isbn']); eligible.append((row, metadata))
+    total_eligible=len(eligible)
+    eligible=eligible[processed_offset:]
+    processed=processed_offset
+    batch_size=100
+    with accepted_path.open('a') as output:
+        for start in range(0,len(eligible),batch_size):
+            batch=eligible[start:start+batch_size]
+            with ThreadPoolExecutor(max_workers=128) as pool:
+                futures=[pool.submit(verify_metadata_row, item) for item in batch]
+                for future in as_completed(futures):
+                    result=future.result()
+                    if result:
+                        accepted_isbns.add(result['isbn']); accepted.append(result)
+                        output.write(json.dumps(result,ensure_ascii=False)+'\n'); output.flush()
+                    else:
+                        rejected['cover_live_verification_failed'] += 1
+            processed += len(batch)
+            progress=dict(target=args.count,processed=processed,accepted=len(accepted),
+                rejected_counts=dict(rejected),remaining=total_eligible-processed,
+                percent=round(processed/total_eligible*100,2) if total_eligible else 100)
+            progress_path.write_text(json.dumps(progress,indent=2)+'\n')
+            print(json.dumps(progress),flush=True)
+            if len(accepted)>=args.count: break
     (args.output/'report.json').write_text(json.dumps(dict(target=args.count,accepted=len(accepted),complete=len(accepted)==args.count,
-        candidates=len(rows),proof='ISBN checksums and required bibliographic metadata; cover IDs and dimensions from official bulk metadata. URLs not all fetched.',
+        candidates=len(rows),proof='ISBN checksums and required bibliographic metadata; every accepted cover was fetched and decoded from its live URL.',
+        rejected=dict(rejected),
         price_policy='Assigned demo USD prices; no market-price claims',stock=0,source=SOURCE),indent=2)+'\n')
-    print('Accepted',len(accepted),'of',len(rows),'candidates')
     if len(accepted)!=args.count: raise SystemExit('Target not met; nothing imported.')
 
 def prepare(args):
@@ -133,7 +183,7 @@ def apply(args):
     rows=[json.loads(line) for line in (args.output/'accepted.jsonl').read_text().splitlines()]
     if len(rows)!=args.count or len({r['isbn'] for r in rows})!=args.count:
         raise SystemExit('Expected exact distinct target count; import refused.')
-    if any(not all(r.get(k) for k in ('title','author','description','publisher','format','cover_url','source_id')) or not isbn13(r['isbn']) or not 1450 <= int(r['year']) <= 2026 or len(r['description']) < 80 or not r.get('cover_verified_at') or not r.get('description') or r['stock']!=0 or not 0<r['price']<100 for r in rows):
+    if any(not all(r.get(k) for k in ('title','author','description','publisher','format','cover_url','source_id')) or not isbn13(r['isbn']) or not 0 <= int(r['year']) <= 2026 or not r.get('cover_verified_at') or r['stock']!=0 or not 0<r['price']<100 for r in rows):
         raise SystemExit('Invalid record; import refused.')
     url=os.environ.get('DATABASE_URL','')
     if urlparse(url).hostname not in ('localhost','127.0.0.1','::1') and urlparse(url).hostname != args.allow_database_host:

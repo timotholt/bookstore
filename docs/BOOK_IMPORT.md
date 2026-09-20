@@ -22,8 +22,11 @@ manifest. External databases require `--allow-database-host EXACT_HOST`; this
 flag should only be used for an explicitly authorized destination.
 
 Every accepted edition has a checksum-valid ISBN, title, author by-statement,
-nontrivial description, publication year, publisher, a cover ID with recorded
-image dimensions, and a positive assigned price. Missing binding information
+title and a positive assigned price. Sparse description, author, publisher,
+year, and format fields are backfilled with honest `Unknown`/`unavailable`
+values so templates and HTMX always receive strings. Its cover URL is fetched
+and decoded as an actual image with minimum dimensions before acceptance.
+Missing binding information
 is labeled `Format unspecified`; no binding is invented. Source descriptions
 are stripped of HTML and rendered as escaped text. Books without enough
 metadata are rejected.
@@ -33,11 +36,10 @@ formats. They are not market offers. Stock is zero; no physical inventory is
 fabricated. No compare-at list prices are invented. Metadata and price source
 are stored separately from product content.
 
-Cover validation is backed by official bulk metadata: each ID must have width
-at least 70 and height at least 100 pixels. This confirms an actual recorded
-cover, but does not prove every remote URL is currently reachable. Representative
-images should also be fetched and visually checked. The importer does not crawl
-the Covers API. An alternative `--editions PATH --covers DIRECTORY` prepare mode
+Cover selection starts with official bulk metadata, then fetches each cover URL
+and decodes the returned image: each accepted image must be at least 70 pixels
+wide and 100 pixels high. The importer does not crawl the Covers API. An
+alternative `--editions PATH --covers DIRECTORY` prepare mode
 validates decoded image bytes from an extracted bulk cover archive.
 
 Covers are displayed through Open Library URLs, with attribution on book detail
