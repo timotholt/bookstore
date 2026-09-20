@@ -13,6 +13,8 @@ pub struct BookCard {
     pub genre_slug: String,
     pub year: i32,
     pub isbn: String,
+    pub description: String,
+    pub cover_url: String,
     pub cover_color: String,
     pub aspect_ratio: f64,
     pub tags: String,

@@ -1,0 +1,7 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{ title }} — Chantel’s Corner bookstore</title><meta name="referrer" content="no-referrer"><link rel="stylesheet" href="/styles.css"></head>
+<body class="auth-body"><main class="auth-shell"><section class="auth-card"><a href="/">Chantel’s Corner · The bookstore</a><h1>{{ title }}</h1><p role="status">{{ message }}</p>
+{% if !action.is_empty() %}<form method="post" action="{{ action }}" class="auth-form"><input type="hidden" name="csrf" value="{{ csrf }}">
+{% for field in fields %}{% include "components/account_email_field.html" %}{% endfor %}
+{% include "components/ui/button.html" %}</form>{% endif %}
+<p><a href="/forgot-password">Request a new password reset link</a> · <a href="/account/verification">Email verification</a></p><p><a href="/login">Sign in</a> · <a href="/account/security">Account security</a></p></section></main></body></html>
