@@ -179,8 +179,13 @@ pub async fn version() -> axum::Json<serde_json::Value> {
             .unwrap_or_else(|_| "unknown".into()),
         "deployment": std::env::var("RAILWAY_DEPLOYMENT_ID")
             .unwrap_or_else(|_| "unknown".into()),
-        "built_at": std::env::var("BUILD_TIMESTAMP")
+        "branch": std::env::var("RAILWAY_GIT_BRANCH")
             .unwrap_or_else(|_| "unknown".into()),
+        "commit_message": std::env::var("RAILWAY_GIT_COMMIT_MESSAGE")
+            .unwrap_or_else(|_| "unknown".into()),
+        "built_at": option_env!("BUILD_TIMESTAMP_PACIFIC").unwrap_or("unknown"),
+        "built_timezone": "America/Los_Angeles",
+        "built_at_utc": option_env!("BUILD_TIMESTAMP_UTC").unwrap_or("unknown"),
     }))
 }
 
