@@ -473,10 +473,8 @@ impl EmailService {
             }
             Err((category, retry_after)) => {
                 let attempts: i32 = row.get("attempts");
-                if retry_after.is_some() && attempts < 7 {
-                    let delay = retry_after
-                        .unwrap()
-                        .max((2_i64.pow((attempts + 1) as u32) * 5).min(300))
+                if let Some(retry_delay) = retry_after.filter(|_| attempts < 7) {
+                    let delay = retry_delay.max((2_i64.pow((attempts + 1) as u32) * 5).min(300))
                         + (id.as_bytes()[0] as i64 % 7);
                     self.retry(pool, id, owner, category, delay, true).await?
                 } else {

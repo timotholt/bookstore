@@ -121,7 +121,7 @@ pub async fn issue(
     sqlx::query("INSERT INTO account_tokens(id,user_id,purpose,token_hash,target_email,auth_version,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7)")
         .bind(id).bind(user).bind(purpose).bind(digest(&token)).bind(email).bind(version).bind(expires).execute(&mut **tx).await?;
     mail.enqueue(
-        &mut **tx,
+        tx,
         kind,
         email,
         &format!("{}/{path}?token={token}", mail.base_url()),
@@ -495,10 +495,10 @@ async fn confirm(
         if let Some(h)=hash {
             sqlx::query("UPDATE password_credentials SET password_hash=$2 WHERE user_id=$1").bind(&id).bind(h).execute(&mut *tx).await?;
             sqlx::query("UPDATE users SET auth_version=auth_version+1 WHERE id=$1").bind(&id).execute(&mut *tx).await?;
-            s.email.enqueue(&mut *tx,EmailKind::PasswordChanged,&old_email,"",None,Utc::now()+Duration::hours(24)).await?;
+            s.email.enqueue(&mut tx,EmailKind::PasswordChanged,&old_email,"",None,Utc::now()+Duration::hours(24)).await?;
         }else if purpose=="change_email"{
             sqlx::query("UPDATE users SET email=$2,email_verified_at=now(),auth_version=auth_version+1 WHERE id=$1").bind(&id).bind(target).execute(&mut *tx).await?;
-            s.email.enqueue(&mut *tx,EmailKind::EmailChanged,&old_email,"",None,Utc::now()+Duration::hours(24)).await?;
+            s.email.enqueue(&mut tx,EmailKind::EmailChanged,&old_email,"",None,Utc::now()+Duration::hours(24)).await?;
         }else{sqlx::query("UPDATE users SET email_verified_at=now() WHERE id=$1").bind(&id).execute(&mut *tx).await?;}
         sqlx::query("UPDATE account_tokens SET consumed_at=now() WHERE token_hash=$1").bind(&c.hash).execute(&mut *tx).await?;
         sqlx::query("UPDATE account_tokens SET revoked_at=now() WHERE user_id=$1 AND consumed_at IS NULL AND revoked_at IS NULL AND ($2 <> 'verify_email' OR purpose='verify_email')").bind(&id).bind(purpose).execute(&mut *tx).await?;
@@ -613,7 +613,7 @@ pub async fn email_change_post(
         let r=sqlx::query("SELECT u.auth_version,p.password_hash FROM users u JOIN password_credentials p ON p.user_id=u.id WHERE u.id=$1 FOR UPDATE OF u").bind(&u.id).fetch_one(&mut *tx).await?;
         if r.get::<i64,_>("auth_version")!=version || r.get::<String,_>("password_hash")!=old_hash{return Ok(false);}
         issue(&mut tx,&s.email,&u.id,"change_email",&email,version).await?;
-        s.email.enqueue(&mut *tx,EmailKind::EmailChangeRequested,&u.email,"",None,Utc::now()+Duration::hours(24)).await?;
+        s.email.enqueue(&mut tx,EmailKind::EmailChangeRequested,&u.email,"",None,Utc::now()+Duration::hours(24)).await?;
         tx.commit().await?;Ok::<_,Box<dyn std::error::Error+Send+Sync>>(true)
     }.await;
     message(

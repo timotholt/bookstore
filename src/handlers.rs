@@ -107,7 +107,7 @@ async fn signup_template_response(
     let current_user = crate::auth::get_current_user(db, session).await?;
 
     Ok(SignupTemplate {
-        csrf: crate::account_email::csrf(&session).await,
+        csrf: crate::account_email::csrf(session).await,
         error_message,
         email,
         first_name,
@@ -144,7 +144,7 @@ async fn login_template_response(
     let current_user = crate::auth::get_current_user(db, session).await?;
 
     Ok(LoginTemplate {
-        csrf: crate::account_email::csrf(&session).await,
+        csrf: crate::account_email::csrf(session).await,
         error_message,
         email,
         genres: chrome.genres,
