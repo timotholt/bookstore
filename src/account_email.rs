@@ -208,7 +208,15 @@ async fn page(
         button: crate::ui::ButtonView::form_submit(button),
     };
     match t.render() {
-        Ok(s) => secure(axum::response::Html(s).into_response()),
+        Ok(s) => {
+            let mut response = secure(axum::response::Html(s).into_response());
+            // Native form POSTs need a non-null Origin for the CSRF check.
+            // strict-origin omits the path/query, including any bearer token.
+            response
+                .headers_mut()
+                .insert("referrer-policy", "strict-origin".parse().unwrap());
+            response
+        }
         Err(_) => secure(StatusCode::INTERNAL_SERVER_ERROR.into_response()),
     }
 }

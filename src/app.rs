@@ -1055,6 +1055,58 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn account_forms_preserve_origin_without_referring_token_urls() {
+        let test_db = postgres_test_db().await;
+        let app = test_app(test_db.pool.clone());
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/forgot-password")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.headers()["referrer-policy"], "strict-origin");
+        let html = response_body(response).await;
+        assert!(html.contains("name=\"referrer\" content=\"strict-origin\""));
+        let (cookie, csrf) = csrf_form(&app, "/forgot-password", None).await;
+        let rejected = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/forgot-password")
+                    .header(header::COOKIE, cookie)
+                    .header(header::ORIGIN, "null")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from(format!(
+                        "csrf={csrf}&email=unknown%40example.com"
+                    )))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(rejected.status(), StatusCode::FORBIDDEN);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/reset-password?token={}",
+                        crate::account_email::random_secret()
+                    ))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        assert_eq!(response.headers()["referrer-policy"], "no-referrer");
+        assert_eq!(response.headers()["location"], "/reset-password");
+    }
+
+    #[tokio::test]
     async fn account_mail_rollback_and_database_rate_limits() {
         let test_db = postgres_test_db().await;
         let db = test_db.pool();
