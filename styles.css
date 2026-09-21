@@ -4061,14 +4061,6 @@ body.cart-drawer-updating .cart-panel {
     height: auto;
   }
 
-  .site-header .brand span:last-child {
-    display: none;
-  }
-
-  .site-header .brand .brand-text {
-    display: inline;
-  }
-
   .auth-header,
   .account-topbar {
     min-height: auto;
