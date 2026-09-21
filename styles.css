@@ -1760,28 +1760,6 @@ h3 {
   z-index: 2;
 }
 
-.quick-add-slot button {
-  width: 42px;
-  height: 42px;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  cursor: pointer;
-  color: transparent;
-  font-size: 0;
-  background-color: #ffffff;
-  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='%23111A17' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='21' r='1'/%3E%3Ccircle cx='20' cy='21' r='1'/%3E%3Cpath d='M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: center;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
-  transition: background-color 0.15s ease, transform 0.12s ease;
-}
-
-.quick-add-slot button:hover {
-  background-color: var(--gold);
-  transform: scale(1.06);
-}
-
 /* Desktop: reveal on hover. Touch (no hover): always visible. */
 @media (hover: hover) {
   .quick-add-slot {
@@ -5277,6 +5255,27 @@ body.cart-drawer-updating .cart-panel {
 .card-btn.buy-now-btn:hover {
   background: var(--btn-buy-hover-bg);
   border-color: var(--btn-buy-border);
+}
+
+/* Product-shelf quick add is a compact icon control, not a full-width card CTA. */
+.quick-add-slot .card-btn.add-btn {
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  color: transparent;
+  font-size: 0;
+  background-color: #ffffff;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='%23111A17' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='21' r='1'/%3E%3Ccircle cx='20' cy='21' r='1'/%3E%3Cpath d='M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+}
+
+.quick-add-slot .card-btn.add-btn:hover {
+  background-color: var(--gold);
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='%23111A17' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='21' r='1'/%3E%3Ccircle cx='20' cy='21' r='1'/%3E%3Cpath d='M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6'/%3E%3C/svg%3E");
 }
 
 /* Inherits product-tile typography and layouts */

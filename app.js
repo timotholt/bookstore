@@ -6,6 +6,20 @@
   let catalogRefreshTimer = null;
   let catalogAbortController = null;
   let catalogRequestSeq = 0;
+  const prefetchedBookUrls = new Set();
+  const bookPrefetchTimers = new WeakMap();
+
+  function prefetchBook(card) {
+    if (!card || !card.dataset.bookUrl || prefetchedBookUrls.has(card.dataset.bookUrl)) return;
+    if (navigator.connection && navigator.connection.saveData) return;
+
+    const url = card.dataset.bookUrl;
+    const link = document.createElement("link");
+    link.rel = "prefetch";
+    link.href = url;
+    document.head.appendChild(link);
+    prefetchedBookUrls.add(url);
+  }
 
   function sendEvent(payload) {
     const body = JSON.stringify(Object.assign({
@@ -351,6 +365,30 @@
     const bookCard = event.target.closest("[data-book-url]");
     if (bookCard && !event.target.closest("button, a, input, select, textarea")) {
       window.location.href = bookCard.dataset.bookUrl;
+    }
+  });
+
+  document.addEventListener("pointerover", function (event) {
+    if (event.pointerType !== "mouse") return;
+    const card = event.target.closest("[data-book-url]");
+    if (!card || (event.relatedTarget && card.contains(event.relatedTarget))) return;
+
+    const timer = window.setTimeout(function () {
+      prefetchBook(card);
+      bookPrefetchTimers.delete(card);
+    }, 150);
+    bookPrefetchTimers.set(card, timer);
+  });
+
+  document.addEventListener("pointerout", function (event) {
+    if (event.pointerType !== "mouse") return;
+    const card = event.target.closest("[data-book-url]");
+    if (!card || (event.relatedTarget && card.contains(event.relatedTarget))) return;
+
+    const timer = bookPrefetchTimers.get(card);
+    if (timer) {
+      window.clearTimeout(timer);
+      bookPrefetchTimers.delete(card);
     }
   });
 
