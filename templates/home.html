@@ -140,7 +140,9 @@
             <div class="quick-filler-row" id="overlayQuickFillers">
               {% for book in quick_fillers %}
               <a class="filler-book-row" href="/books/{{ book.id }}" style="--cover-color: {{ book.cover_color }}">
-                <span class="filler-cover-mini"></span>
+                <span class="filler-cover-mini">
+                  <img src="{{ book.cover_url }}" alt="{{ book.title }} cover" loading="lazy" onerror="this.src='/assets/covers/placeholder.jpg';">
+                </span>
                 <span class="filler-details">
                   <span class="filler-title">{{ book.title }}</span>
                   <span class="filler-price">{{ self.money(book.price) }}</span>

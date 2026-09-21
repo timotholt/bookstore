@@ -298,7 +298,7 @@ pub async fn home(
     let quick_fillers: Vec<BookCard> = all_books
         .iter()
         .filter(|b| b.price < 8.0)
-        .take(2)
+        .take(4)
         .cloned()
         .collect();
 
