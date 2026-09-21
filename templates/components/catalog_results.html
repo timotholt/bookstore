@@ -16,7 +16,7 @@
       </label>
       <label class="sort-label" for="perPageSelect">
         <span>Items per page</span>
-        <select id="perPageSelect" name="per_page" form="catalogFilters" hx-get="/search" hx-trigger="change" hx-target="#catalogResults" hx-swap="outerHTML" hx-push-url="true" hx-include="#catalogFilters">
+        <select id="perPageSelect" name="per_page" form="catalogFilters" hx-get="/search" hx-trigger="change" hx-target="#catalogResults" hx-swap="outerHTML" hx-sync="#catalog:replace" hx-push-url="true" hx-include="#catalogFilters">
           <option value="24" {% if filters.per_page.unwrap_or(24) == 24 %}selected{% endif %}>24</option>
           <option value="48" {% if filters.per_page.unwrap_or(24) == 48 %}selected{% endif %}>48</option>
           <option value="96" {% if filters.per_page.unwrap_or(24) == 96 %}selected{% endif %}>96</option>
@@ -37,11 +37,11 @@
   {% if filters.total_pages > 1 %}
   <nav class="catalog-pagination" aria-label="Search results pages">
     {% if filters.page.unwrap_or(1) > 1 %}
-      <a class="secondary-button" rel="prev" href="{{ self.catalog_url(filters, filters.page.unwrap_or(1) - 1) }}" hx-get="{{ self.catalog_url(filters, filters.page.unwrap_or(1) - 1) }}" hx-target="#catalogResults" hx-swap="outerHTML" hx-push-url="true">Previous</a>
+      <a class="secondary-button" rel="prev" href="{{ self.catalog_url(filters, filters.page.unwrap_or(1) - 1) }}" hx-get="{{ self.catalog_url(filters, filters.page.unwrap_or(1) - 1) }}" hx-target="#catalogResults" hx-swap="outerHTML" hx-sync="#catalog:replace" hx-push-url="true">Previous</a>
     {% endif %}
     <span aria-current="page">Page {{ filters.page.unwrap_or(1) }} of {{ filters.total_pages }}</span>
     {% if filters.page.unwrap_or(1) < filters.total_pages %}
-      <a class="secondary-button" rel="next" href="{{ self.catalog_url(filters, filters.page.unwrap_or(1) + 1) }}" hx-get="{{ self.catalog_url(filters, filters.page.unwrap_or(1) + 1) }}" hx-target="#catalogResults" hx-swap="outerHTML" hx-push-url="true">Next</a>
+      <a class="secondary-button" rel="next" href="{{ self.catalog_url(filters, filters.page.unwrap_or(1) + 1) }}" hx-get="{{ self.catalog_url(filters, filters.page.unwrap_or(1) + 1) }}" hx-target="#catalogResults" hx-swap="outerHTML" hx-sync="#catalog:replace" hx-push-url="true">Next</a>
     {% endif %}
   </nav>
   {% endif %}

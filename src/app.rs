@@ -416,6 +416,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn search_htmx_route_renders_only_results_fragment() {
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let app = test_app(db);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/search?per_page=48&page=1")
+                    .header("HX-Request", "true")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_body(response).await;
+        assert!(body.starts_with(r#"<div id="catalogResults">"#));
+        assert!(body.contains("Items per page"));
+        assert!(!body.contains("<html"));
+        assert!(!body.contains("Search all items"));
+    }
+
+    #[tokio::test]
     async fn catalog_htmx_route_accepts_listing_filters() {
         let test_db = postgres_test_db().await;
         let db = test_db.pool();

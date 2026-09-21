@@ -64,6 +64,20 @@ fn result_filters(filters: CatalogFilters, count: usize, total: usize) -> Catalo
     out
 }
 
+fn catalog_results_response(
+    books: Vec<BookCard>,
+    filters: CatalogFilters,
+    total: usize,
+    source: &'static str,
+) -> Response {
+    let count = books.len();
+    CatalogResultsTemplate {
+        catalog_cards: ui::product_cards(books, source),
+        filters: result_filters(filters, count, total),
+    }
+    .into_response()
+}
+
 fn listing_checked(filters: &CatalogFilters, option: &str) -> bool {
     filters
         .listing
@@ -362,11 +376,12 @@ pub async fn catalog(
     let total = store::count_books(db, &filters).await? as usize;
 
     if headers.get("HX-Request").and_then(|v| v.to_str().ok()) == Some("true") {
-        let template = CatalogResultsTemplate {
-            catalog_cards: ui::product_cards(books.clone(), "catalog.results"),
-            filters: result_filters(filters, books.len(), total),
-        };
-        Ok(template.into_response())
+        Ok(catalog_results_response(
+            books,
+            filters,
+            total,
+            "catalog.results",
+        ))
     } else {
         let redirect = axum::response::Redirect::to("/search");
         Ok(redirect.into_response())
@@ -390,6 +405,16 @@ pub async fn search_page(
     );
     let books = store::list_books(db, &filters).await?;
     let total = store::count_books(db, &filters).await? as usize;
+
+    if headers.get("HX-Request").and_then(|v| v.to_str().ok()) == Some("true") {
+        return Ok(catalog_results_response(
+            books,
+            filters,
+            total,
+            "search.results",
+        ));
+    }
+
     let (genres, conditions, formats) = store::catalog_facets(db).await?;
     let cart = cart::view(db, &session).await?;
     let cart_lines = ui::cart_lines(cart.lines.clone(), "#cartDrawer");
@@ -432,7 +457,7 @@ pub async fn search_page(
             .unwrap_or(None),
     };
 
-    Ok(template)
+    Ok(template.into_response())
 }
 
 pub async fn book_detail(
