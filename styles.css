@@ -3371,21 +3371,78 @@ body.cart-drawer-updating .cart-panel {
 }
 
 @media (max-width: 760px) {
-  /* Header: search drops to its own full-width row, declutter the rest */
+  /* Mobile header: keep the primary controls in one compact row, then search. */
   .header-top-bar {
-    flex-wrap: wrap;
-    gap: 10px 14px;
-    padding-inline: 16px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "brand account cart"
+      "search search search";
+    gap: 8px 10px;
+    padding: 10px 12px;
+  }
+
+  .header-top-bar > .brand {
+    grid-area: brand;
+  }
+
+  .header-top-bar > .account-menu,
+  .header-top-bar > .account-signin-link {
+    grid-area: account;
+    justify-self: end;
+  }
+
+  .header-top-bar > .cart-toggle-widget {
+    grid-area: cart;
   }
 
   .header-search-form {
-    order: 1;
-    flex: 1 1 100%;
+    grid-area: search;
+    width: 100%;
     max-width: none;
   }
 
   .header-delivery-widget {
     display: none;
+  }
+
+  .header-top-bar > .header-widget:not(.account-menu):not(.account-signin-link) {
+    display: none;
+  }
+
+  .site-header-subnav {
+    height: 42px;
+    min-width: 0;
+    padding: 0 8px;
+  }
+
+  .subnav-left {
+    flex: 0 0 auto;
+    margin-right: 4px;
+  }
+
+  .subnav-links {
+    min-width: 0;
+    gap: 6px;
+  }
+
+  .subnav-links a,
+  .all-menu-button {
+    padding-inline: 8px;
+  }
+
+  .promo-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-overlay-grid {
+    width: min(100% - 24px, 520px);
+    grid-template-columns: 1fr;
+    margin-top: -28px;
+  }
+
+  .overlay-card {
+    min-height: 0;
   }
 
   .cart-page-layout {
@@ -4001,7 +4058,7 @@ body.cart-drawer-updating .cart-panel {
 
 @media (max-width: 620px) {
   .site-header {
-    height: 68px;
+    height: auto;
   }
 
   .site-header .brand span:last-child {
