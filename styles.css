@@ -1630,6 +1630,7 @@ h3 {
 .product-shelf {
   display: grid;
   gap: 18px;
+  scroll-margin-top: var(--anchor-offset);
 }
 
 .shelf-heading {
@@ -2525,6 +2526,7 @@ input[type="range"] {
   border-radius: var(--radius);
   color: #fffdf8;
   overflow: hidden;
+  scroll-margin-top: var(--anchor-offset);
 }
 
 .feature-band p,
