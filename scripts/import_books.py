@@ -25,6 +25,15 @@ def isbn13(value):
 def clean(value):
     return re.sub(r'\s+', ' ', html.unescape(re.sub('<[^>]+>', ' ', str(value or '')))).strip()
 
+def canonical_format(value):
+    value = clean(value)
+    folded = value.casefold()
+    if folded == 'paperback':
+        return 'Paperback'
+    if folded == 'hardcover':
+        return 'Hardcover'
+    return value
+
 def candidate(row, authors=None):
     isbn = next((n for x in row.get('isbn_13',[])+row.get('isbn_10',[]) if (n:=isbn13(x))),None)
     description=row.get('description','')
@@ -33,7 +42,7 @@ def candidate(row, authors=None):
     author=re.sub(r'^by\s+', '', clean(row.get('by_statement')), flags=re.I).strip(' .') or 'Unknown author'
     years=re.findall(r'\b(?:1[4-9]\d{2}|20[0-2]\d)\b',str(row.get('publish_date','')))
     covers=[c for c in row.get('covers',[]) if isinstance(c,int) and c>0]
-    fmt=clean(row.get('physical_format')) or 'Format unspecified'
+    fmt=canonical_format(row.get('physical_format')) or 'Format unspecified'
     publishers=row.get('publishers',[])
     if not isbn or not title or not covers:
         return None

@@ -45,3 +45,13 @@ validates decoded image bytes from an extracted bulk cover archive.
 Covers are displayed through Open Library URLs, with attribution on book detail
 pages. Application and database changes must ship together for descriptions and
 remote cover URLs to render; existing books retain their local cover paths.
+
+## Subject enrichment
+
+Imported editions retain their Open Library edition key in
+`books.metadata_source_id`. Run `scripts/enrich_openlibrary_subjects.py` to
+stream the same pinned editions snapshot, rehydrate authoritative `subjects`,
+preserve them in `book_subjects`, and map them into the controlled storefront
+genres. The tool writes a JSONL checkpoint first and refuses `--apply` when any
+record is missing from the snapshot. Unmatched records remain in the generic
+`Books` genre; the tool never classifies a title by guess or by API crawling.
