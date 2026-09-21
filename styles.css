@@ -83,6 +83,10 @@ body {
   line-height: 1.6;
 }
 
+#top {
+  scroll-margin-top: var(--anchor-offset);
+}
+
 body.cart-open {
   overflow: hidden;
 }
