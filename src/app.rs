@@ -132,6 +132,10 @@ pub fn build_router(state: AppState) -> Router {
             catalog_cache,
             crate::catalog_cache::middleware,
         ))
+        .layer(axum::middleware::from_fn_with_state(
+            state.email.clone(),
+            crate::email::wake_after_mutation,
+        ))
         .layer(axum::middleware::from_fn(crate::read_budget::middleware))
         .with_state(state)
 }
@@ -2091,6 +2095,40 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
+    #[tokio::test]
+    async fn committed_signup_wakes_idle_email_worker() {
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let email = std::sync::Arc::new(crate::email::EmailService::test_capture());
+        let app = build_router(AppState {
+            db: db.clone(),
+            email: email.clone(),
+            usage: crate::usage::UsageMonitor::healthy_for_test(),
+        });
+        let worker = email.spawn_worker(db.clone());
+        // Let the empty startup sweep enter its long idle wait.
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        let (cookie, csrf) = csrf_form(&app, "/signup", None).await;
+        let response = app.oneshot(Request::builder().method("POST").uri("/signup")
+            .header(header::COOKIE,cookie)
+            .header(header::ORIGIN,std::env::var("PUBLIC_BASE_URL").unwrap_or_else(|_| "https://www.chantelscorner.com".into()))
+            .header(header::CONTENT_TYPE,"application/x-www-form-urlencoded")
+            .body(Body::from(format!("first_name=Idle&last_name=Worker&email=idle%40example.com&password=UniqueHorseBookstore27%21&password_confirm=UniqueHorseBookstore27%21&csrf={csrf}"))).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        let result = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                let sent: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM email_outbox WHERE recipient='idle@example.com' AND status='accepted')").fetch_one(&db).await.unwrap();
+                if sent { break; }
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+        }).await;
+        worker.abort();
+        assert!(
+            result.is_ok(),
+            "committed mail was not delivered promptly after idle"
+        );
+    }
+
     #[tokio::test]
     async fn spending_alert_refresh_and_private_metrics() {
         let test_db = postgres_test_db().await;

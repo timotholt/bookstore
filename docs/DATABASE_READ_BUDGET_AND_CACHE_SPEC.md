@@ -100,3 +100,11 @@ Sources: [Neon consumption API](https://neon.com/docs/reference/api/consumption/
 ### Local release checks
 
 On 2026-09-24: workspace check and warning-free clippy passed; 56 application tests and 21 xtask tests passed in the full run. The added refresh/protected-metrics integration test passed separately, and the explicitly ignored email outbox test passed against the same disposable local database. Chrome verified search pagination, book detail, and Add to Stack updating the cart and totals. The real Neon v2 poll returned a successful organization usage estimate without a database query. Deployment remains to be verified.
+
+## Idle email worker
+
+The previous two-second outbox poll kept an enabled Neon compute active without visitors. The worker now receives an in-process notification after relevant account POST requests finish (after transaction commit), drains work at the existing two-second cadence, and sleeps until the next pending retry/lease deadline. With no work it checks every 15 minutes for recovery and cross-replica work. Startup checks immediately. No LISTEN connection or new service is required. This allows idle compute suspension between recovery checks; traffic and other database clients can still keep compute active.
+
+## Idle-cost audit
+
+Reviewed all production Rust tasks, browser timers, SQLx pool maintenance, Railway service configuration, and Neon compute settings. The email worker was the only continuous application PostgreSQL polling loop. The carousel timer only changes DOM; filter timers are user-triggered debouncing. Hover-prefetch previously downloaded complete book pages without navigation and has been removed. Click/search analytics are user-triggered writes, not idle polling. SQLx explicitly permits zero idle connections and closes unused connections after 60 seconds; it does not maintain a background minimum. The Neon usage poll is control-plane HTTP only. Railway has no cron schedule, one web replica, and deployment-only `/readyz` checks. Neon scale-to-zero is enabled (`suspend_timeout_seconds=0`, plan default). External clients/monitors are outside this repository audit.

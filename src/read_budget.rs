@@ -52,7 +52,6 @@ impl Reservation {
             counter.fetch_sub(self.max - rows, Ordering::SeqCst);
         }
         crate::usage::DB_ROWS.fetch_add(rows as u64, Ordering::Relaxed);
-        crate::usage::DB_QUERIES.fetch_add(1, Ordering::Relaxed);
         tracing::debug!(rows, maximum = self.max, "database read");
         Ok(())
     }
@@ -61,6 +60,7 @@ impl Reservation {
 pub trait ReadFutureExt<T>: Future<Output = Result<T, sqlx::Error>> + Sized {
     async fn bounded_one(self) -> Result<T, sqlx::Error> {
         let reservation = Reservation::new(1)?;
+        crate::usage::DB_QUERIES.fetch_add(1, Ordering::Relaxed);
         let value = self.await?;
         reservation.finish(1)?;
         Ok(value)
@@ -70,6 +70,7 @@ impl<T, F: Future<Output = Result<T, sqlx::Error>>> ReadFutureExt<T> for F {}
 pub trait RowsFutureExt<T>: Future<Output = Result<Vec<T>, sqlx::Error>> + Sized {
     async fn bounded_rows(self, max: usize) -> Result<Vec<T>, sqlx::Error> {
         let reservation = Reservation::new(max)?;
+        crate::usage::DB_QUERIES.fetch_add(1, Ordering::Relaxed);
         let value = self.await?;
         reservation.finish(value.len())?;
         Ok(value)

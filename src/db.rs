@@ -55,6 +55,8 @@ pub fn require_postgres_url(database_url: &str) -> Result<(), Error> {
 pub async fn connect(database_url: &str) -> Result<DbPool, sqlx::Error> {
     sqlx::postgres::PgPoolOptions::new()
         .max_connections(5)
+        .min_connections(0)
+        .idle_timeout(std::time::Duration::from_secs(60))
         .connect(database_url)
         .await
 }

@@ -167,6 +167,7 @@ struct InlineImage {
     content_type: String,
 }
 pub struct EmailService {
+    wake: tokio::sync::Notify,
     provider: Provider,
     key: Option<[u8; 32]>,
     key_id: String,
@@ -178,6 +179,38 @@ pub struct EmailService {
     quota: i32,
     client: reqwest::Client,
     capture_dir: Option<std::path::PathBuf>,
+}
+// Committed HTTP mutations notify the local worker; the slow sweep recovers after
+// restarts, missed notifications, or work created on another replica.
+fn idle_worker_delay(next_attempt_seconds: Option<f64>) -> Duration {
+    Duration::from_secs_f64(
+        next_attempt_seconds
+            .filter(|n| n.is_finite())
+            .unwrap_or(900.)
+            .clamp(2., 900.),
+    )
+}
+pub async fn wake_after_mutation(
+    axum::extract::State(mail): axum::extract::State<Arc<EmailService>>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let relevant = request.method() == axum::http::Method::POST
+        && matches!(
+            request.uri().path(),
+            "/signup"
+                | "/forgot-password"
+                | "/reset-password"
+                | "/verify-email"
+                | "/confirm-email-change"
+                | "/account/verification/resend"
+                | "/account/email-change"
+        );
+    let response = next.run(request).await;
+    if relevant {
+        mail.wake.notify_one();
+    }
+    response
 }
 fn mailbox(value: &str) -> bool {
     !value.contains(['\r', '\n']) && validator::validate_email(value)
@@ -282,6 +315,7 @@ impl EmailService {
             None
         };
         Ok(Self {
+            wake: tokio::sync::Notify::new(),
             provider,
             key,
             key_id,
@@ -394,12 +428,24 @@ impl EmailService {
             if !self.available() {
                 return;
             }
-            let mut interval = tokio::time::interval(Duration::from_secs(2));
+            let mut delay = Duration::ZERO;
             loop {
-                interval.tick().await;
-                if let Err(e) = crate::read_budget::scope(self.work_once(&pool)).await {
-                    tracing::error!(error=%e,"email worker failed");
+                tokio::select! {
+                    _ = tokio::time::sleep(delay) => {},
+                    _ = self.wake.notified() => {},
                 }
+                delay = match crate::read_budget::scope(async {
+                    if self.work_once(&pool).await? {
+                        Ok(Duration::from_secs(2))
+                    } else {
+                        let next: Option<f64> = sqlx::query_scalar("SELECT EXTRACT(EPOCH FROM MIN(CASE WHEN status='sending' THEN lease_until ELSE next_attempt_at END)-now())::double precision FROM email_outbox WHERE status IN ('pending','sending') AND expires_at>now()")
+                            .fetch_one(&pool).bounded_one().await?;
+                        Ok::<_, EmailError>(idle_worker_delay(next))
+                    }
+                }).await {
+                    Ok(delay) => delay,
+                    Err(e) => { tracing::error!(error=%e,"email worker failed"); Duration::from_secs(60) }
+                };
             }
         })
     }
@@ -674,6 +720,15 @@ fn verify_signature(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn idle_worker_sleeps_but_due_retries_stay_prompt() {
+        use super::*;
+        assert_eq!(idle_worker_delay(None), Duration::from_secs(900));
+        assert_eq!(idle_worker_delay(Some(30.)), Duration::from_secs(30));
+        assert_eq!(idle_worker_delay(Some(-1.)), Duration::from_secs(2));
+        assert_eq!(idle_worker_delay(Some(f64::NAN)), Duration::from_secs(900));
+    }
+
     use super::*;
     fn capture() -> EmailService {
         EmailService::from_lookup(false, |k| match k {
