@@ -191,7 +191,7 @@ impl UsageMonitor {
                 snapshot.last_error = Some(message.into());
             }
         }
-        tracing::info!(provider_transfer_bytes=?snapshot.provider_transfer_bytes,estimated_month_usd=?snapshot.estimated_month_usd,estimated_day_usd=?snapshot.estimated_day_usd,last_success=?snapshot.last_success,monitor_error=?snapshot.last_error,cache_hits=CACHE_HITS.load(Ordering::Relaxed),cache_fills=CACHE_FILLS.load(Ordering::Relaxed),cache_fill_bytes=CACHE_FILL_BYTES.load(Ordering::Relaxed),cache_errors=CACHE_ERRORS.load(Ordering::Relaxed),database_rows=DB_ROWS.load(Ordering::Relaxed),database_queries=DB_QUERIES.load(Ordering::Relaxed),read_budget_rejections=BUDGET_REJECTIONS.load(Ordering::Relaxed),"server usage statistics");
+        tracing::info!(provider_transfer_bytes=?snapshot.provider_transfer_bytes,estimated_month_usd=?snapshot.estimated_month_usd,estimated_day_usd=?snapshot.estimated_day_usd,last_success=?snapshot.last_success,monitor_error=?snapshot.last_error,cache_hits=CACHE_HITS.load(Ordering::Relaxed),cache_fills=CACHE_FILLS.load(Ordering::Relaxed),cache_fill_bytes=CACHE_FILL_BYTES.load(Ordering::Relaxed),cache_errors=CACHE_ERRORS.load(Ordering::Relaxed),database_rows_accounted=DB_ROWS.load(Ordering::Relaxed),database_read_queries=DB_QUERIES.load(Ordering::Relaxed),read_budget_rejections=BUDGET_REJECTIONS.load(Ordering::Relaxed),"server usage statistics");
     }
     #[cfg(test)]
     pub fn set_cost_for_test(&self, month: f64, day: f64) {
@@ -366,7 +366,7 @@ pub async fn metrics(State(state): State<AppState>, headers: HeaderMap) -> Respo
     }
     ([(axum::http::header::CACHE_CONTROL,"no-store")],Json(serde_json::json!({
         "neon":state.usage.snapshot(),"notice":state.usage.notice(),
-        "process":{"cache_hits":CACHE_HITS.load(Ordering::Relaxed),"cache_fills":CACHE_FILLS.load(Ordering::Relaxed),"estimated_cache_fill_bytes":CACHE_FILL_BYTES.load(Ordering::Relaxed),"cache_errors":CACHE_ERRORS.load(Ordering::Relaxed),"database_rows":DB_ROWS.load(Ordering::Relaxed),"database_queries":DB_QUERIES.load(Ordering::Relaxed),"read_budget_rejections":BUDGET_REJECTIONS.load(Ordering::Relaxed)}
+        "process":{"cache_hits":CACHE_HITS.load(Ordering::Relaxed),"cache_fills":CACHE_FILLS.load(Ordering::Relaxed),"estimated_cache_fill_bytes":CACHE_FILL_BYTES.load(Ordering::Relaxed),"cache_errors":CACHE_ERRORS.load(Ordering::Relaxed),"database_rows_accounted":DB_ROWS.load(Ordering::Relaxed),"database_read_queries":DB_QUERIES.load(Ordering::Relaxed),"read_budget_rejections":BUDGET_REJECTIONS.load(Ordering::Relaxed)}
     }))).into_response()
 }
 
