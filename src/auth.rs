@@ -1,4 +1,5 @@
 use crate::models::User;
+use crate::read_budget::ReadFutureExt;
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
@@ -116,6 +117,7 @@ pub async fn register_user(
     .bind(first_name)
     .bind(last_name)
     .fetch_one(&mut *tx)
+    .bounded_one()
     .await;
 
     let user = match user_result {
@@ -188,6 +190,7 @@ pub async fn login_user(
     )
     .bind(&email)
     .fetch_optional(db)
+    .bounded_one()
     .await?;
 
     let record = match record {
@@ -230,7 +233,7 @@ pub async fn login_user(
     };
 
     let unchanged: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users u JOIN password_credentials p ON p.user_id=u.id WHERE u.id=$1 AND u.auth_version=$2 AND p.password_hash=$3)")
-        .bind(&user.id).bind(version).bind(&password_hash).fetch_one(db).await?;
+        .bind(&user.id).bind(version).bind(&password_hash).fetch_one(db).bounded_one().await?;
     if !unchanged {
         return Err(AuthError::InvalidCredentials);
     }
@@ -280,6 +283,7 @@ pub async fn get_current_user(db: &PgPool, session: &Session) -> Result<Option<U
             .bind(&id)
             .bind(version)
             .fetch_optional(db)
+            .bounded_one()
             .await?;
             Ok(user)
         }
@@ -309,6 +313,7 @@ pub async fn update_user_profile(
     let current: String = sqlx::query_scalar("SELECT email FROM users WHERE id=$1")
         .bind(user_id)
         .fetch_one(db)
+        .bounded_one()
         .await?;
     if email != current {
         return Err(AuthError::Validation(
@@ -371,6 +376,7 @@ pub async fn update_user_profile(
     .bind(address_postal_code)
     .bind(input.marketing_opt_in)
     .fetch_one(db)
+    .bounded_one()
     .await;
 
     match result {

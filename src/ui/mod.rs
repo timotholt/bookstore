@@ -741,3 +741,32 @@ fn to_camel_id(id: &str) -> String {
     }
     out
 }
+
+#[derive(Debug, Clone)]
+pub struct PageNavView {
+    pub page: u32,
+    pub pages: i64,
+    pub previous: Option<LinkView>,
+    pub next: Option<LinkView>,
+}
+pub fn page_navigation(base: &str, key: &str, page: u32, total: i64, size: i64) -> PageNavView {
+    let page = page.max(1);
+    let pages = ((total + size - 1) / size).max(1);
+    let link = |label: &str, p: u32| {
+        LinkView::tracked(
+            label,
+            crate::pages::url(base, key, p),
+            "secondary-button",
+            "pagination_clicked",
+            "pagination",
+            "page",
+            p.to_string(),
+        )
+    };
+    PageNavView {
+        page,
+        pages,
+        previous: (page > 1).then(|| link("Previous", page - 1)),
+        next: (i64::from(page) < pages).then(|| link("Next", page + 1)),
+    }
+}

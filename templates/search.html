@@ -29,6 +29,8 @@
             <option value="{{ gen }}" {% if self.selected(filters.genre.as_deref(), gen) %}selected{% endif %}>{{ gen }}</option>
             {% endfor %}
           </select>
+          {% let navigation = genre_navigation.clone() %}
+          {% include "components/ui/page_navigation.html" %}
         </div>
         <div class="filter-block">
           <label for="conditionFilter">Condition</label>
@@ -38,6 +40,8 @@
             <option value="{{ cond }}" {% if self.selected(filters.condition.as_deref(), cond) %}selected{% endif %}>{{ cond }}</option>
             {% endfor %}
           </select>
+          {% let navigation = condition_navigation.clone() %}
+          {% include "components/ui/page_navigation.html" %}
         </div>
         <fieldset class="filter-block">
           <legend>New or Used</legend>
@@ -94,6 +98,8 @@
             <option value="{{ fmt }}" {% if self.selected(filters.format.as_deref(), fmt) %}selected{% endif %}>{{ fmt }}</option>
             {% endfor %}
           </select>
+          {% let navigation = format_navigation.clone() %}
+          {% include "components/ui/page_navigation.html" %}
         </div>
         <a class="secondary-button" id="resetFilters" href="/search">Reset filters</a>
       </form>

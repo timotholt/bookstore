@@ -10,6 +10,7 @@ use crate::handlers;
 
 #[derive(Clone)]
 pub struct AppState {
+    pub usage: std::sync::Arc<crate::usage::UsageMonitor>,
     pub db: DbPool,
     pub email: std::sync::Arc<crate::email::EmailService>,
 }
@@ -23,6 +24,7 @@ pub fn build_router(state: AppState) -> Router {
             tower_sessions::cookie::time::Duration::days(7),
         ));
 
+    let catalog_cache = std::sync::Arc::new(crate::catalog_cache::CatalogCache::new());
     Router::new()
         .route(
             "/webhooks/resend",
@@ -58,6 +60,7 @@ pub fn build_router(state: AppState) -> Router {
             get(crate::account_email::email_change_get)
                 .post(crate::account_email::email_change_post),
         )
+        .route("/ops/usage", get(crate::usage::metrics))
         .route("/healthz", get(handlers::healthz))
         .route("/readyz", get(handlers::readyz))
         .route("/version", get(handlers::version))
@@ -125,6 +128,15 @@ pub fn build_router(state: AppState) -> Router {
         .route_service("/styles.css", ServeFile::new("styles.css"))
         .layer(axum::extract::DefaultBodyLimit::max(16384))
         .layer(session_layer)
+        .layer(axum::middleware::from_fn_with_state(
+            catalog_cache,
+            crate::catalog_cache::middleware,
+        ))
+        .layer(axum::middleware::from_fn_with_state(
+            state.email.clone(),
+            crate::email::wake_after_mutation,
+        ))
+        .layer(axum::middleware::from_fn(crate::read_budget::middleware))
         .with_state(state)
 }
 
@@ -247,6 +259,7 @@ mod tests {
 
     fn test_app(db: DbPool) -> Router {
         build_router(AppState {
+            usage: crate::usage::UsageMonitor::healthy_for_test(),
             db,
             email: std::sync::Arc::new(crate::email::EmailService::test_capture()),
         })
@@ -255,6 +268,7 @@ mod tests {
     fn test_app_with_db(db: DbPool) -> (Router, DbPool) {
         (
             build_router(AppState {
+                usage: crate::usage::UsageMonitor::healthy_for_test(),
                 db: db.clone(),
                 email: std::sync::Arc::new(crate::email::EmailService::test_capture()),
             }),
@@ -1370,6 +1384,7 @@ mod tests {
             .unwrap();
         let cart_cookie = named_cookie(&add_response, cart::BROWSER_CART_KEY_COOKIE);
         let restarted_app = build_router(AppState {
+            usage: crate::usage::UsageMonitor::healthy_for_test(),
             db,
             email: std::sync::Arc::new(crate::email::EmailService::test_capture()),
         });
@@ -1780,6 +1795,7 @@ mod tests {
         assert_eq!(save_response.status(), StatusCode::OK);
 
         let restarted_app = build_router(AppState {
+            usage: crate::usage::UsageMonitor::healthy_for_test(),
             db: db.clone(),
             email: std::sync::Arc::new(crate::email::EmailService::test_capture()),
         });
@@ -2078,5 +2094,281 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+    #[tokio::test]
+    async fn committed_signup_wakes_idle_email_worker() {
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let email = std::sync::Arc::new(crate::email::EmailService::test_capture());
+        let app = build_router(AppState {
+            db: db.clone(),
+            email: email.clone(),
+            usage: crate::usage::UsageMonitor::healthy_for_test(),
+        });
+        let worker = email.spawn_worker(db.clone());
+        // Let the empty startup sweep enter its long idle wait.
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        let (cookie, csrf) = csrf_form(&app, "/signup", None).await;
+        let response = app.oneshot(Request::builder().method("POST").uri("/signup")
+            .header(header::COOKIE,cookie)
+            .header(header::ORIGIN,std::env::var("PUBLIC_BASE_URL").unwrap_or_else(|_| "https://www.chantelscorner.com".into()))
+            .header(header::CONTENT_TYPE,"application/x-www-form-urlencoded")
+            .body(Body::from(format!("first_name=Idle&last_name=Worker&email=idle%40example.com&password=UniqueHorseBookstore27%21&password_confirm=UniqueHorseBookstore27%21&csrf={csrf}"))).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        let result = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                let sent: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM email_outbox WHERE recipient='idle@example.com' AND status='accepted')").fetch_one(&db).await.unwrap();
+                if sent { break; }
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+        }).await;
+        worker.abort();
+        assert!(
+            result.is_ok(),
+            "committed mail was not delivered promptly after idle"
+        );
+    }
+
+    #[tokio::test]
+    async fn spending_alert_refresh_and_private_metrics() {
+        let test_db = postgres_test_db().await;
+        let usage = crate::usage::UsageMonitor::healthy_for_test();
+        let app = build_router(AppState {
+            db: test_db.pool(),
+            usage: usage.clone(),
+            email: std::sync::Arc::new(crate::email::EmailService::test_capture()),
+        });
+        let response = app
+            .clone()
+            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert!(!response_body(response)
+            .await
+            .contains("Neon spending alert"));
+        usage.set_cost_for_test(2., 0.51);
+        let response = app
+            .clone()
+            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_body(response).await;
+        assert!(
+            body.contains("Neon spending alert")
+                && body.contains("$0.51 today")
+                && body.contains("role=\"alert\"")
+        );
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/ops/usage")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/ops/usage")
+                    .header(
+                        header::AUTHORIZATION,
+                        "Bearer test-operations-token-at-least-32-characters",
+                    )
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+        let body = response_body(response).await;
+        assert!(body.contains("estimated_day_usd") && body.contains("cache_hits"));
+        assert!(!body.contains("test-operations-token"));
+    }
+
+    #[tokio::test]
+    async fn large_catalog_reads_are_bounded_and_warm_requests_reuse_cache() {
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        sqlx::query("INSERT INTO books(id,slug,title,description,search_text,primary_genre_id,is_new_arrival) SELECT 'budget-'||n,'budget-'||n,'Budget book '||lpad(n::text,5,'0'),repeat('long description ',500),'budget book', (SELECT id FROM genres ORDER BY id LIMIT 1),true FROM generate_series(1,10001) n")
+            .execute(&db).await.unwrap();
+        sqlx::query("INSERT INTO book_copies(book_id,condition,price,format,stock) SELECT id,'Good',5,'Paperback',1 FROM books WHERE id LIKE 'budget-%'")
+            .execute(&db).await.unwrap();
+        let filters = crate::models::CatalogFilters::default();
+        let all_count = crate::store::count_books(&db, &filters).await.unwrap();
+        assert!(all_count > 10000);
+        let page = crate::store::list_books(&db, &filters).await.unwrap();
+        assert_eq!(page.len(), 24);
+        assert!(page.iter().all(|b| b.description.is_empty()));
+        let bad = crate::models::CatalogFilters {
+            per_page: Some(10000),
+            ..Default::default()
+        };
+        assert!(crate::store::list_books(&db, &bad).await.is_err());
+        assert!(crate::store::collection_books(&db, "best-sellers", -1)
+            .await
+            .is_err());
+        assert!(
+            crate::store::books_by_copy_ids(&db, &(1..=101).collect::<Vec<_>>())
+                .await
+                .is_err()
+        );
+        for path in [
+            "/",
+            "/search?per_page=96",
+            "/books/budget-1",
+            "/cart",
+            "/login",
+        ] {
+            let app = test_app(db.clone());
+            let mut rows = Vec::new();
+            for _ in 0..2 {
+                let response = app
+                    .clone()
+                    .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+                    .await
+                    .unwrap();
+                assert_eq!(response.status(), StatusCode::OK, "{path}");
+                rows.push(
+                    response.headers()["x-test-read-rows"]
+                        .to_str()
+                        .unwrap()
+                        .parse::<usize>()
+                        .unwrap(),
+                );
+                let body = response_body(response).await;
+                if path.starts_with("/search") {
+                    assert!(body.contains(&all_count.to_string()), "total missing");
+                }
+            }
+            assert!(rows[0] <= 200, "{path}: {rows:?}");
+            assert_eq!(
+                rows[1], 2,
+                "warm {path} queried PostgreSQL beyond the reserved session allowance"
+            );
+            println!(
+                "cache evidence: {path}, cold rows={}, warm rows={}",
+                rows[0], rows[1]
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn large_baskets_and_variants_are_paged_without_losing_totals() {
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        sqlx::query("INSERT INTO books(id,slug,title) SELECT 'page-'||n,'page-'||n,'Page book '||lpad(n::text,3,'0') FROM generate_series(1,45)n").execute(&db).await.unwrap();
+        sqlx::query("INSERT INTO book_copies(book_id,price,stock,format) SELECT id,5,1,'Paperback' FROM books WHERE id LIKE 'page-%'").execute(&db).await.unwrap();
+        let key = uuid::Uuid::new_v4().to_string();
+        let cart_id: i64 = sqlx::query_scalar(
+            "INSERT INTO carts(session_key,status) VALUES($1,'active') RETURNING id",
+        )
+        .bind(&key)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO cart_items(cart_id,copy_id,quantity) SELECT $1,id,1 FROM book_copies WHERE book_id LIKE 'page-%'").bind(cart_id).execute(&db).await.unwrap();
+        sqlx::query("INSERT INTO saved_items(session_key,copy_id,quantity) SELECT $1,id,1 FROM book_copies WHERE book_id LIKE 'page-%'").bind(&key).execute(&db).await.unwrap();
+        sqlx::query("INSERT INTO book_copies(book_id,price,stock,format) SELECT 'page-1',100+n,1,'Option '||n FROM generate_series(1,25)n").execute(&db).await.unwrap();
+        sqlx::query("INSERT INTO variant_attributes(variant_id,name,value) SELECT c.id,'attribute-'||n,'value-'||n FROM book_copies c CROSS JOIN generate_series(1,7)n WHERE c.book_id='page-1'").execute(&db).await.unwrap();
+        let app = test_app(db.clone());
+        for page in 1..=3 {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri(format!("/cart?cart_page={page}&saved_page={page}"))
+                        .header(header::COOKIE, format!("chantels_cart_key={key}"))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            let rows: usize = response.headers()["x-test-read-rows"]
+                .to_str()
+                .unwrap()
+                .parse()
+                .unwrap();
+            assert!(rows <= 200);
+            let body = response_body(response).await;
+            assert!(
+                body.contains("$225.00"),
+                "full basket subtotal missing on page {page}"
+            );
+            assert!(body.contains(&format!("Page {page} of 3")));
+            assert!(body.contains("45 items"));
+        }
+        for path in [
+            "/books/page-1",
+            "/books/page-1?copy_page=2",
+            "/books/page-1?attribute_page=2",
+        ] {
+            let response = app
+                .clone()
+                .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK, "{path}");
+            let body = response_body(response).await;
+            assert!(body.contains("Page "), "continuation missing {path}");
+        }
+        // Cart calculations use live offers, even after a detail snapshot is cached.
+        sqlx::query(
+            "UPDATE book_copies SET price=6 WHERE book_id LIKE 'page-%' AND format='Paperback'",
+        )
+        .execute(&db)
+        .await
+        .unwrap();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/cart")
+                    .header(header::COOKIE, format!("chantels_cart_key={key}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(response_body(response).await.contains("$270.00"));
+    }
+
+    #[test]
+    fn runtime_queries_require_explicit_read_guards() {
+        for (name, source) in [
+            ("store", include_str!("store.rs")),
+            ("cart", include_str!("cart.rs")),
+            ("auth", include_str!("auth.rs")),
+            ("handlers", include_str!("handlers.rs")),
+            ("account_email", include_str!("account_email.rs")),
+            ("email", include_str!("email/mod.rs")),
+        ] {
+            let source = source.split("#[cfg(test)]\nmod ").next().unwrap();
+            for (needle, guard) in [
+                (".fetch_all(", ".bounded_rows("),
+                (".fetch_one(", ".bounded_one()"),
+                (".fetch_optional(", ".bounded_one()"),
+            ] {
+                for tail in source.split(needle).skip(1) {
+                    assert!(
+                        tail.split(".await").next().unwrap().contains(guard),
+                        "unguarded {needle} in {name}"
+                    );
+                }
+            }
+            assert!(
+                !source.contains(".fetch("),
+                "streamed reads require explicit review: {name}"
+            );
+            assert!(
+                !source.contains("sqlx::raw_sql"),
+                "raw SQL requires explicit review: {name}"
+            );
+        }
     }
 }

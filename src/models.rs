@@ -84,6 +84,8 @@ pub struct CartLine {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CartView {
+    pub page: u32,
+    pub total_lines: i64,
     pub lines: Vec<CartLine>,
     pub item_count: i32,
     pub subtotal: Decimal,
@@ -96,6 +98,8 @@ pub struct CartView {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SavedItemsView {
+    pub page: u32,
+    pub total_lines: i64,
     pub lines: Vec<CartLine>,
     pub item_count: i32,
 }

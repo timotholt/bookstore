@@ -1,4 +1,5 @@
 //! Transactional account mail. Secrets and payloads intentionally never implement Debug.
+use crate::read_budget::ReadFutureExt;
 use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit, OsRng, Payload},
     Aes256Gcm, Nonce,
@@ -166,6 +167,7 @@ struct InlineImage {
     content_type: String,
 }
 pub struct EmailService {
+    wake: tokio::sync::Notify,
     provider: Provider,
     key: Option<[u8; 32]>,
     key_id: String,
@@ -177,6 +179,38 @@ pub struct EmailService {
     quota: i32,
     client: reqwest::Client,
     capture_dir: Option<std::path::PathBuf>,
+}
+// Committed HTTP mutations notify the local worker; the slow sweep recovers after
+// restarts, missed notifications, or work created on another replica.
+fn idle_worker_delay(next_attempt_seconds: Option<f64>) -> Duration {
+    Duration::from_secs_f64(
+        next_attempt_seconds
+            .filter(|n| n.is_finite())
+            .unwrap_or(900.)
+            .clamp(2., 900.),
+    )
+}
+pub async fn wake_after_mutation(
+    axum::extract::State(mail): axum::extract::State<Arc<EmailService>>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let relevant = request.method() == axum::http::Method::POST
+        && matches!(
+            request.uri().path(),
+            "/signup"
+                | "/forgot-password"
+                | "/reset-password"
+                | "/verify-email"
+                | "/confirm-email-change"
+                | "/account/verification/resend"
+                | "/account/email-change"
+        );
+    let response = next.run(request).await;
+    if relevant {
+        mail.wake.notify_one();
+    }
+    response
 }
 fn mailbox(value: &str) -> bool {
     !value.contains(['\r', '\n']) && validator::validate_email(value)
@@ -281,6 +315,7 @@ impl EmailService {
             None
         };
         Ok(Self {
+            wake: tokio::sync::Notify::new(),
             provider,
             key,
             key_id,
@@ -393,12 +428,24 @@ impl EmailService {
             if !self.available() {
                 return;
             }
-            let mut interval = tokio::time::interval(Duration::from_secs(2));
+            let mut delay = Duration::ZERO;
             loop {
-                interval.tick().await;
-                if let Err(e) = self.work_once(&pool).await {
-                    tracing::error!(error=%e,"email worker failed");
+                tokio::select! {
+                    _ = tokio::time::sleep(delay) => {},
+                    _ = self.wake.notified() => {},
                 }
+                delay = match crate::read_budget::scope(async {
+                    if self.work_once(&pool).await? {
+                        Ok(Duration::from_secs(2))
+                    } else {
+                        let next: Option<f64> = sqlx::query_scalar("SELECT EXTRACT(EPOCH FROM MIN(CASE WHEN status='sending' THEN lease_until ELSE next_attempt_at END)-now())::double precision FROM email_outbox WHERE status IN ('pending','sending') AND expires_at>now()")
+                            .fetch_one(&pool).bounded_one().await?;
+                        Ok::<_, EmailError>(idle_worker_delay(next))
+                    }
+                }).await {
+                    Ok(delay) => delay,
+                    Err(e) => { tracing::error!(error=%e,"email worker failed"); Duration::from_secs(60) }
+                };
             }
         })
     }
@@ -413,7 +460,7 @@ impl EmailService {
             .await?;
         sqlx::query("UPDATE email_outbox SET status='expired',payload=NULL,lease_owner=NULL,lease_until=NULL WHERE status IN ('pending','sending') AND expires_at<=now()").execute(pool).await?;
         let owner = Uuid::new_v4();
-        let row=sqlx::query("WITH candidate AS (SELECT id FROM email_outbox WHERE (status='pending' OR (status='sending' AND lease_until<now())) AND next_attempt_at<=now() AND expires_at>now() ORDER BY CASE WHEN kind='verification' THEN 1 ELSE 0 END,created_at FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE email_outbox o SET status='sending',lease_owner=$1,lease_until=now()+interval '60 seconds' FROM candidate c WHERE o.id=c.id RETURNING o.*").bind(owner).fetch_optional(pool).await?;
+        let row=sqlx::query("WITH candidate AS (SELECT id FROM email_outbox WHERE (status='pending' OR (status='sending' AND lease_until<now())) AND next_attempt_at<=now() AND expires_at>now() ORDER BY CASE WHEN kind='verification' THEN 1 ELSE 0 END,created_at FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE email_outbox o SET status='sending',lease_owner=$1,lease_until=now()+interval '60 seconds' FROM candidate c WHERE o.id=c.id RETURNING o.*").bind(owner).fetch_optional(pool).bounded_one().await?;
         let Some(row) = row else { return Ok(false) };
         let id: Uuid = row.get("id");
         let recipient: String = row.get("recipient");
@@ -423,9 +470,10 @@ impl EmailService {
         )
         .bind(&recipient)
         .fetch_one(pool)
+        .bounded_one()
         .await?;
         let current = if let Some(token) = token {
-            sqlx::query_scalar::<_,bool>("SELECT EXISTS(SELECT 1 FROM account_tokens t JOIN users u ON u.id=t.user_id WHERE t.id=$1 AND t.consumed_at IS NULL AND t.revoked_at IS NULL AND t.expires_at>now() AND t.auth_version=u.auth_version AND t.target_email=$2 AND (t.purpose='change_email' OR u.email=t.target_email))").bind(token).bind(&recipient).fetch_one(pool).await?
+            sqlx::query_scalar::<_,bool>("SELECT EXISTS(SELECT 1 FROM account_tokens t JOIN users u ON u.id=t.user_id WHERE t.id=$1 AND t.consumed_at IS NULL AND t.revoked_at IS NULL AND t.expires_at>now() AND t.auth_version=u.auth_version AND t.target_email=$2 AND (t.purpose='change_email' OR u.email=t.target_email))").bind(token).bind(&recipient).fetch_one(pool).bounded_one().await?
         } else {
             true
         };
@@ -454,7 +502,7 @@ impl EmailService {
             return Ok(true);
         };
         let verification: bool = row.get::<String, _>("kind") == "verification";
-        let budget=sqlx::query("INSERT INTO email_send_budget(day,total,verification,last_send_at) VALUES(CURRENT_DATE,1,$1,now()) ON CONFLICT(day) DO UPDATE SET total=email_send_budget.total+1,verification=email_send_budget.verification+$1,last_send_at=now() WHERE email_send_budget.total<$2 AND ($1=0 OR email_send_budget.verification<$3) AND email_send_budget.last_send_at<now()-interval '1 second' RETURNING total").bind(if verification{1}else{0}).bind(self.quota).bind(self.quota*4/5).fetch_optional(pool).await?;
+        let budget=sqlx::query("INSERT INTO email_send_budget(day,total,verification,last_send_at) VALUES(CURRENT_DATE,1,$1,now()) ON CONFLICT(day) DO UPDATE SET total=email_send_budget.total+1,verification=email_send_budget.verification+$1,last_send_at=now() WHERE email_send_budget.total<$2 AND ($1=0 OR email_send_budget.verification<$3) AND email_send_budget.last_send_at<now()-interval '1 second' RETURNING total").bind(if verification{1}else{0}).bind(self.quota).bind(self.quota*4/5).fetch_optional(pool).bounded_one().await?;
         if budget.is_none() {
             self.retry(pool, id, owner, "quota_or_rate_limit", 60, false)
                 .await?;
@@ -672,6 +720,15 @@ fn verify_signature(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn idle_worker_sleeps_but_due_retries_stay_prompt() {
+        use super::*;
+        assert_eq!(idle_worker_delay(None), Duration::from_secs(900));
+        assert_eq!(idle_worker_delay(Some(30.)), Duration::from_secs(30));
+        assert_eq!(idle_worker_delay(Some(-1.)), Duration::from_secs(2));
+        assert_eq!(idle_worker_delay(Some(f64::NAN)), Duration::from_secs(900));
+    }
+
     use super::*;
     fn capture() -> EmailService {
         EmailService::from_lookup(false, |k| match k {
@@ -878,6 +935,7 @@ mod tests {
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT count(*) FROM email_outbox")
                 .fetch_one(&pool)
+                .bounded_one()
                 .await
                 .unwrap(),
             0
@@ -898,6 +956,7 @@ mod tests {
         let payload: Vec<u8> = sqlx::query_scalar("SELECT payload FROM email_outbox WHERE id=$1")
             .bind(id)
             .fetch_one(&pool)
+            .bounded_one()
             .await
             .unwrap();
         assert!(!payload.windows(6).any(|x| x == b"secret"));
@@ -907,6 +966,7 @@ mod tests {
         let row = sqlx::query("SELECT status,payload,attempts FROM email_outbox WHERE id=$1")
             .bind(id)
             .fetch_one(&pool)
+            .bounded_one()
             .await
             .unwrap();
         assert_eq!(row.get::<String, _>("status"), "accepted");
@@ -932,6 +992,7 @@ mod tests {
             sqlx::query_scalar::<_, String>("SELECT status FROM email_outbox WHERE id=$1")
                 .bind(blocked)
                 .fetch_one(&pool)
+                .bounded_one()
                 .await
                 .unwrap(),
             "cancelled"
@@ -959,6 +1020,7 @@ mod tests {
             sqlx::query_scalar::<_, String>("SELECT error_category FROM email_outbox WHERE id=$1")
                 .bind(quota_job)
                 .fetch_one(&pool)
+                .bounded_one()
                 .await
                 .unwrap(),
             "quota_or_rate_limit"
@@ -972,6 +1034,7 @@ mod tests {
         let expired = sqlx::query("SELECT status,payload FROM email_outbox WHERE id=$1")
             .bind(quota_job)
             .fetch_one(&pool)
+            .bounded_one()
             .await
             .unwrap();
         assert_eq!(expired.get::<String, _>("status"), "expired");
@@ -1006,6 +1069,7 @@ mod tests {
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT count(*) FROM email_delivery_events")
                 .fetch_one(&pool)
+                .bounded_one()
                 .await
                 .unwrap(),
             2
@@ -1015,6 +1079,7 @@ mod tests {
                 "SELECT reason FROM email_suppressions WHERE recipient='signed@example.com'"
             )
             .fetch_one(&pool)
+            .bounded_one()
             .await
             .unwrap(),
             "email.complained"

@@ -106,6 +106,10 @@
           </button>
           {% endfor %}
         </div>
+        {% let navigation = copy_navigation.clone() %}
+        {% include "components/ui/page_navigation.html" %}
+        {% let navigation = attribute_navigation.clone() %}
+        {% include "components/ui/page_navigation.html" %}
       </section>
 
       <section class="detail-info-card details-tabs-section" aria-label="Book details and condition guide">

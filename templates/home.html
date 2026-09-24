@@ -2,6 +2,9 @@
 
 {% block content %}
 <main id="top">
+  {% if let Some(notice) = usage_notice %}
+  {% include "components/ui/service_notice.html" %}
+  {% endif %}
   <div id="storefrontView">
     <section class="hero-amazon-carousel" aria-label="Store highlights carousel">
       <div class="carousel-track-wrapper">

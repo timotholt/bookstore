@@ -1,3 +1,4 @@
+use crate::read_budget::{ReadFutureExt, RowsFutureExt};
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
 use rust_decimal::Decimal;
 use std::collections::HashMap;
@@ -21,7 +22,15 @@ pub async fn view(db: &DbPool, session: &Session) -> Result<CartView, AppError> 
     };
 
     let items = cart_items(db, cart_id).await?;
-    build_cart_view(db, Some(cart_id), items).await
+    let view = build_cart_view(db, Some(cart_id), items).await?;
+    let (count,subtotal,total_lines):(i64,Decimal,i64)=sqlx::query_as("SELECT COALESCE(sum(least(i.quantity,c.stock)),0)::bigint,COALESCE(sum(least(i.quantity,c.stock)*c.price),0),count(*) FROM cart_items i JOIN book_copies c ON c.id=i.copy_id WHERE i.cart_id=$1 AND i.quantity>0 AND c.stock>0 AND c.is_sold=false")
+        .bind(cart_id).fetch_one(db).bounded_one().await?;
+    let count = i32::try_from(count)
+        .map_err(|_| AppError::Validation("cart quantity is too large".into()))?;
+    let mut view = cart_view_from_totals(view.lines, count, subtotal);
+    view.page = crate::pages::number("cart_page");
+    view.total_lines = total_lines;
+    Ok(view)
 }
 
 pub async fn saved_view(db: &DbPool, session: &Session) -> Result<SavedItemsView, AppError> {
@@ -30,7 +39,14 @@ pub async fn saved_view(db: &DbPool, session: &Session) -> Result<SavedItemsView
     };
 
     let items = saved_items(db, &session_key).await?;
-    build_saved_items_view(db, &session_key, items).await
+    let mut view = build_saved_items_view(db, &session_key, items).await?;
+    let (count,total_lines):(i64,i64)=sqlx::query_as("SELECT COALESCE(sum(i.quantity),0)::bigint,count(*) FROM saved_items i JOIN book_copies c ON c.id=i.copy_id WHERE i.session_key=$1 AND i.user_id IS NULL AND i.quantity>0 AND c.stock>0 AND c.is_sold=false")
+        .bind(&session_key).fetch_one(db).bounded_one().await?;
+    view.item_count = i32::try_from(count)
+        .map_err(|_| AppError::Validation("saved quantity is too large".into()))?;
+    view.page = crate::pages::number("saved_page");
+    view.total_lines = total_lines;
+    Ok(view)
 }
 
 pub async fn add_one(db: &DbPool, session: &Session, copy_id: i64) -> Result<(), AppError> {
@@ -284,6 +300,7 @@ async fn active_cart_id(db: &DbPool, session_key: &str) -> Result<Option<i64>, s
     )
     .bind(session_key)
     .fetch_optional(db)
+    .bounded_one()
     .await
 }
 
@@ -305,17 +322,8 @@ async fn ensure_active_cart(db: &DbPool, session_key: &str) -> Result<i64, sqlx:
 }
 
 async fn cart_items(db: &DbPool, cart_id: i64) -> Result<Vec<CartItem>, sqlx::Error> {
-    sqlx::query_as::<_, CartItem>(
-        r#"
-        SELECT copy_id, quantity
-        FROM cart_items
-        WHERE cart_id = $1
-        ORDER BY created_at ASC, id ASC
-        "#,
-    )
-    .bind(cart_id)
-    .fetch_all(db)
-    .await
+    sqlx::query_as("SELECT i.copy_id,i.quantity FROM cart_items i JOIN book_copies c ON c.id=i.copy_id WHERE i.cart_id=$1 AND i.quantity>0 AND c.stock>0 AND c.is_sold=false ORDER BY i.created_at,i.id LIMIT 20 OFFSET $2")
+        .bind(cart_id).bind(crate::pages::offset("cart_page",20)).fetch_all(db).bounded_rows(20).await
 }
 
 async fn cart_item_quantity(
@@ -329,21 +337,13 @@ async fn cart_item_quantity(
     .bind(cart_id)
     .bind(copy_id)
     .fetch_optional(db)
+    .bounded_one()
     .await
 }
 
 async fn saved_items(db: &DbPool, session_key: &str) -> Result<Vec<SavedItem>, sqlx::Error> {
-    sqlx::query_as::<_, SavedItem>(
-        r#"
-        SELECT copy_id, quantity
-        FROM saved_items
-        WHERE session_key = $1 AND user_id IS NULL
-        ORDER BY created_at ASC, id ASC
-        "#,
-    )
-    .bind(session_key)
-    .fetch_all(db)
-    .await
+    sqlx::query_as("SELECT i.copy_id,i.quantity FROM saved_items i JOIN book_copies c ON c.id=i.copy_id WHERE i.session_key=$1 AND i.user_id IS NULL AND i.quantity>0 AND c.stock>0 AND c.is_sold=false ORDER BY i.created_at,i.id LIMIT 20 OFFSET $2")
+        .bind(session_key).bind(crate::pages::offset("saved_page",20)).fetch_all(db).bounded_rows(20).await
 }
 
 async fn saved_item_quantity(
@@ -356,7 +356,7 @@ async fn saved_item_quantity(
     )
     .bind(session_key)
     .bind(copy_id)
-    .fetch_optional(db)
+    .fetch_optional(db).bounded_one()
     .await
 }
 
@@ -375,6 +375,7 @@ async fn removed_cart_item(
     )
     .bind(session_key)
     .fetch_optional(db)
+    .bounded_one()
     .await
 }
 
@@ -388,7 +389,7 @@ async fn removed_item_quantity(
     )
     .bind(session_key)
     .bind(copy_id)
-    .fetch_optional(db)
+    .fetch_optional(db).bounded_one()
     .await
 }
 
@@ -603,7 +604,12 @@ async fn build_saved_items_view(
         item_count += quantity;
     }
 
-    Ok(SavedItemsView { lines, item_count })
+    Ok(SavedItemsView {
+        total_lines: lines.len() as i64,
+        page: 1,
+        lines,
+        item_count,
+    })
 }
 
 fn cart_view_from_totals(lines: Vec<CartLine>, item_count: i32, subtotal: Decimal) -> CartView {
@@ -630,6 +636,8 @@ fn cart_view_from_totals(lines: Vec<CartLine>, item_count: i32, subtotal: Decima
     }
 
     CartView {
+        total_lines: lines.len() as i64,
+        page: 1,
         lines,
         item_count,
         subtotal,

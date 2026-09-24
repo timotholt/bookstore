@@ -24,6 +24,17 @@ pub enum AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, error_message) = match self {
+            AppError::Database(sqlx::Error::Protocol(ref message))
+                if message.contains("budget exceeded")
+                    || message.contains("refresh rate exceeded") =>
+            {
+                return (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    [(axum::http::header::RETRY_AFTER, "60")],
+                    "Catalog is temporarily busy. Please try again shortly.",
+                )
+                    .into_response();
+            }
             AppError::Database(err) => {
                 tracing::error!("Database error: {:?}", err);
                 (

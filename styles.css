@@ -64,6 +64,9 @@
   --product-card-width: 184px;
   --product-card-min: 158px;
   --product-card-gap: 18px;
+  --ui-page-navigation-gap: 1rem;
+  --ui-service-notice-space: 1rem;
+  --ui-service-notice-text-gap: .5rem;
   font-family: var(--font-sans);
 }
 
@@ -5929,3 +5932,9 @@ body.cart-drawer-updating .cart-panel {
 @keyframes swatch-spin {
   to { transform: rotate(360deg); }
 }
+
+.ui-page-navigation { display: flex; align-items: center; justify-content: center; gap: var(--ui-page-navigation-gap); padding-block: var(--ui-page-navigation-gap); }
+
+.ui-service-notice { margin: var(--ui-service-notice-space); padding: var(--ui-service-notice-space); border: 2px solid var(--gold); border-radius: var(--radius); background: var(--surface); color: var(--ink); }
+.ui-service-notice p { margin: var(--ui-service-notice-text-gap) 0 0; }
+.ui-service-notice--error { border-color: var(--oxblood); }

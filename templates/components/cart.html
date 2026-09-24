@@ -30,6 +30,8 @@
         {% include "components/ui/link.html" %}
       </div>
       {% endfor %}
+      {% let navigation = self.page_navigation("/cart","cart_page",cart.page,cart.total_lines,20) %}
+      {% include "components/ui/page_navigation.html" %}
     </div>
     <div class="cart-footer">
       <div class="cart-row">
