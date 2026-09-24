@@ -35,5 +35,7 @@ base64 = "0.22"
 hmac = "0.12"
 sha2 = "0.10"
 
+moka = { version = "0.12", features = ["future"] }
+
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

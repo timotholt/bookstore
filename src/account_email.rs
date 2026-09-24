@@ -1,4 +1,5 @@
 //! Account email challenges. GET only exchanges a bearer link for a server-side challenge.
+use crate::read_budget::ReadFutureExt;
 use crate::{
     app::AppState,
     email::{EmailKind, EmailService},
@@ -55,7 +56,7 @@ pub async fn check_csrf(session: &Session, headers: &HeaderMap, supplied: &str) 
 /// Atomic buckets are shared by all application replicas. Never trust forwarded headers.
 async fn limit(db: &PgPool, key: &str, count: i32, seconds: i64) -> Result<bool, sqlx::Error> {
     let n:i32=sqlx::query_scalar("INSERT INTO account_email_rate_limits(bucket,attempts,expires_at) VALUES($1,1,now()+make_interval(secs=>$2::double precision)) ON CONFLICT(bucket) DO UPDATE SET attempts=CASE WHEN account_email_rate_limits.expires_at<=now() THEN 1 ELSE account_email_rate_limits.attempts+1 END, expires_at=CASE WHEN account_email_rate_limits.expires_at<=now() THEN EXCLUDED.expires_at ELSE account_email_rate_limits.expires_at END RETURNING attempts")
-        .bind(digest(key)).bind(seconds as f64).fetch_one(db).await?;
+        .bind(digest(key)).bind(seconds as f64).fetch_one(db).bounded_one().await?;
     sqlx::query("DELETE FROM account_email_rate_limits WHERE expires_at < now()-interval '1 day'")
         .execute(db)
         .await?;
@@ -108,6 +109,7 @@ pub async fn issue(
     };
     let now: chrono::DateTime<Utc> = sqlx::query_scalar("SELECT now()")
         .fetch_one(&mut **tx)
+        .bounded_one()
         .await?;
     let expires = now
         + if hours == 0 {
@@ -359,6 +361,7 @@ pub async fn verification_get(State(s): State<AppState>, session: Session) -> Re
         sqlx::query_scalar("SELECT email_verified_at IS NOT NULL FROM users WHERE id=$1")
             .bind(&u.id)
             .fetch_one(&s.db)
+            .bounded_one()
             .await
             .unwrap_or(false);
     if verified {
@@ -425,10 +428,10 @@ pub async fn forgot_post(
         let Ok(email)=crate::auth::normalize_email(&f.email) else{return Ok(());};
         if !issuance_limits(&s.db,&email,"reset_password").await{return Ok(());}
         let mut tx=s.db.begin().await?;
-        let row=sqlx::query("SELECT u.id,u.auth_version FROM users u JOIN password_credentials p ON p.user_id=u.id WHERE email=$1 FOR UPDATE OF u").bind(&email).fetch_optional(&mut *tx).await?;
+        let row=sqlx::query("SELECT u.id,u.auth_version FROM users u JOIN password_credentials p ON p.user_id=u.id WHERE email=$1 FOR UPDATE OF u").bind(&email).fetch_optional(&mut *tx).bounded_one().await?;
         if let Some(row)=row {
             let id:String=row.get("id");let version:i64=row.get("auth_version");
-            let count:i64=sqlx::query_scalar("SELECT count(*) FROM account_tokens WHERE user_id=$1 AND purpose='reset_password' AND revoked_at IS NULL AND consumed_at IS NULL AND expires_at>now()").bind(&id).fetch_one(&mut *tx).await?;
+            let count:i64=sqlx::query_scalar("SELECT count(*) FROM account_tokens WHERE user_id=$1 AND purpose='reset_password' AND revoked_at IS NULL AND consumed_at IS NULL AND expires_at>now()").bind(&id).fetch_one(&mut *tx).bounded_one().await?;
             if count<5 {issue(&mut tx,&s.email,&id,"reset_password",&email,version).await?;}
         }
         tx.commit().await?;Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
@@ -469,7 +472,7 @@ pub async fn resend_post(
     }
     let result=async {
         let mut tx=s.db.begin().await?;
-        let r=sqlx::query("SELECT email,auth_version,email_verified_at IS NOT NULL AS verified FROM users WHERE id=$1 FOR UPDATE").bind(&u.id).fetch_one(&mut *tx).await?;
+        let r=sqlx::query("SELECT email,auth_version,email_verified_at IS NOT NULL AS verified FROM users WHERE id=$1 FOR UPDATE").bind(&u.id).fetch_one(&mut *tx).bounded_one().await?;
         let current_version: i64=r.get("auth_version");
         if session.get::<i64>("auth_version").await? != Some(current_version) { return Err(crate::auth::AuthError::InvalidCredentials.into()); }
         let current_email: String=r.get("email");
@@ -492,7 +495,7 @@ async fn token(
     hash: &str,
     purpose: &str,
 ) -> Result<Option<sqlx::postgres::PgRow>, sqlx::Error> {
-    sqlx::query("SELECT t.*,u.email FROM account_tokens t JOIN users u ON u.id=t.user_id WHERE t.token_hash=$1 AND t.purpose=$2 AND t.consumed_at IS NULL AND t.revoked_at IS NULL AND t.expires_at>now() AND t.auth_version=u.auth_version AND (t.purpose='change_email' OR t.target_email=u.email)").bind(hash).bind(purpose).fetch_optional(db).await
+    sqlx::query("SELECT t.*,u.email FROM account_tokens t JOIN users u ON u.id=t.user_id WHERE t.token_hash=$1 AND t.purpose=$2 AND t.consumed_at IS NULL AND t.revoked_at IS NULL AND t.expires_at>now() AND t.auth_version=u.auth_version AND (t.purpose='change_email' OR t.target_email=u.email)").bind(hash).bind(purpose).fetch_optional(db).bounded_one().await
 }
 async fn confirm(
     s: AppState,
@@ -550,8 +553,8 @@ async fn confirm(
     let result=async {
         let mut tx=s.db.begin().await?;
         // All mutations lock the user first, then challenge, to serialize sibling tokens.
-        sqlx::query("SELECT id FROM users WHERE id=$1 FOR UPDATE").bind(&id).fetch_one(&mut *tx).await?;
-        let r=sqlx::query("SELECT t.*,u.email FROM account_tokens t JOIN users u ON u.id=t.user_id WHERE t.token_hash=$1 AND t.purpose=$2 AND t.consumed_at IS NULL AND t.revoked_at IS NULL AND t.expires_at>now() AND t.auth_version=u.auth_version AND (t.purpose='change_email' OR t.target_email=u.email) FOR UPDATE OF t").bind(&c.hash).bind(purpose).fetch_optional(&mut *tx).await?;
+        sqlx::query("SELECT id FROM users WHERE id=$1 FOR UPDATE").bind(&id).fetch_one(&mut *tx).bounded_one().await?;
+        let r=sqlx::query("SELECT t.*,u.email FROM account_tokens t JOIN users u ON u.id=t.user_id WHERE t.token_hash=$1 AND t.purpose=$2 AND t.consumed_at IS NULL AND t.revoked_at IS NULL AND t.expires_at>now() AND t.auth_version=u.auth_version AND (t.purpose='change_email' OR t.target_email=u.email) FOR UPDATE OF t").bind(&c.hash).bind(purpose).fetch_optional(&mut *tx).bounded_one().await?;
         let Some(r)=r else{return Ok(false);};
         let old_email:String=r.get("email");let target:String=r.get("target_email");
         if let Some(h)=hash {
@@ -654,6 +657,7 @@ pub async fn email_change_post(
     )
     .bind(&u.id)
     .fetch_one(&s.db)
+    .bounded_one()
     .await
     else {
         return message(&session, "Reauthentication failed.").await;
@@ -672,7 +676,7 @@ pub async fn email_change_post(
         .unwrap_or(-1);
     let result=async{
         let mut tx=s.db.begin().await?;
-        let r=sqlx::query("SELECT u.auth_version,p.password_hash FROM users u JOIN password_credentials p ON p.user_id=u.id WHERE u.id=$1 FOR UPDATE OF u").bind(&u.id).fetch_one(&mut *tx).await?;
+        let r=sqlx::query("SELECT u.auth_version,p.password_hash FROM users u JOIN password_credentials p ON p.user_id=u.id WHERE u.id=$1 FOR UPDATE OF u").bind(&u.id).fetch_one(&mut *tx).bounded_one().await?;
         if r.get::<i64,_>("auth_version")!=version || r.get::<String,_>("password_hash")!=old_hash{return Ok(false);}
         issue(&mut tx,&s.email,&u.id,"change_email",&email,version).await?;
         s.email.enqueue(&mut tx,EmailKind::EmailChangeRequested,&u.email,"",None,Utc::now()+Duration::hours(24)).await?;

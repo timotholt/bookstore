@@ -23,6 +23,8 @@
           </div>
           {% endfor %}
         </div>
+        {% let navigation = self.page_navigation("/cart","cart_page",cart.page,cart.total_lines,20) %}
+        {% include "components/ui/page_navigation.html" %}
       </section>
 
       {% if !saved_lines.is_empty() %}
@@ -36,6 +38,8 @@
           {% include "components/ui/saved_line.html" %}
           {% endfor %}
         </div>
+        {% let navigation = saved_navigation.clone() %}
+        {% include "components/ui/page_navigation.html" %}
       </section>
       {% endif %}
     </div>

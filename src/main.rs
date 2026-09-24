@@ -6,14 +6,18 @@ mod app;
 mod auth;
 mod brand;
 mod cart;
+mod catalog_cache;
 mod db;
 mod email;
 mod errors;
 mod handlers;
 mod models;
+mod pages;
+mod read_budget;
 mod store;
 mod templates;
 mod ui;
+mod usage;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -48,7 +52,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::var("APP_ENV").unwrap_or_default() == "production",
     )?);
     let _email_worker = email.clone().spawn_worker(db.clone());
-    let app = app::build_router(app::AppState { db, email });
+    let usage = usage::UsageMonitor::from_env();
+    usage.clone().spawn();
+    let app = app::build_router(app::AppState { db, email, usage });
 
     // Bind and start the server
     let addr = listen_address(

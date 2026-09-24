@@ -1,4 +1,5 @@
 //! Transactional account mail. Secrets and payloads intentionally never implement Debug.
+use crate::read_budget::ReadFutureExt;
 use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit, OsRng, Payload},
     Aes256Gcm, Nonce,
@@ -396,7 +397,7 @@ impl EmailService {
             let mut interval = tokio::time::interval(Duration::from_secs(2));
             loop {
                 interval.tick().await;
-                if let Err(e) = self.work_once(&pool).await {
+                if let Err(e) = crate::read_budget::scope(self.work_once(&pool)).await {
                     tracing::error!(error=%e,"email worker failed");
                 }
             }
@@ -413,7 +414,7 @@ impl EmailService {
             .await?;
         sqlx::query("UPDATE email_outbox SET status='expired',payload=NULL,lease_owner=NULL,lease_until=NULL WHERE status IN ('pending','sending') AND expires_at<=now()").execute(pool).await?;
         let owner = Uuid::new_v4();
-        let row=sqlx::query("WITH candidate AS (SELECT id FROM email_outbox WHERE (status='pending' OR (status='sending' AND lease_until<now())) AND next_attempt_at<=now() AND expires_at>now() ORDER BY CASE WHEN kind='verification' THEN 1 ELSE 0 END,created_at FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE email_outbox o SET status='sending',lease_owner=$1,lease_until=now()+interval '60 seconds' FROM candidate c WHERE o.id=c.id RETURNING o.*").bind(owner).fetch_optional(pool).await?;
+        let row=sqlx::query("WITH candidate AS (SELECT id FROM email_outbox WHERE (status='pending' OR (status='sending' AND lease_until<now())) AND next_attempt_at<=now() AND expires_at>now() ORDER BY CASE WHEN kind='verification' THEN 1 ELSE 0 END,created_at FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE email_outbox o SET status='sending',lease_owner=$1,lease_until=now()+interval '60 seconds' FROM candidate c WHERE o.id=c.id RETURNING o.*").bind(owner).fetch_optional(pool).bounded_one().await?;
         let Some(row) = row else { return Ok(false) };
         let id: Uuid = row.get("id");
         let recipient: String = row.get("recipient");
@@ -423,9 +424,10 @@ impl EmailService {
         )
         .bind(&recipient)
         .fetch_one(pool)
+        .bounded_one()
         .await?;
         let current = if let Some(token) = token {
-            sqlx::query_scalar::<_,bool>("SELECT EXISTS(SELECT 1 FROM account_tokens t JOIN users u ON u.id=t.user_id WHERE t.id=$1 AND t.consumed_at IS NULL AND t.revoked_at IS NULL AND t.expires_at>now() AND t.auth_version=u.auth_version AND t.target_email=$2 AND (t.purpose='change_email' OR u.email=t.target_email))").bind(token).bind(&recipient).fetch_one(pool).await?
+            sqlx::query_scalar::<_,bool>("SELECT EXISTS(SELECT 1 FROM account_tokens t JOIN users u ON u.id=t.user_id WHERE t.id=$1 AND t.consumed_at IS NULL AND t.revoked_at IS NULL AND t.expires_at>now() AND t.auth_version=u.auth_version AND t.target_email=$2 AND (t.purpose='change_email' OR u.email=t.target_email))").bind(token).bind(&recipient).fetch_one(pool).bounded_one().await?
         } else {
             true
         };
@@ -454,7 +456,7 @@ impl EmailService {
             return Ok(true);
         };
         let verification: bool = row.get::<String, _>("kind") == "verification";
-        let budget=sqlx::query("INSERT INTO email_send_budget(day,total,verification,last_send_at) VALUES(CURRENT_DATE,1,$1,now()) ON CONFLICT(day) DO UPDATE SET total=email_send_budget.total+1,verification=email_send_budget.verification+$1,last_send_at=now() WHERE email_send_budget.total<$2 AND ($1=0 OR email_send_budget.verification<$3) AND email_send_budget.last_send_at<now()-interval '1 second' RETURNING total").bind(if verification{1}else{0}).bind(self.quota).bind(self.quota*4/5).fetch_optional(pool).await?;
+        let budget=sqlx::query("INSERT INTO email_send_budget(day,total,verification,last_send_at) VALUES(CURRENT_DATE,1,$1,now()) ON CONFLICT(day) DO UPDATE SET total=email_send_budget.total+1,verification=email_send_budget.verification+$1,last_send_at=now() WHERE email_send_budget.total<$2 AND ($1=0 OR email_send_budget.verification<$3) AND email_send_budget.last_send_at<now()-interval '1 second' RETURNING total").bind(if verification{1}else{0}).bind(self.quota).bind(self.quota*4/5).fetch_optional(pool).bounded_one().await?;
         if budget.is_none() {
             self.retry(pool, id, owner, "quota_or_rate_limit", 60, false)
                 .await?;
@@ -878,6 +880,7 @@ mod tests {
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT count(*) FROM email_outbox")
                 .fetch_one(&pool)
+                .bounded_one()
                 .await
                 .unwrap(),
             0
@@ -898,6 +901,7 @@ mod tests {
         let payload: Vec<u8> = sqlx::query_scalar("SELECT payload FROM email_outbox WHERE id=$1")
             .bind(id)
             .fetch_one(&pool)
+            .bounded_one()
             .await
             .unwrap();
         assert!(!payload.windows(6).any(|x| x == b"secret"));
@@ -907,6 +911,7 @@ mod tests {
         let row = sqlx::query("SELECT status,payload,attempts FROM email_outbox WHERE id=$1")
             .bind(id)
             .fetch_one(&pool)
+            .bounded_one()
             .await
             .unwrap();
         assert_eq!(row.get::<String, _>("status"), "accepted");
@@ -932,6 +937,7 @@ mod tests {
             sqlx::query_scalar::<_, String>("SELECT status FROM email_outbox WHERE id=$1")
                 .bind(blocked)
                 .fetch_one(&pool)
+                .bounded_one()
                 .await
                 .unwrap(),
             "cancelled"
@@ -959,6 +965,7 @@ mod tests {
             sqlx::query_scalar::<_, String>("SELECT error_category FROM email_outbox WHERE id=$1")
                 .bind(quota_job)
                 .fetch_one(&pool)
+                .bounded_one()
                 .await
                 .unwrap(),
             "quota_or_rate_limit"
@@ -972,6 +979,7 @@ mod tests {
         let expired = sqlx::query("SELECT status,payload FROM email_outbox WHERE id=$1")
             .bind(quota_job)
             .fetch_one(&pool)
+            .bounded_one()
             .await
             .unwrap();
         assert_eq!(expired.get::<String, _>("status"), "expired");
@@ -1006,6 +1014,7 @@ mod tests {
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT count(*) FROM email_delivery_events")
                 .fetch_one(&pool)
+                .bounded_one()
                 .await
                 .unwrap(),
             2
@@ -1015,6 +1024,7 @@ mod tests {
                 "SELECT reason FROM email_suppressions WHERE recipient='signed@example.com'"
             )
             .fetch_one(&pool)
+            .bounded_one()
             .await
             .unwrap(),
             "email.complained"

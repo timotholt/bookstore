@@ -17,18 +17,6 @@ use crate::store;
 use crate::templates::*;
 use crate::ui;
 
-// Helpers for catalog filters
-fn unique_genres(books: &[BookCard]) -> Vec<String> {
-    let mut genres = Vec::new();
-    for b in books {
-        if !b.genre.is_empty() && !genres.contains(&b.genre) {
-            genres.push(b.genre.clone());
-        }
-    }
-    genres.sort();
-    genres
-}
-
 fn result_filters(filters: CatalogFilters, count: usize, total: usize) -> CatalogFilters {
     let mut out = filters;
     let per_page = out
@@ -96,7 +84,7 @@ struct StoreChrome {
 }
 
 async fn store_chrome(db: &DbPool, session: &Session) -> Result<StoreChrome, AppError> {
-    let all_books = store::list_books(db, &CatalogFilters::default()).await?;
+    let genres = store::genres(db).await?;
     let cart = cart::view(db, session).await?;
     let cart_is_empty = cart.item_count == 0;
     let cart_lines = ui::cart_lines(cart.lines.clone(), "#cartDrawer");
@@ -107,7 +95,7 @@ async fn store_chrome(db: &DbPool, session: &Session) -> Result<StoreChrome, App
     );
 
     Ok(StoreChrome {
-        genres: unique_genres(&all_books),
+        genres,
         cart,
         cart_lines,
         removed_notice,
@@ -261,7 +249,7 @@ pub async fn home(
 ) -> Result<impl IntoResponse, AppError> {
     restore_cart_session(&headers, &session).await?;
     let db = &state.db;
-    let all_books = store::list_books(db, &CatalogFilters::default()).await?;
+    let genres = store::genres(db).await?;
     let best_sellers = store::collection_books(db, "best-sellers", 6).await?;
     let deals = store::collection_books(db, "used-deals", 6).await?;
     let staff_picks = store::collection_books(db, "staff-picks", 3).await?;
@@ -273,11 +261,15 @@ pub async fn home(
         "cart.drawer",
     );
 
-    let featured = all_books
-        .iter()
-        .find(|b| b.id == "b005")
-        .cloned()
-        .unwrap_or_else(|| all_books[0].clone());
+    let featured = match store::book_by_id(db, "b005").await {
+        Ok(book) => book,
+        Err(sqlx::Error::RowNotFound) => store::shelf(db, "featured", "", "")
+            .await?
+            .into_iter()
+            .next()
+            .ok_or(AppError::NotFound)?,
+        Err(e) => return Err(e.into()),
+    };
     let featured_add_button = ui::ButtonView::cart_action(
         "Add to Cart",
         "card-btn add-btn",
@@ -295,19 +287,8 @@ pub async fn home(
         "home.featured_deal",
     );
 
-    let quick_fillers: Vec<BookCard> = all_books
-        .iter()
-        .filter(|b| b.price < 8.0)
-        .take(4)
-        .cloned()
-        .collect();
-
-    let new_arrivals: Vec<BookCard> = all_books
-        .iter()
-        .filter(|b| b.is_new_arrival)
-        .take(6)
-        .cloned()
-        .collect();
+    let quick_fillers = store::shelf(db, "fillers", "", "").await?;
+    let new_arrivals = store::shelf(db, "arrivals", "", "").await?;
 
     let product_sections = vec![
         ui::product_shelf(
@@ -338,8 +319,9 @@ pub async fn home(
     ];
 
     let template = HomeTemplate {
+        usage_notice: state.usage.notice(),
         title: format!("{} | Used Books Online", crate::brand::STORE_NAME),
-        genres: unique_genres(&all_books),
+        genres,
         featured,
         featured_add_button,
         featured_buy_now_button,
@@ -415,7 +397,19 @@ pub async fn search_page(
         ));
     }
 
-    let (genres, conditions, formats) = store::catalog_facets(db).await?;
+    let (mut genres, mut conditions, mut formats) = store::catalog_facets(db).await?;
+    let facet_counts = store::facet_counts(db).await?;
+    for (options, selected) in [
+        (&mut genres, &filters.genre),
+        (&mut conditions, &filters.condition),
+        (&mut formats, &filters.format),
+    ] {
+        if let Some(selected) = selected {
+            if !selected.is_empty() && selected != "All" && !options.contains(selected) {
+                options.push(selected.clone());
+            }
+        }
+    }
     let cart = cart::view(db, &session).await?;
     let cart_lines = ui::cart_lines(cart.lines.clone(), "#cartDrawer");
     let removed_notice = ui::removed_notice(
@@ -429,6 +423,27 @@ pub async fn search_page(
     let min_rating = filters.min_rating.clone().unwrap_or_default();
 
     let template = SearchTemplate {
+        genre_navigation: ui::page_navigation(
+            "/search",
+            "genre_page",
+            crate::pages::number("genre_page"),
+            facet_counts.0,
+            24,
+        ),
+        condition_navigation: ui::page_navigation(
+            "/search",
+            "condition_page",
+            crate::pages::number("condition_page"),
+            facet_counts.1,
+            8,
+        ),
+        format_navigation: ui::page_navigation(
+            "/search",
+            "format_page",
+            crate::pages::number("format_page"),
+            facet_counts.2,
+            12,
+        ),
         title: if query.is_empty() {
             format!("Search | {}", crate::brand::STORE_NAME)
         } else {
@@ -468,14 +483,16 @@ pub async fn book_detail(
 ) -> Result<impl IntoResponse, AppError> {
     restore_cart_session(&headers, &session).await?;
     let db = &state.db;
-    let book = match store::book_by_id(db, &book_id).await {
+    let mut book = match store::book_by_id(db, &book_id).await {
         Ok(b) => b,
         Err(sqlx::Error::RowNotFound) => return Err(AppError::NotFound),
         Err(err) => return Err(err.into()),
     };
 
+    book.description = store::description(db, &book_id).await?;
     let copies = store::copies_by_product_id(db, &book_id).await?;
     let raw_attribs = store::variant_attributes(db, &book_id).await?;
+    let detail_counts = store::detail_counts(db, &book_id).await?;
 
     let mut attributes = HashMap::new();
     for attr in raw_attribs {
@@ -485,7 +502,7 @@ pub async fn book_detail(
             .push(attr);
     }
 
-    let all_books = store::list_books(db, &CatalogFilters::default()).await?;
+    let genres = store::genres(db).await?;
     let cart = cart::view(db, &session).await?;
     let cart_lines = ui::cart_lines(cart.lines.clone(), "#cartDrawer");
     let removed_notice = ui::removed_notice(
@@ -494,12 +511,7 @@ pub async fn book_detail(
         "cart.drawer",
     );
 
-    let related: Vec<BookCard> = all_books
-        .iter()
-        .filter(|b| b.genre == book.genre && b.id != book.id)
-        .take(4)
-        .cloned()
-        .collect();
+    let related = store::shelf(db, "related", &book.genre, &book.id).await?;
     let add_button = ui::ButtonView::cart_action(
         "Add to Stack",
         "buybox-btn add-to-stack",
@@ -518,7 +530,21 @@ pub async fn book_detail(
     );
 
     let template = BookDetailTemplate {
-        genres: unique_genres(&all_books),
+        copy_navigation: ui::page_navigation(
+            &format!("/books/{book_id}"),
+            "copy_page",
+            crate::pages::number("copy_page"),
+            detail_counts.0,
+            10,
+        ),
+        attribute_navigation: ui::page_navigation(
+            &format!("/books/{book_id}"),
+            "attribute_page",
+            crate::pages::number("attribute_page"),
+            detail_counts.1,
+            50,
+        ),
+        genres,
         book,
         copies,
         attributes,
@@ -677,6 +703,7 @@ pub async fn checkout(
     let checkout_lines = ui::checkout_lines(cart.lines.clone());
     let summary = ui::order_summary(&cart, "checkout.summary");
     let response = CheckoutTemplate {
+        navigation: ui::page_navigation("/checkout", "cart_page", cart.page, cart.total_lines, 20),
         sections: ui::checkout_sections(),
         checkout_lines,
         summary,
@@ -692,16 +719,17 @@ pub async fn cart_page(
 ) -> Result<Response, AppError> {
     restore_cart_session(&headers, &session).await?;
     let db = &state.db;
-    let all_books = store::list_books(db, &CatalogFilters::default()).await?;
+    let genres = store::genres(db).await?;
     let content = cart_page_content_template(db, &session).await?;
 
     let template = CartPageTemplate {
-        genres: unique_genres(&all_books),
+        genres,
         cart: content.cart,
         cart_lines: content.cart_lines,
         removed_notice: content.removed_notice,
         saved_lines: content.saved_lines,
         saved_count_label: content.saved_count_label,
+        saved_navigation: content.saved_navigation,
         checkout_button: content.checkout_button,
         browse_books_link: content.browse_books_link,
         current_user: crate::auth::get_current_user(db, &session)
@@ -745,6 +773,13 @@ async fn cart_page_content_template(
         removed_notice,
         saved_lines,
         saved_count_label,
+        saved_navigation: ui::page_navigation(
+            "/cart",
+            "saved_page",
+            saved.page,
+            saved.total_lines,
+            20,
+        ),
         checkout_button,
         browse_books_link: ui::browse_books_link("cart.page.empty", "primary-button"),
     })

@@ -16,6 +16,17 @@ pub fn is_selected(current: Option<&str>, option: &str) -> bool {
 }
 
 pub trait TemplateHelpers {
+    fn page_navigation(
+        &self,
+        base: &str,
+        key: &str,
+        page: &u32,
+        total: &i64,
+        size: i64,
+    ) -> crate::ui::PageNavView {
+        crate::ui::page_navigation(base, key, *page, *total, size)
+    }
+
     fn catalog_url(&self, filters: &CatalogFilters, page: u32) -> String {
         let mut query = filters.clone();
         query.page = Some(page);
@@ -79,6 +90,7 @@ pub trait TemplateHelpers {
 #[derive(Template)]
 #[template(path = "home.html")]
 pub struct HomeTemplate {
+    pub usage_notice: Option<crate::usage::Notice>,
     pub title: String,
     pub genres: Vec<String>,
     pub featured: BookCard,
@@ -111,6 +123,8 @@ impl axum::response::IntoResponse for HomeTemplate {
 #[derive(Template)]
 #[template(path = "book_detail.html")]
 pub struct BookDetailTemplate {
+    pub copy_navigation: crate::ui::PageNavView,
+    pub attribute_navigation: crate::ui::PageNavView,
     pub genres: Vec<String>,
     pub book: BookCard,
     pub copies: Vec<BookCard>,
@@ -158,6 +172,7 @@ pub struct CartPageTemplate {
     pub removed_notice: Option<RemovedCartNoticeView>,
     pub saved_lines: Vec<SavedLineView>,
     pub saved_count_label: String,
+    pub saved_navigation: crate::ui::PageNavView,
     pub checkout_button: ButtonView,
     pub browse_books_link: LinkView,
     pub current_user: Option<crate::models::User>,
@@ -184,6 +199,7 @@ pub struct CartPageContentTemplate {
     pub removed_notice: Option<RemovedCartNoticeView>,
     pub saved_lines: Vec<SavedLineView>,
     pub saved_count_label: String,
+    pub saved_navigation: crate::ui::PageNavView,
     pub checkout_button: ButtonView,
     pub browse_books_link: LinkView,
 }
@@ -204,6 +220,7 @@ impl axum::response::IntoResponse for CartPageContentTemplate {
 #[derive(Template)]
 #[template(path = "checkout.html")]
 pub struct CheckoutTemplate {
+    pub navigation: crate::ui::PageNavView,
     pub sections: Vec<CheckoutSectionView>,
     pub checkout_lines: Vec<CheckoutLineView>,
     pub summary: OrderSummaryView,
@@ -248,6 +265,9 @@ impl axum::response::IntoResponse for CartDrawerTemplate {
 #[derive(Template)]
 #[template(path = "search.html")]
 pub struct SearchTemplate {
+    pub genre_navigation: crate::ui::PageNavView,
+    pub condition_navigation: crate::ui::PageNavView,
+    pub format_navigation: crate::ui::PageNavView,
     pub title: String,
     pub query: String,
     pub genres: Vec<String>,

@@ -1,0 +1,7 @@
+{% if navigation.pages > 1 %}
+<nav class="ui-page-navigation" aria-label="Item pages">
+  {% if let Some(link) = navigation.previous %}{% include "components/ui/link.html" %}{% endif %}
+  <span aria-current="page">Page {{ navigation.page }} of {{ navigation.pages }}</span>
+  {% if let Some(link) = navigation.next %}{% include "components/ui/link.html" %}{% endif %}
+</nav>
+{% endif %}
