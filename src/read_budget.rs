@@ -31,14 +31,26 @@ impl Reservation {
         limit(max)?;
         let budget = BUDGET.try_with(Arc::clone).ok();
         if let Some(ref counter) = budget {
-            counter
-                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| {
-                    n.checked_add(max).filter(|v| *v <= MAX_REQUEST_ROWS)
-                })
-                .map_err(|_| {
+            // Compare-exchange loop: fetch_update is deprecated on new stable, and its
+            // replacement try_update does not exist on older toolchains.
+            let mut current = counter.load(Ordering::SeqCst);
+            loop {
+                let Some(next) = current.checked_add(max).filter(|v| *v <= MAX_REQUEST_ROWS) else {
                     crate::usage::BUDGET_REJECTIONS.fetch_add(1, Ordering::Relaxed);
-                    sqlx::Error::Protocol("request database read budget exceeded".into())
-                })?;
+                    return Err(sqlx::Error::Protocol(
+                        "request database read budget exceeded".into(),
+                    ));
+                };
+                match counter.compare_exchange_weak(
+                    current,
+                    next,
+                    Ordering::SeqCst,
+                    Ordering::SeqCst,
+                ) {
+                    Ok(_) => break,
+                    Err(actual) => current = actual,
+                }
+            }
         }
         Ok(Self { budget, max })
     }
