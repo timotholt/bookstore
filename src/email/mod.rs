@@ -185,8 +185,13 @@ pub struct EmailService {
 // the scale-to-zero database all day. Single replica (docs/INFRASTRUCTURE_SPEC.md);
 // another replica would need a shared wake (e.g. LISTEN/NOTIFY) instead.
 fn idle_worker_delay(next_attempt_seconds: Option<f64>) -> Option<Duration> {
-    next_attempt_seconds
-        .map(|n| Duration::from_secs_f64(if n.is_finite() { n.clamp(2., 900.) } else { 900. }))
+    next_attempt_seconds.map(|n| {
+        Duration::from_secs_f64(if n.is_finite() {
+            n.clamp(2., 900.)
+        } else {
+            900.
+        })
+    })
 }
 pub async fn wake_after_mutation(
     axum::extract::State(mail): axum::extract::State<Arc<EmailService>>,
@@ -730,7 +735,10 @@ mod tests {
         assert_eq!(idle_worker_delay(None), None);
         assert_eq!(idle_worker_delay(Some(30.)), Some(Duration::from_secs(30)));
         assert_eq!(idle_worker_delay(Some(-1.)), Some(Duration::from_secs(2)));
-        assert_eq!(idle_worker_delay(Some(f64::NAN)), Some(Duration::from_secs(900)));
+        assert_eq!(
+            idle_worker_delay(Some(f64::NAN)),
+            Some(Duration::from_secs(900))
+        );
     }
 
     use super::*;

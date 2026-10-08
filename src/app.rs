@@ -169,15 +169,24 @@ mod tests {
     fn is_local_postgres_url(database_url: &str) -> bool {
         use std::str::FromStr;
         sqlx::postgres::PgConnectOptions::from_str(database_url)
-            .map(|o| matches!(o.get_host(), "localhost" | "127.0.0.1" | "::1") || o.get_host().starts_with('/'))
+            .map(|o| {
+                matches!(o.get_host(), "localhost" | "127.0.0.1" | "::1")
+                    || o.get_host().starts_with('/')
+            })
             .unwrap_or(false)
     }
 
     #[test]
     fn postgres_tests_refuse_hosted_databases() {
-        assert!(is_local_postgres_url("postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"));
-        assert!(is_local_postgres_url("postgres://me@127.0.0.1/bookstore_test"));
-        assert!(!is_local_postgres_url("postgresql://u:p@ep-x-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"));
+        assert!(is_local_postgres_url(
+            "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+        ));
+        assert!(is_local_postgres_url(
+            "postgres://me@127.0.0.1/bookstore_test"
+        ));
+        assert!(!is_local_postgres_url(
+            "postgresql://u:p@ep-x-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
+        ));
     }
 
     async fn postgres_test_db() -> PostgresTestDb {
