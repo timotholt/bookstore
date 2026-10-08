@@ -180,15 +180,13 @@ pub struct EmailService {
     client: reqwest::Client,
     capture_dir: Option<std::path::PathBuf>,
 }
-// Committed HTTP mutations notify the local worker; the slow sweep recovers after
-// restarts, missed notifications, or work created on another replica.
-fn idle_worker_delay(next_attempt_seconds: Option<f64>) -> Duration {
-    Duration::from_secs_f64(
-        next_attempt_seconds
-            .filter(|n| n.is_finite())
-            .unwrap_or(900.)
-            .clamp(2., 900.),
-    )
+// Committed HTTP mutations notify the local worker, and it checks once at startup.
+// With no pending work it waits for a notification only: a timed sweep would wake
+// the scale-to-zero database all day. Single replica (docs/INFRASTRUCTURE_SPEC.md);
+// another replica would need a shared wake (e.g. LISTEN/NOTIFY) instead.
+fn idle_worker_delay(next_attempt_seconds: Option<f64>) -> Option<Duration> {
+    next_attempt_seconds
+        .map(|n| Duration::from_secs_f64(if n.is_finite() { n.clamp(2., 900.) } else { 900. }))
 }
 pub async fn wake_after_mutation(
     axum::extract::State(mail): axum::extract::State<Arc<EmailService>>,
@@ -428,15 +426,21 @@ impl EmailService {
             if !self.available() {
                 return;
             }
-            let mut delay = Duration::ZERO;
+            let mut delay = Some(Duration::ZERO);
             loop {
+                let timer = async {
+                    match delay {
+                        Some(d) => tokio::time::sleep(d).await,
+                        None => std::future::pending().await,
+                    }
+                };
                 tokio::select! {
-                    _ = tokio::time::sleep(delay) => {},
+                    _ = timer => {},
                     _ = self.wake.notified() => {},
                 }
                 delay = match crate::read_budget::scope(async {
                     if self.work_once(&pool).await? {
-                        Ok(Duration::from_secs(2))
+                        Ok(Some(Duration::from_secs(2)))
                     } else {
                         let next: Option<f64> = sqlx::query_scalar("SELECT EXTRACT(EPOCH FROM MIN(CASE WHEN status='sending' THEN lease_until ELSE next_attempt_at END)-now())::double precision FROM email_outbox WHERE status IN ('pending','sending') AND expires_at>now()")
                             .fetch_one(&pool).bounded_one().await?;
@@ -444,7 +448,7 @@ impl EmailService {
                     }
                 }).await {
                     Ok(delay) => delay,
-                    Err(e) => { tracing::error!(error=%e,"email worker failed"); Duration::from_secs(60) }
+                    Err(e) => { tracing::error!(error=%e,"email worker failed"); Some(Duration::from_secs(60)) }
                 };
             }
         })
@@ -723,10 +727,10 @@ mod tests {
     #[test]
     fn idle_worker_sleeps_but_due_retries_stay_prompt() {
         use super::*;
-        assert_eq!(idle_worker_delay(None), Duration::from_secs(900));
-        assert_eq!(idle_worker_delay(Some(30.)), Duration::from_secs(30));
-        assert_eq!(idle_worker_delay(Some(-1.)), Duration::from_secs(2));
-        assert_eq!(idle_worker_delay(Some(f64::NAN)), Duration::from_secs(900));
+        assert_eq!(idle_worker_delay(None), None);
+        assert_eq!(idle_worker_delay(Some(30.)), Some(Duration::from_secs(30)));
+        assert_eq!(idle_worker_delay(Some(-1.)), Some(Duration::from_secs(2)));
+        assert_eq!(idle_worker_delay(Some(f64::NAN)), Some(Duration::from_secs(900)));
     }
 
     use super::*;
