@@ -165,12 +165,32 @@ mod tests {
         }
     }
 
+    // Tests create schemas and wake the compute; never let them reach a hosted database.
+    fn is_local_postgres_url(database_url: &str) -> bool {
+        use std::str::FromStr;
+        sqlx::postgres::PgConnectOptions::from_str(database_url)
+            .map(|o| matches!(o.get_host(), "localhost" | "127.0.0.1" | "::1") || o.get_host().starts_with('/'))
+            .unwrap_or(false)
+    }
+
+    #[test]
+    fn postgres_tests_refuse_hosted_databases() {
+        assert!(is_local_postgres_url("postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"));
+        assert!(is_local_postgres_url("postgres://me@127.0.0.1/bookstore_test"));
+        assert!(!is_local_postgres_url("postgresql://u:p@ep-x-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"));
+    }
+
     async fn postgres_test_db() -> PostgresTestDb {
         crate::db::load_runtime_env();
         let database_url =
             std::env::var("DATABASE_URL").expect("DATABASE_URL must be set for Postgres tests");
         crate::db::require_postgres_url(&database_url)
             .expect("DATABASE_URL must be postgres:// or postgresql:// for Postgres tests");
+        assert!(
+            is_local_postgres_url(&database_url),
+            "Postgres tests need a local DATABASE_URL (localhost); .env points at the hosted \
+             database. Run with DATABASE_URL=postgres://localhost/<test db> cargo test"
+        );
         let database_url = direct_postgres_url(&database_url);
 
         let guard = TEST_DB_LOCK.lock().await;
