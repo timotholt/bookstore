@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Checkout Preview | {{ self.store_name() }}</title>
-    <meta name="description" content="Preview your {{ self.store_name() }} cart. No order or payment is processed.">
+    <title>Checkout | {{ self.store_name() }}</title>
+    <meta name="description" content="New orders are temporarily paused during our ownership transition.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=optional">
@@ -17,25 +17,23 @@
       <a class="brand checkout-brand" href="/" aria-label="{{ self.store_name() }} home">
         <span>{{ self.store_name() }}</span>
       </a>
-      <h1>Checkout Preview</h1>
-      <div class="checkout-header-assurance">No order or payment is processed</div>
+      <h1>Checkout</h1>
+      <div class="checkout-header-assurance">Ordering temporarily paused</div>
     </header>
 
     <main class="checkout-main">
       <div class="checkout-layout">
         <div class="checkout-sections">
-          {% for section in sections %}
-          {% include "components/ui/checkout_section.html" %}
-          {% endfor %}
+          {% include "components/ui/ordering_notice.html" %}
 
           <section class="checkout-section checkout-delivery-section">
             <div class="checkout-section-heading">
               <div>
-                <p class="checkout-eyebrow">3. Review cart</p>
+                <p class="checkout-eyebrow">Your saved cart</p>
                 <h2>Items in your cart</h2>
-                <p>Availability and pickup have not been confirmed.</p>
+                <p>Items in your cart are not reserved.</p>
               </div>
-              <span class="checkout-status">Preview only</span>
+              <span class="checkout-status">Ordering paused</span>
             </div>
 
             <div class="checkout-items-list" aria-label="Items in your cart">
@@ -46,32 +44,14 @@
             {% include "components/ui/page_navigation.html" %}
           </section>
 
-          <section class="checkout-place-order-band">
-            <form action="/checkout" method="get">
-              {% let button = summary.place_order_button.clone() %}
-              {% include "components/ui/button.html" %}
-            </form>
-            <div>
-              <h2>Estimated total: {{ summary.total_label }}</h2>
-              <p>Order placement is not available in this preview. No purchase, reservation, or charge will occur.</p>
-            </div>
-          </section>
-
-          <section class="checkout-help-section">
-            <p>Prices and availability reflect the current demo catalog and cart.</p>
-            <p>Payment processing and order creation are planned future work.</p>
-          </section>
         </div>
 
         <aside class="checkout-summary">
-          <form action="/checkout" method="get">
-            {% let button = summary.place_order_button.clone() %}
-            {% include "components/ui/button.html" %}
-          </form>
-          <p>Preview cart costs only. Taxes, payment, and order creation are not implemented.</p>
+          <h2>Cart estimate</h2>
+          <p>Your cart is saved. No payment is collected or order placed.</p>
           {% include "components/ui/order_summary.html" %}
           <div class="checkout-summary-note">
-            <span>Preview only</span>
+            <span>Ordering paused</span>
             <span>No payment collected</span>
             <span>No order placed</span>
           </div>

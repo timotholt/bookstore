@@ -44,10 +44,8 @@
         <p class="details-author">by <span>{{ book.author }}</span></p>
         {% endif %}
 
-        <div class="details-rating">
-          <div class="stars">★★★★★</div>
-          <span class="rating-text">4.8 (124 reader notes)</span>
-        </div>
+        {% let review_summary = self.review_summary(book) %}
+        {% include "components/ui/review_summary.html" %}
 
         <div class="details-price-row">
           <span class="discount-badge" id="mainDiscount"{% if !book.is_new || book.list_price.is_none() %} hidden{% endif %}>{% if let Some(list) = book.list_price.as_ref() %}-{{ self.discount_pct(book.price, list) }}%{% endif %}</span>
@@ -78,6 +76,8 @@
         {% endif %}
       </section>
       {% endif %}
+
+      {% include "components/ui/review_panel.html" %}
 
       <section class="detail-info-card details-description" aria-labelledby="copyNotesTitle">
         <h2 id="copyNotesTitle">About this copy</h2>

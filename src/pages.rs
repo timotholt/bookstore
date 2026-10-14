@@ -1,6 +1,9 @@
 //! Bounded secondary-list navigation; pagination is shared by full pages and fragments.
 use std::collections::HashMap;
 tokio::task_local! { static PAGES: HashMap<String,String>; }
+pub fn value(key: &str) -> Option<String> {
+    PAGES.try_with(|q| q.get(key).cloned()).ok().flatten()
+}
 pub fn number(key: &str) -> u32 {
     PAGES
         .try_with(|q| {

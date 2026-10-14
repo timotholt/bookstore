@@ -1,0 +1,8 @@
+<section class="ui-ordering-notice" aria-labelledby="ordering-notice-heading">
+<h2 id="ordering-notice-heading">{{ ordering_notice.heading }}</h2>
+<p>{{ ordering_notice.message }}</p>
+<p>If you have any questions or wish to receive a refund, please call our customer service department at {% let link = ordering_notice.customer_service_link.clone() %}{% include "components/ui/link.html" %}.</p>
+<div class="ui-review-actions">
+{% let link = ordering_notice.cart_link.clone() %}{% include "components/ui/link.html" %}
+{% let link = ordering_notice.browse_link.clone() %}{% include "components/ui/link.html" %}
+</div></section>

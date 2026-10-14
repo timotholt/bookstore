@@ -1,7 +1,4 @@
-use crate::{
-    brand,
-    models::{BookCard, CartLine},
-};
+use crate::models::{BookCard, CartLine};
 
 #[derive(Debug, Clone)]
 pub struct AnalyticsAttrs {
@@ -126,6 +123,8 @@ pub struct ButtonView {
     pub label: String,
     pub class_name: String,
     pub button_type: &'static str,
+    pub submit_name: String,
+    pub submit_value: String,
     pub disabled: bool,
     pub data_action: String,
     pub target_id: String,
@@ -140,6 +139,8 @@ impl ButtonView {
             label: label.into(),
             class_name: "primary-button auth-submit".into(),
             button_type: "submit",
+            submit_name: String::new(),
+            submit_value: String::new(),
             disabled: false,
             data_action: String::new(),
             target_id: String::new(),
@@ -166,6 +167,8 @@ impl ButtonView {
             label: label.into(),
             class_name: class_name.into(),
             button_type,
+            submit_name: String::new(),
+            submit_value: String::new(),
             disabled: false,
             data_action: data_action.into(),
             target_id: target_id.clone(),
@@ -194,6 +197,8 @@ impl ButtonView {
             label: label.into(),
             class_name: class_name.into(),
             button_type: "button",
+            submit_name: String::new(),
+            submit_value: String::new(),
             disabled: false,
             data_action: data_action.into(),
             target_id: book.id.clone(),
@@ -221,6 +226,8 @@ impl ButtonView {
             label: label.into(),
             class_name: class_name.into(),
             button_type: "button",
+            submit_name: String::new(),
+            submit_value: String::new(),
             disabled: false,
             data_action: String::new(),
             target_id: copy_id.to_string(),
@@ -229,28 +236,12 @@ impl ButtonView {
             htmx,
         }
     }
-
-    pub fn checkout_place_order(source: impl Into<String>) -> Self {
-        let mut button = Self::tracked(
-            "Order placement unavailable",
-            "primary-button checkout-place-order-button",
-            "button",
-            "place-order",
-            "Order placement unavailable in this preview",
-            "checkout_place_order_clicked",
-            source,
-            "checkout",
-            "current",
-        );
-        button.disabled = true;
-        button
-    }
 }
 
 #[derive(Debug, Clone)]
 pub struct ProductCardView {
     pub book: BookCard,
-    pub rating_count: i32,
+    pub review_summary: crate::review_web::ReviewSummaryView,
     pub extra_class: String,
     pub analytics: AnalyticsAttrs,
     pub title_link: LinkView,
@@ -490,51 +481,11 @@ pub fn cart_page_removed_notice(line: Option<CartLine>) -> Option<RemovedCartNot
 }
 
 #[derive(Debug, Clone)]
-pub struct CheckoutSectionView {
-    pub class_name: String,
-    pub eyebrow: String,
-    pub title: String,
-    pub body: String,
-    pub status: String,
-    pub has_link: bool,
-    pub link: LinkView,
-}
-
-impl CheckoutSectionView {
-    pub fn informational(
-        class_name: impl Into<String>,
-        eyebrow: impl Into<String>,
-        title: impl Into<String>,
-        body: impl Into<String>,
-        status: impl Into<String>,
-    ) -> Self {
-        Self {
-            class_name: class_name.into(),
-            eyebrow: eyebrow.into(),
-            title: title.into(),
-            body: body.into(),
-            status: status.into(),
-            has_link: false,
-            link: LinkView::tracked(
-                "",
-                "#checkout",
-                "",
-                "checkout_section_link_hidden",
-                "checkout.section",
-                "checkout",
-                "current",
-            ),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
 pub struct CheckoutLineView {
     pub line: CartLine,
     pub line_total_label: String,
     pub option_label: String,
     pub quantity_label: String,
-    pub pickup_name: String,
 }
 
 impl CheckoutLineView {
@@ -547,7 +498,6 @@ impl CheckoutLineView {
         Self {
             line_total_label: format!("${:.2}", line.line_total),
             quantity_label: format!("Quantity: {}", line.quantity),
-            pickup_name: format!("pickup-{}", line.book.copy_id),
             option_label,
             line,
         }
@@ -560,26 +510,6 @@ pub struct OrderSummaryView {
     pub shipping_label: String,
     pub tax_label: String,
     pub total_label: String,
-    pub place_order_button: ButtonView,
-}
-
-pub fn checkout_sections() -> Vec<CheckoutSectionView> {
-    vec![
-        CheckoutSectionView::informational(
-            "checkout-address-section",
-            "1. Pickup preview",
-            "Store pickup in La Habra, CA",
-            format!("Potential pickup location: {}, {}. No reservation is created.", brand::STORE_NAME, brand::STORE_ADDRESS),
-            "Not reserved",
-        ),
-        CheckoutSectionView::informational(
-            "",
-            "2. Payment preview",
-            "Payment not available",
-            "Stripe Checkout is planned, but this page does not collect card details or place an order.",
-            "No charge",
-        ),
-    ]
 }
 
 pub fn checkout_lines(lines: Vec<CartLine>) -> Vec<CheckoutLineView> {
@@ -588,7 +518,7 @@ pub fn checkout_lines(lines: Vec<CartLine>) -> Vec<CheckoutLineView> {
 
 pub fn order_summary(
     cart: &crate::models::CartView,
-    source: impl Into<String>,
+    _source: impl Into<String>,
 ) -> OrderSummaryView {
     OrderSummaryView {
         subtotal_label: format!("${:.2}", cart.subtotal),
@@ -597,19 +527,18 @@ pub fn order_summary(
         } else {
             format!("${:.2}", cart.shipping)
         },
-        tax_label: "Not calculated in preview".to_string(),
+        tax_label: "Not calculated while ordering is paused".to_string(),
         total_label: format!("${:.2}", cart.total),
-        place_order_button: ButtonView::checkout_place_order(source),
     }
 }
 
 pub fn checkout_start_button(source: impl Into<String>, disabled: bool) -> ButtonView {
     let mut button = ButtonView::tracked(
-        "Checkout Preview",
+        "Checkout",
         "primary-button checkout-button",
         "submit",
         "checkout",
-        "Checkout preview",
+        "Checkout",
         "checkout_started",
         source,
         "checkout",
@@ -645,7 +574,10 @@ impl ProductCardView {
         );
 
         Self {
-            rating_count: 48,
+            review_summary: crate::review_web::ReviewSummaryView::new(
+                book.review_count,
+                book.average_rating,
+            ),
             extra_class: String::new(),
             analytics: AnalyticsAttrs::product(source, book.id.clone()),
             title_link,
@@ -768,5 +700,23 @@ pub fn page_navigation(base: &str, key: &str, page: u32, total: i64, size: i64) 
         pages,
         previous: (page > 1).then(|| link("Previous", page - 1)),
         next: (i64::from(page) < pages).then(|| link("Next", page + 1)),
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct OrderingNoticeView {
+    pub heading: &'static str,
+    pub message: &'static str,
+    pub customer_service_link: LinkView,
+    pub cart_link: LinkView,
+    pub browse_link: LinkView,
+}
+pub fn ordering_notice() -> OrderingNoticeView {
+    OrderingNoticeView {
+        heading: "New orders are temporarily paused",
+        message: "We’re transitioning ownership and are currently unable to accept new orders. All existing orders will be fulfilled as soon as possible. You can continue browsing, adding items to your cart, and saving books to your wishlist. Thank you for your patience.",
+        customer_service_link: LinkView::tracked("(383) 383-4446", "tel:+13833834446", "ui-review-link", "customer_service_called", "checkout", "phone", "customer-service"),
+        cart_link: LinkView::tracked("Return to cart", "/cart", "secondary-button", "cart_opened", "checkout", "page", "cart"),
+        browse_link: LinkView::tracked("Continue browsing", "/search", "primary-button", "catalog_opened", "checkout", "page", "search"),
     }
 }

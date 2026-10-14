@@ -22,10 +22,8 @@
     {% if !card.book.format.is_empty() || !card.book.condition.is_empty() %}
     <span class="card-format">{{ card.book.format }}{% if !card.book.format.is_empty() && !card.book.condition.is_empty() %} · {% endif %}{{ card.book.condition }}</span>
     {% endif %}
-    <div class="stars-rating">
-      <span class="stars-val">★★★★★</span>
-      <span class="rating-count">{{ card.rating_count }}</span>
-    </div>
+    {% let review_summary = card.review_summary.clone() %}
+    {% include "components/ui/review_summary.html" %}
     <div class="price-row">
       <span class="ui-price ui-price--card">
         {% if !card.book.is_new %}<span class="ui-price-prefix">from</span>{% endif %}

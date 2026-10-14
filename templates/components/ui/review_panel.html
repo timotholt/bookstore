@@ -1,0 +1,42 @@
+<section class="detail-info-card ui-review-panel" id="reviews" aria-labelledby="reviews-heading">
+  <h2 id="reviews-heading">Reader reviews</h2>
+  {% let review_summary = review_panel.review_summary.clone() %}{% include "components/ui/review_summary.html" %}
+  <p>Reviews cover this title and author across editions.</p>
+  <dl class="ui-review-breakdown" aria-label="Star distribution">
+    <dt>5 stars</dt><dd>{{ review_panel.summary.star_5_count }}</dd><dt>4 stars</dt><dd>{{ review_panel.summary.star_4_count }}</dd>
+    <dt>3 stars</dt><dd>{{ review_panel.summary.star_3_count }}</dd><dt>2 stars</dt><dd>{{ review_panel.summary.star_2_count }}</dd><dt>1 star</dt><dd>{{ review_panel.summary.star_1_count }}</dd>
+  </dl>
+  {% let link = review_panel.write_link.clone() %}{% include "components/ui/link.html" %}
+  <form class="ui-review-sort" method="get" action="/books/{{ review_panel.book_id }}#reviews">
+    <label for="review-sort">Sort reviews</label><select id="review-sort" name="review_sort">
+      <option value="recent" {% if review_panel.sort == "recent" %}selected{% endif %}>Most recent</option>
+      <option value="highest" {% if review_panel.sort == "highest" %}selected{% endif %}>Highest rated</option>
+      <option value="lowest" {% if review_panel.sort == "lowest" %}selected{% endif %}>Lowest rated</option>
+      <option value="helpful" {% if review_panel.sort == "helpful" %}selected{% endif %}>Most helpful</option>
+    </select>{% let button = review_panel.sort_button.clone() %}{% include "components/ui/button.html" %}
+  </form>
+  {% if review_panel.cards.is_empty() %}<p>No published reviews on this page.</p>{% endif %}
+  {% for card in review_panel.cards %}
+    {% include "components/ui/review_card.html" %}
+    {% if review_panel.logged_in && card.entry.user_id != review_panel.user_id %}
+    <div class="ui-review-actions">
+      <form action="/reviews/{{ card.entry.id }}/vote" method="post">
+        <input type="hidden" name="csrf" value="{{ review_panel.csrf }}"><input type="hidden" name="revision" value="{{ card.entry.revision }}"><input type="hidden" name="vote" value="1">
+        {% let button = card.helpful_button.clone() %}{% include "components/ui/button.html" %}
+      </form>
+      <form action="/reviews/{{ card.entry.id }}/vote" method="post">
+        <input type="hidden" name="csrf" value="{{ review_panel.csrf }}"><input type="hidden" name="revision" value="{{ card.entry.revision }}"><input type="hidden" name="vote" value="0">
+        {% let button = card.unvote_button.clone() %}{% include "components/ui/button.html" %}
+      </form>
+    </div>
+    <details class="ui-review-report"><summary>Report this review</summary>
+      <form class="ui-review-form" action="/reviews/{{ card.entry.id }}/report" method="post">
+        <input type="hidden" name="csrf" value="{{ review_panel.csrf }}"><input type="hidden" name="revision" value="{{ card.entry.revision }}">
+        {% let field = card.report_field.clone() %}{% include "components/ui/review_field.html" %}
+        {% let button = card.report_button.clone() %}{% include "components/ui/button.html" %}
+      </form>
+    </details>
+    {% endif %}
+  {% endfor %}
+  {% let navigation = review_panel.navigation.clone() %}{% include "components/ui/page_navigation.html" %}
+</section>

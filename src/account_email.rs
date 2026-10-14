@@ -100,6 +100,15 @@ pub async fn issue(
     email: &str,
     version: i64,
 ) -> Result<Uuid, Box<dyn std::error::Error + Send + Sync>> {
+    crate::access::require_active_tx(
+        tx,
+        &crate::access::Principal {
+            user_id: user.into(),
+            auth_version: version,
+        },
+        crate::access::AccountLock::Update,
+    )
+    .await?;
     let id = Uuid::new_v4();
     let token = random_secret();
     let (path, kind, hours) = match purpose {
@@ -428,7 +437,7 @@ pub async fn forgot_post(
         let Ok(email)=crate::auth::normalize_email(&f.email) else{return Ok(());};
         if !issuance_limits(&s.db,&email,"reset_password").await{return Ok(());}
         let mut tx=s.db.begin().await?;
-        let row=sqlx::query("SELECT u.id,u.auth_version FROM users u JOIN password_credentials p ON p.user_id=u.id WHERE email=$1 FOR UPDATE OF u").bind(&email).fetch_optional(&mut *tx).bounded_one().await?;
+        let row=sqlx::query("SELECT u.id,u.auth_version FROM users u JOIN password_credentials p ON p.user_id=u.id WHERE email=$1 AND u.account_status='active' FOR UPDATE OF u").bind(&email).fetch_optional(&mut *tx).bounded_one().await?;
         if let Some(row)=row {
             let id:String=row.get("id");let version:i64=row.get("auth_version");
             let count:i64=sqlx::query_scalar("SELECT count(*) FROM account_tokens WHERE user_id=$1 AND purpose='reset_password' AND revoked_at IS NULL AND consumed_at IS NULL AND expires_at>now()").bind(&id).fetch_one(&mut *tx).bounded_one().await?;
@@ -495,7 +504,7 @@ async fn token(
     hash: &str,
     purpose: &str,
 ) -> Result<Option<sqlx::postgres::PgRow>, sqlx::Error> {
-    sqlx::query("SELECT t.*,u.email FROM account_tokens t JOIN users u ON u.id=t.user_id WHERE t.token_hash=$1 AND t.purpose=$2 AND t.consumed_at IS NULL AND t.revoked_at IS NULL AND t.expires_at>now() AND t.auth_version=u.auth_version AND (t.purpose='change_email' OR t.target_email=u.email)").bind(hash).bind(purpose).fetch_optional(db).bounded_one().await
+    sqlx::query("SELECT t.*,u.email FROM account_tokens t JOIN users u ON u.id=t.user_id WHERE t.token_hash=$1 AND t.purpose=$2 AND t.consumed_at IS NULL AND t.revoked_at IS NULL AND t.expires_at>now() AND u.account_status='active' AND t.auth_version=u.auth_version AND (t.purpose='change_email' OR t.target_email=u.email)").bind(hash).bind(purpose).fetch_optional(db).bounded_one().await
 }
 async fn confirm(
     s: AppState,
@@ -554,7 +563,7 @@ async fn confirm(
         let mut tx=s.db.begin().await?;
         // All mutations lock the user first, then challenge, to serialize sibling tokens.
         sqlx::query("SELECT id FROM users WHERE id=$1 FOR UPDATE").bind(&id).fetch_one(&mut *tx).bounded_one().await?;
-        let r=sqlx::query("SELECT t.*,u.email FROM account_tokens t JOIN users u ON u.id=t.user_id WHERE t.token_hash=$1 AND t.purpose=$2 AND t.consumed_at IS NULL AND t.revoked_at IS NULL AND t.expires_at>now() AND t.auth_version=u.auth_version AND (t.purpose='change_email' OR t.target_email=u.email) FOR UPDATE OF t").bind(&c.hash).bind(purpose).fetch_optional(&mut *tx).bounded_one().await?;
+        let r=sqlx::query("SELECT t.*,u.email FROM account_tokens t JOIN users u ON u.id=t.user_id WHERE t.token_hash=$1 AND t.purpose=$2 AND t.consumed_at IS NULL AND t.revoked_at IS NULL AND t.expires_at>now() AND u.account_status='active' AND t.auth_version=u.auth_version AND (t.purpose='change_email' OR t.target_email=u.email) FOR UPDATE OF t").bind(&c.hash).bind(purpose).fetch_optional(&mut *tx).bounded_one().await?;
         let Some(r)=r else{return Ok(false);};
         let old_email:String=r.get("email");let target:String=r.get("target_email");
         if let Some(h)=hash {

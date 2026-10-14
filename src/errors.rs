@@ -17,6 +17,9 @@ pub enum AppError {
     #[error("Askama template error: {0}")]
     Template(#[from] askama::Error),
 
+    #[error("{1}")]
+    Http(StatusCode, String),
+
     #[error("Not Found")]
     NotFound,
 }
@@ -57,6 +60,7 @@ impl IntoResponse for AppError {
                 )
             }
             AppError::Validation(msg) => (StatusCode::BAD_REQUEST, msg),
+            AppError::Http(status, msg) => (status, msg),
             AppError::NotFound => (StatusCode::NOT_FOUND, "Resource not found".to_string()),
         };
 

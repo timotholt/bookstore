@@ -17,7 +17,7 @@ use std::{
 use tokio::sync::Semaphore;
 
 type Entries = Cache<String, Arc<Vec<u8>>>;
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Lifetime {
     Offers,
     Counts,
@@ -34,19 +34,26 @@ pub struct CatalogCache {
 tokio::task_local! { static CURRENT: Arc<CatalogCache>; }
 impl CatalogCache {
     pub fn new() -> Self {
-        fn cache(mib: u64, seconds: u64) -> Entries {
+        Self::with_lifetimes(
+            Duration::from_secs(30),
+            Duration::from_secs(300),
+            Duration::from_secs(3600),
+        )
+    }
+    fn with_lifetimes(offers: Duration, counts: Duration, metadata: Duration) -> Self {
+        fn cache(mib: u64, lifetime: Duration) -> Entries {
             Cache::builder()
                 .max_capacity(mib * 1024 * 1024)
                 .weigher(|k: &String, v: &Arc<Vec<u8>>| {
                     (k.len() + v.len() + 1024).min(u32::MAX as usize) as u32
                 })
-                .time_to_live(Duration::from_secs(seconds))
+                .time_to_live(lifetime)
                 .build()
         }
         Self {
-            offers: cache(32, 30),
-            counts: cache(8, 300),
-            metadata: cache(24, 3600),
+            offers: cache(32, offers),
+            counts: cache(8, counts),
+            metadata: cache(24, metadata),
             concurrency: Semaphore::new(2),
             rate: std::sync::Mutex::new((Instant::now(), 0)),
             generation: AtomicU64::new(0),
@@ -220,6 +227,83 @@ mod tests {
         assert_eq!(
             cache.offers.policy().time_to_live(),
             Some(Duration::from_secs(30))
+        );
+    }
+    #[tokio::test]
+    async fn independent_instances_converge_rating_counts_and_rows_at_offer_lifetime() {
+        use crate::models::CatalogFilters;
+        let filters = CatalogFilters {
+            min_rating: Some("4".into()),
+            ..Default::default()
+        };
+        let lifetime = crate::store::count_lifetime(&filters);
+        assert_eq!(lifetime, Lifetime::Offers);
+        assert_eq!(
+            crate::store::count_lifetime(&CatalogFilters::default()),
+            Lifetime::Counts
+        );
+        assert_eq!(
+            CatalogCache::new().offers.policy().time_to_live(),
+            Some(Duration::from_secs(30))
+        );
+        let a = CatalogCache::with_lifetimes(
+            Duration::from_millis(80),
+            Duration::from_secs(5),
+            Duration::from_secs(5),
+        );
+        let b = CatalogCache::with_lifetimes(
+            Duration::from_millis(80),
+            Duration::from_secs(5),
+            Duration::from_secs(5),
+        );
+        for cache in [&a, &b] {
+            cache
+                .load("count_books", "rating:4".into(), lifetime, async {
+                    Ok::<_, sqlx::Error>(0i64)
+                })
+                .await
+                .unwrap();
+            cache
+                .load("list_books", "rating:4".into(), Lifetime::Offers, async {
+                    Ok::<_, sqlx::Error>(Vec::<String>::new())
+                })
+                .await
+                .unwrap();
+        }
+        // Mutation invalidates its own instance; another process retains bounded old data.
+        a.invalidate();
+        assert_eq!(
+            a.load("count_books", "rating:4".into(), lifetime, async {
+                Ok::<_, sqlx::Error>(1i64)
+            })
+            .await
+            .unwrap(),
+            1
+        );
+        assert_eq!(
+            b.load("count_books", "rating:4".into(), lifetime, async {
+                Ok::<_, sqlx::Error>(1i64)
+            })
+            .await
+            .unwrap(),
+            0
+        );
+        tokio::time::sleep(Duration::from_millis(120)).await;
+        assert_eq!(
+            b.load("count_books", "rating:4".into(), lifetime, async {
+                Ok::<_, sqlx::Error>(1i64)
+            })
+            .await
+            .unwrap(),
+            1
+        );
+        assert_eq!(
+            b.load("list_books", "rating:4".into(), Lifetime::Offers, async {
+                Ok::<_, sqlx::Error>(vec!["approved".to_owned()])
+            })
+            .await
+            .unwrap(),
+            vec!["approved"]
         );
     }
 }

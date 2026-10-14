@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ heading }} | {{ self.store_name() }}</title><link rel="stylesheet" href="/styles.css"></head>
+<body>
+<header class="ui-review-header"><a class="ui-review-brand" href="/">{{ self.store_name() }}</a>
+<nav class="ui-review-actions" aria-label="Review navigation">
+{% let link = home_link.clone() %}{% include "components/ui/link.html" %}
+{% let link = account_link.clone() %}{% include "components/ui/link.html" %}
+{% let link = my_link.clone() %}{% include "components/ui/link.html" %}
+{% if staff %}{% let link = staff_link.clone() %}{% include "components/ui/link.html" %}{% endif %}
+</nav></header>
+<main class="ui-review-page">
+<h1>{{ heading }}</h1>
+{% if !message.is_empty() %}<p class="ui-review-notice" role="status">{{ message }}</p>{% endif %}
+{% if !error.is_empty() %}<p class="ui-review-error" role="alert">{{ error }}</p>{% endif %}
+{% if let Some(form) = form %}{% include "components/ui/review_form.html" %}{% endif %}
+{% if moderation && detail_id == 0 %}
+<p class="ui-review-status">Queue: {{ filter }}</p>
+<nav class="ui-review-actions" aria-label="Moderation filters">
+{% for link in filter_links %}{% include "components/ui/link.html" %}{% endfor %}</nav>
+{% endif %}
+{% if own && cards.is_empty() %}<p>You haven’t written any reviews yet. Open a book to write your first review.</p>{% endif %}
+{% if moderation && cards.is_empty() %}<p>No reviews in this queue.</p>{% endif %}
+{% for card in cards %}
+<section class="ui-review-managed">
+{% let link = card.book_link.clone() %}{% include "components/ui/link.html" %}<p>by {{ card.entry.author }}</p>
+{% include "components/ui/review_card.html" %}
+<p class="ui-review-status">{{ card.status_label }}{% if moderation %} · Revision {{ card.entry.revision }}{% endif %}</p>
+{% if !card.entry.reason.is_empty() %}<p>Moderator reason: {{ card.entry.reason }}</p>{% endif %}
+{% if own %}
+<div class="ui-review-actions">
+{% let link = card.edit_link.clone() %}{% include "components/ui/link.html" %}
+<details><summary>Delete review</summary><p>Delete this review and remove its stars from the public rating?</p>
+<form action="/reviews/{{ card.entry.id }}/delete" method="post">
+<input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="revision" value="{{ card.entry.revision }}">
+{% let button = card.delete_button.clone() %}{% include "components/ui/button.html" %}
+</form></details></div>
+{% endif %}
+{% if moderation %}
+{% if detail_id == 0 %}
+<p>{{ card.entry.report_count }} open reports</p>
+{% let link = card.detail_link.clone() %}{% include "components/ui/link.html" %}
+{% else %}
+<form class="ui-review-form" action="/staff/reviews/{{ card.entry.id }}" method="post">
+<input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="revision" value="{{ card.entry.revision }}">
+{% let field = moderation_reason.clone() %}{% include "components/ui/review_field.html" %}
+<div class="ui-review-actions">
+{% if card.entry.status == "pending" %}
+{% let button = approve_button.clone() %}{% include "components/ui/button.html" %}
+{% let button = reject_button.clone() %}{% include "components/ui/button.html" %}
+{% endif %}
+{% if card.entry.published_revision.is_some() %}{% let button = remove_button.clone() %}{% include "components/ui/button.html" %}{% endif %}
+{% let button = resolve_button.clone() %}{% include "components/ui/button.html" %}
+</div></form>
+{% endif %}
+{% endif %}
+</section>
+{% endfor %}
+{% if let Some(card) = published %}<section class="ui-review-managed"><h2>Currently published version</h2>{% include "components/ui/review_card.html" %}</section>{% endif %}
+{% if detail_id > 0 %}
+<section class="ui-review-managed"><h2>Reports</h2>{% for report in reports %}<p>Report {{ report.id }} · Revision {{ report.revision_id }} · {{ report.status }}: {{ report.reason }}</p>{% endfor %}
+{% if reports.is_empty() %}<p>No reports.</p>{% endif %}</section>
+<section class="ui-review-managed"><h2>Moderation history</h2>{% for event in history %}<p>{{ event.created_at }} · {{ event.action }} · Staff {{ event.actor_name }} · Revision {{ event.revision_id.unwrap_or(0) }}: {{ event.reason }}</p>{% endfor %}
+{% if history.is_empty() %}<p>No moderation decisions yet.</p>{% endif %}<p>Showing the latest 20 reports and decisions.</p></section>
+{% endif %}
+{% include "components/ui/page_navigation.html" %}
+</main></body></html>

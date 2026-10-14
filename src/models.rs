@@ -19,6 +19,12 @@ pub struct BookCard {
     pub aspect_ratio: f64,
     pub tags: String,
     pub is_new_arrival: bool,
+    #[sqlx(default)]
+    #[serde(default)]
+    pub review_count: i64,
+    #[sqlx(default)]
+    #[serde(default)]
+    pub average_rating: f64,
     #[sqlx(rename = "copy_id")]
     pub copy_id: i64,
     pub condition: String,
@@ -116,6 +122,7 @@ pub struct AnalyticsEventPayload {
 
 #[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
 pub struct User {
+    pub profile_version: i64,
     pub id: String,
     pub email: String,
     pub full_name: Option<String>,

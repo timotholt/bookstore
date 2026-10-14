@@ -1,0 +1,7 @@
+<form method="post" class="ui-admin-role" action="/staff/users/{{ user.id }}">
+<input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="role" value="{{ role.name }}">
+{% if role.granted %}<input type="hidden" name="action" value="revoke">{% else %}<input type="hidden" name="action" value="grant">{% endif %}
+<span>{{ role.name }} — {% if role.granted %}Granted{% else %}Not granted{% endif %}</span>
+{% let field = role.reason.clone() %}{% include "components/ui/admin_field.html" %}
+{% let button = role.button.clone() %}{% include "components/ui/button.html" %}
+</form>

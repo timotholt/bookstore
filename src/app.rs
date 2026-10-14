@@ -89,6 +89,26 @@ pub fn build_router(state: AppState) -> Router {
         .route("/catalog", get(handlers::catalog))
         .route("/search", get(handlers::search_page))
         .route("/books/:book_id", get(handlers::book_detail))
+        .route("/account/reviews", get(crate::review_web::my_reviews))
+        .route(
+            "/account/reviews/activity",
+            get(crate::review_web::activity),
+        )
+        .route("/books/:book_id/reviews/edit", get(crate::review_web::edit))
+        .route("/books/:book_id/reviews", post(crate::review_web::submit))
+        .route("/reviews/:id/delete", post(crate::review_web::delete))
+        .route("/reviews/:id/vote", post(crate::review_web::vote))
+        .route("/reviews/:id/report", post(crate::review_web::report))
+        .route("/staff/users", get(crate::admin::users))
+        .route(
+            "/staff/users/:id",
+            get(crate::admin::detail).post(crate::admin::action),
+        )
+        .route("/staff/reviews", get(crate::review_web::staff))
+        .route(
+            "/staff/reviews/:id",
+            get(crate::review_web::staff_detail).post(crate::review_web::moderate),
+        )
         .route("/cart", get(handlers::cart_page))
         .route("/cart/items", post(handlers::add_cart_item))
         .route(
@@ -121,7 +141,7 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route(
             "/checkout",
-            get(handlers::checkout).post(handlers::checkout),
+            get(handlers::checkout).post(handlers::checkout_paused),
         )
         .nest_service("/assets", ServeDir::new("assets"))
         .route_service("/app.js", ServeFile::new("app.js"))
@@ -187,6 +207,13 @@ mod tests {
         assert!(!is_local_postgres_url(
             "postgresql://u:p@ep-x-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require"
         ));
+    }
+
+    fn test_principal(id: &str) -> crate::access::Principal {
+        crate::access::Principal {
+            user_id: id.into(),
+            auth_version: 0,
+        }
     }
 
     async fn postgres_test_db() -> PostgresTestDb {
@@ -1067,6 +1094,8 @@ mod tests {
                 address_postal_code: "",
                 marketing_opt_in: false,
             },
+            0,
+            0,
         )
         .await;
         assert!(r.is_err());
@@ -1968,78 +1997,19 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
         let body = response_body(response).await;
-        assert!(body.contains("Checkout Preview"));
-        assert!(body.contains("Order placement unavailable"));
+        assert!(body.contains("New orders are temporarily paused"));
+        assert!(body.contains("transitioning ownership"));
         assert!(body.contains("Items in your cart"));
-        assert!(body.contains("Availability and pickup have not been confirmed"));
+        assert!(body.contains("Items in your cart are not reserved"));
         assert!(body.contains("Dune"));
-        assert!(body.contains("No order or payment is processed"));
-        assert!(body.contains("disabled aria-disabled=\"true\""));
+        assert!(body.contains("No payment is collected or order placed"));
+        assert!(!body.contains("name=\"payment\""));
         assert!(body.contains(
             r#"<a class="brand checkout-brand" href="/" aria-label="Chantel&#x27;s Corner home">"#
         ));
         assert!(!body.contains("All Genres"));
         assert!(!body.contains("Best Sellers"));
         assert!(!body.contains("checkout-cart-link"));
-    }
-
-    #[tokio::test]
-    async fn review_foundation_tables_migrate() {
-        let test_db = postgres_test_db().await;
-        let db = test_db.pool();
-        let (_app, db) = test_app_with_db(db);
-
-        sqlx::query(
-            r#"
-            INSERT INTO reviews (
-                book_id,
-                user_id,
-                rating,
-                title,
-                body,
-                status,
-                verified_purchase
-            )
-            VALUES ('b003', 'user-1', 5, 'Loved it', 'A classic for a reason.', 'published', true)
-            "#,
-        )
-        .execute(&db)
-        .await
-        .unwrap();
-
-        sqlx::query(
-            r#"
-            INSERT INTO review_aggregates (
-                book_id,
-                published_count,
-                rating_sum,
-                average_rating,
-                star_5_count,
-                verified_count
-            )
-            VALUES ('b003', 1, 5, 5.0, 1, 1)
-            "#,
-        )
-        .execute(&db)
-        .await
-        .unwrap();
-
-        let aggregate = sqlx::query_as::<_, (i64, i64, f64, i64)>(
-            r#"
-            SELECT
-                published_count::int8,
-                rating_sum::int8,
-                average_rating::float8,
-                verified_count::int8
-            FROM review_aggregates
-            WHERE book_id = 'b003'
-            "#,
-        )
-        .fetch_one(&db)
-        .await
-        .unwrap();
-
-        assert_eq!(aggregate, (1, 5, 5.0, 1));
     }
 
     #[tokio::test]
@@ -2373,7 +2343,11 @@ mod tests {
             ("store", include_str!("store.rs")),
             ("cart", include_str!("cart.rs")),
             ("auth", include_str!("auth.rs")),
+            ("access", include_str!("access.rs")),
+            ("admin", include_str!("admin.rs")),
             ("handlers", include_str!("handlers.rs")),
+            ("reviews", include_str!("reviews.rs")),
+            ("review_web", include_str!("review_web.rs")),
             ("account_email", include_str!("account_email.rs")),
             ("email", include_str!("email/mod.rs")),
         ] {
@@ -2399,5 +2373,1047 @@ mod tests {
                 "raw SQL requires explicit review: {name}"
             );
         }
+    }
+    async fn review_account(app: &Router, email: &str) -> (String, String) {
+        let (cookie, token) = csrf_form(app, "/signup", None).await;
+        let response=post_form(app,"/signup",&cookie,format!("first_name=Reader&last_name=Test&email={email}&password=UniqueHorseBookstore27%21&password_confirm=UniqueHorseBookstore27%21&csrf={token}")).await;
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        let cookie = session_cookie(&response);
+        csrf_form(app, "/books/b003/reviews/edit", Some(&cookie)).await
+    }
+    async fn review_get(app: &Router, path: &str, cookie: &str) -> axum::response::Response {
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri(path)
+                    .header(header::COOKIE, cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+    async fn catalog_fingerprint(db: &DbPool) -> Vec<(String, String)> {
+        let mut result = Vec::new();
+        for table in [
+            "books",
+            "authors",
+            "book_authors",
+            "genres",
+            "book_genres",
+            "book_copies",
+            "variant_attributes",
+            "book_collections",
+            "book_collection_items",
+            "book_subjects",
+        ] {
+            let digest:String=sqlx::query_scalar(&format!("SELECT md5(COALESCE(string_agg(row_to_json(t)::text,'' ORDER BY row_to_json(t)::text),'')) FROM {table} t")).fetch_one(db).await.unwrap();
+            result.push((table.into(), digest));
+        }
+        result
+    }
+    #[tokio::test]
+    async fn review_http_lifecycle_preserves_catalog_and_enforces_ownership() {
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let (app, db) = test_app_with_db(db);
+        let before = catalog_fingerprint(&db).await;
+        let (a, csrf_a) = review_account(&app, "review-a%40example.com").await;
+        let (b, csrf_b) = review_account(&app, "review-b%40example.com").await;
+        let (staff, csrf_staff) = review_account(&app, "review-staff%40example.com").await;
+        sqlx::query("INSERT INTO user_staff_roles(user_id,role) SELECT id,'moderator' FROM users WHERE email='review-staff@example.com'").execute(&db).await.unwrap();
+        let bad = post_form(
+            &app,
+            "/books/b003/reviews",
+            &a,
+            format!("rating=7&title=Retain+this&body=Retain+body&revision=0&csrf={csrf_a}"),
+        )
+        .await;
+        assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
+        assert!(response_body(bad).await.contains("Retain body"));
+        let no_csrf = post_form(
+            &app,
+            "/books/b003/reviews",
+            &a,
+            "rating=5&title=x&body=x&revision=0&csrf=bad".into(),
+        )
+        .await;
+        assert_eq!(no_csrf.status(), StatusCode::FORBIDDEN);
+        let submitted=post_form(&app,"/books/b003/reviews",&a,format!("rating=5&title=Great+book&body=%3Cscript%3Ealert%281%29%3C%2Fscript%3E&revision=0&user_id=forged-author&csrf={csrf_a}")).await;
+        assert_eq!(submitted.status(), StatusCode::SEE_OTHER);
+        let (id, v1): (i64, i64) = sqlx::query_as("SELECT id,current_revision FROM reviews")
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        let pending = response_body(review_get(&app, "/account/reviews", &a).await).await;
+        assert!(pending.contains("Awaiting moderation"));
+        assert!(pending.contains("&lt;script&gt;"));
+        let other = response_body(review_get(&app, "/account/reviews", &b).await).await;
+        assert!(!other.contains("Great book"));
+        let public = response_body(review_get(&app, "/books/b003", "").await).await;
+        assert!(!public.contains("Great book"));
+        assert!(public.contains("No reviews yet"));
+        assert_eq!(
+            review_get(&app, "/staff/reviews", &b).await.status(),
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            post_form(
+                &app,
+                &format!("/reviews/{id}/delete"),
+                &b,
+                format!("revision={v1}&csrf={csrf_b}")
+            )
+            .await
+            .status(),
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            post_form(
+                &app,
+                &format!("/staff/reviews/{id}"),
+                &b,
+                format!("revision={v1}&action=approve&csrf={csrf_b}")
+            )
+            .await
+            .status(),
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            post_form(
+                &app,
+                &format!("/staff/reviews/{id}"),
+                &staff,
+                format!("revision={v1}&action=approve&csrf={csrf_staff}")
+            )
+            .await
+            .status(),
+            StatusCode::SEE_OTHER
+        );
+        let public = response_body(review_get(&app, "/books/b003", "").await).await;
+        assert!(public.contains("Great book"));
+        assert!(public.contains("5.0 out of 5"));
+        assert!(!public.contains("<script>alert(1)</script>"));
+        // Repeated votes do not inflate totals; authors cannot vote on themselves.
+        for _ in 0..2 {
+            assert_eq!(
+                post_form(
+                    &app,
+                    &format!("/reviews/{id}/vote"),
+                    &b,
+                    format!("revision={v1}&vote=1&csrf={csrf_b}")
+                )
+                .await
+                .status(),
+                StatusCode::SEE_OTHER
+            );
+        }
+        assert_eq!(
+            sqlx::query_scalar::<_, i32>("SELECT helpful_count FROM reviews WHERE id=$1")
+                .bind(id)
+                .fetch_one(&db)
+                .await
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            post_form(
+                &app,
+                &format!("/reviews/{id}/vote"),
+                &a,
+                format!("revision={v1}&vote=1&csrf={csrf_a}")
+            )
+            .await
+            .status(),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            post_form(
+                &app,
+                &format!("/reviews/{id}/report"),
+                &b,
+                format!("revision={v1}&reason=Contains+unsafe+content&csrf={csrf_b}")
+            )
+            .await
+            .status(),
+            StatusCode::SEE_OTHER
+        );
+        let reports =
+            response_body(review_get(&app, "/staff/reviews?filter=reported", &staff).await).await;
+        assert!(reports.contains("Great book"));
+        let detail =
+            response_body(review_get(&app, &format!("/staff/reviews/{id}"), &staff).await).await;
+        assert!(detail.contains("Contains unsafe content"));
+        assert_eq!(post_form(&app,"/books/b003/reviews",&a,format!("rating=2&title=Changed+opinion&body=Updated+review&revision={v1}&csrf={csrf_a}")).await.status(),StatusCode::SEE_OTHER);
+        let v2: i64 = sqlx::query_scalar("SELECT current_revision FROM reviews WHERE id=$1")
+            .bind(id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_ne!(v1, v2);
+        let still_public = response_body(review_get(&app, "/books/b003", "").await).await;
+        assert!(still_public.contains("Great book"));
+        assert!(!still_public.contains("Changed opinion"));
+        assert_eq!(
+            post_form(
+                &app,
+                &format!("/staff/reviews/{id}"),
+                &staff,
+                format!("revision={v1}&action=approve&csrf={csrf_staff}")
+            )
+            .await
+            .status(),
+            StatusCode::CONFLICT
+        );
+        assert_eq!(
+            post_form(
+                &app,
+                &format!("/staff/reviews/{id}"),
+                &staff,
+                format!("revision={v2}&action=reject&reason=Unrelated+content&csrf={csrf_staff}")
+            )
+            .await
+            .status(),
+            StatusCode::SEE_OTHER
+        );
+        let mine = response_body(review_get(&app, "/account/reviews", &a).await).await;
+        assert!(mine.contains("Unrelated content"));
+        assert!(mine.contains("Changes rejected"));
+        assert_eq!(
+            post_form(
+                &app,
+                "/books/b003/reviews",
+                &a,
+                format!(
+                    "rating=2&title=Changed+opinion&body=Now+relevant&revision={v2}&csrf={csrf_a}"
+                )
+            )
+            .await
+            .status(),
+            StatusCode::SEE_OTHER
+        );
+        let v3: i64 = sqlx::query_scalar("SELECT current_revision FROM reviews WHERE id=$1")
+            .bind(id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_eq!(
+            post_form(
+                &app,
+                &format!("/staff/reviews/{id}"),
+                &staff,
+                format!("revision={v3}&action=approve&csrf={csrf_staff}")
+            )
+            .await
+            .status(),
+            StatusCode::SEE_OTHER
+        );
+        let public = response_body(review_get(&app, "/books/b003", "").await).await;
+        assert!(public.contains("2.0 out of 5"));
+        assert!(public.contains("Changed opinion"));
+        assert!(!public.contains("Great book"));
+        assert_eq!(
+            post_form(
+                &app,
+                &format!("/staff/reviews/{id}"),
+                &staff,
+                format!("revision={v3}&action=remove&reason=Policy+violation&csrf={csrf_staff}")
+            )
+            .await
+            .status(),
+            StatusCode::SEE_OTHER
+        );
+        let public = response_body(review_get(&app, "/books/b003", "").await).await;
+        assert!(public.contains("No reviews yet"));
+        assert!(!public.contains("Changed opinion"));
+        assert_eq!(
+            post_form(
+                &app,
+                &format!("/reviews/{id}/delete"),
+                &a,
+                format!("revision={v3}&csrf={csrf_a}")
+            )
+            .await
+            .status(),
+            StatusCode::SEE_OTHER
+        );
+        let mine = response_body(review_get(&app, "/account/reviews", &a).await).await;
+        assert!(!mine.contains("Changed opinion"));
+        assert_eq!(
+            post_form(
+                &app,
+                &format!("/staff/reviews/{id}"),
+                &staff,
+                format!("revision={v3}&action=approve&csrf={csrf_staff}")
+            )
+            .await
+            .status(),
+            StatusCode::CONFLICT
+        );
+        let unauth = review_get(&app, "/books/b003/reviews/edit", "").await;
+        assert_eq!(unauth.status(), StatusCode::SEE_OTHER);
+        let anon_post = post_form(
+            &app,
+            "/books/b003/reviews",
+            "",
+            format!("rating=5&title=x&body=x&revision=0&csrf={csrf_a}"),
+        )
+        .await;
+        assert_eq!(anon_post.status(), StatusCode::FORBIDDEN);
+        assert_eq!(
+            review_get(&app, "/checkout", "").await.status(),
+            StatusCode::OK
+        );
+        assert_eq!(
+            post_form(&app, "/checkout", &a, "".into()).await.status(),
+            StatusCode::CONFLICT
+        );
+        let (anon_cookie, anon_csrf) = csrf_form(&app, "/signup", None).await;
+        assert_eq!(
+            post_form(
+                &app,
+                "/books/b003/reviews",
+                &anon_cookie,
+                format!("rating=5&title=x&body=x&revision=0&csrf={anon_csrf}")
+            )
+            .await
+            .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        let wiped: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM review_revisions WHERE review_id=$1 AND (title<>'' OR body<>'')",
+        )
+        .bind(id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+        assert_eq!(wiped, 0, "deleted author text retained");
+        let author: String = sqlx::query_scalar("SELECT user_id FROM reviews WHERE id=$1")
+            .bind(id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO user_staff_roles(user_id,role) VALUES($1,'moderator')")
+            .bind(&author)
+            .execute(&db)
+            .await
+            .unwrap();
+        let key = crate::reviews::work(&db, "b003").await.unwrap().work_key;
+        let input = crate::reviews::Input {
+            rating: 3,
+            title: "New submission".into(),
+            body: String::new(),
+            revision: v3,
+        };
+        assert_eq!(
+            crate::reviews::submit(&db, &test_principal(&author), "b003", &input)
+                .await
+                .unwrap(),
+            id
+        );
+        let v4 = crate::reviews::own(&db, &key, &author)
+            .await
+            .unwrap()
+            .unwrap()
+            .current_revision
+            .unwrap();
+        assert!(
+            crate::reviews::moderate(&db, &test_principal(&author), id, v4, "approve", "")
+                .await
+                .is_err(),
+            "moderator approved own review"
+        );
+        assert!(crate::reviews::moderate(
+            &db,
+            &test_principal("forged-author"),
+            id,
+            v4,
+            "approve",
+            ""
+        )
+        .await
+        .is_err());
+        let input = crate::reviews::Input {
+            revision: v4,
+            ..input
+        };
+        crate::reviews::submit(&db, &test_principal(&author), "b003", &input)
+            .await
+            .unwrap();
+        let current = crate::reviews::own(&db, &key, &author)
+            .await
+            .unwrap()
+            .unwrap()
+            .current_revision
+            .unwrap();
+        assert!(matches!(
+            crate::reviews::submit(
+                &db,
+                &test_principal(&author),
+                "b003",
+                &crate::reviews::Input {
+                    revision: current,
+                    ..input
+                }
+            )
+            .await,
+            Err(crate::errors::AppError::Http(
+                StatusCode::TOO_MANY_REQUESTS,
+                _
+            ))
+        ));
+        sqlx::query("UPDATE users SET auth_version=auth_version+1 WHERE id=$1")
+            .bind(&author)
+            .execute(&db)
+            .await
+            .unwrap();
+        assert_eq!(
+            post_form(
+                &app,
+                "/books/b003/reviews",
+                &a,
+                format!("rating=5&title=x&body=x&revision={current}&csrf={csrf_a}")
+            )
+            .await
+            .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            before,
+            catalog_fingerprint(&db).await,
+            "review/checkout flows changed catalog records"
+        );
+    }
+    #[tokio::test]
+    async fn review_editions_concurrency_pagination_and_database_constraints() {
+        use crate::reviews;
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        // Only synthetic fixtures in this isolated local schema; no deployed catalog changes.
+        sqlx::query("INSERT INTO books(id,slug,title,primary_author_id,isbn) SELECT 'review-edition','review-edition',upper(title)||'  ',primary_author_id,'TEST-EDITION' FROM books WHERE id='b003'").execute(&db).await.unwrap();
+        let work = reviews::work(&db, "b003").await.unwrap();
+        assert_eq!(
+            work.work_key,
+            reviews::work(&db, "review-edition").await.unwrap().work_key
+        );
+        sqlx::query("INSERT INTO users(id,email) VALUES('moderator','mod@example.com')")
+            .execute(&db)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO user_staff_roles(user_id,role) VALUES('moderator','moderator')")
+            .execute(&db)
+            .await
+            .unwrap();
+        let mut handles = vec![];
+        for n in 0..22 {
+            let user = format!("reviewer-{n}");
+            sqlx::query("INSERT INTO users(id,email) VALUES($1,$2)")
+                .bind(&user)
+                .bind(format!("{user}@example.com"))
+                .execute(&db)
+                .await
+                .unwrap();
+            let input = reviews::Input {
+                rating: if n % 2 == 0 { 5 } else { 1 },
+                title: format!("Review {n}"),
+                body: String::new(),
+                revision: 0,
+            };
+            let id = reviews::submit(&db, &test_principal(&user), "b003", &input)
+                .await
+                .unwrap();
+            let r = reviews::own(&db, &work.work_key, &user)
+                .await
+                .unwrap()
+                .unwrap();
+            let rev = r.current_revision.unwrap();
+            let db = db.clone();
+            handles.push(tokio::spawn(async move {
+                reviews::moderate(&db, &test_principal("moderator"), id, rev, "approve", "")
+                    .await
+                    .unwrap();
+            }));
+        }
+        for h in handles {
+            h.await.unwrap();
+        }
+        let summary = reviews::summary(&db, &work.work_key).await.unwrap();
+        assert_eq!(summary.published_count, 22);
+        assert_eq!(summary.average_rating, 3.);
+        assert_eq!(summary.star_1_count, 11);
+        assert_eq!(summary.star_5_count, 11);
+        assert_eq!(
+            reviews::public_list(&db, &work.work_key, 1, "recent")
+                .await
+                .unwrap()
+                .len(),
+            20
+        );
+        assert_eq!(
+            reviews::public_list(&db, &work.work_key, 2, "recent")
+                .await
+                .unwrap()
+                .len(),
+            2
+        );
+        let same = reviews::own(&db, &work.work_key, "reviewer-0")
+            .await
+            .unwrap()
+            .unwrap();
+        let input = reviews::Input {
+            rating: 4,
+            title: "Other edition edit".into(),
+            body: String::new(),
+            revision: same.current_revision.unwrap(),
+        };
+        let reviewer_zero = test_principal("reviewer-0");
+        let (first, second) = tokio::join!(
+            reviews::submit(&db, &reviewer_zero, "review-edition", &input),
+            reviews::submit(&db, &reviewer_zero, "b003", &input)
+        );
+        assert_eq!(
+            usize::from(first.is_ok()) + usize::from(second.is_ok()),
+            1,
+            "stale concurrent edit accepted"
+        );
+        let count: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM reviews WHERE user_id='reviewer-0'")
+                .fetch_one(&db)
+                .await
+                .unwrap();
+        assert_eq!(count, 1);
+        assert!(sqlx::query("INSERT INTO reviews(book_id,user_id,work_key,rating) VALUES('b003','nonexistent',$1,5)").bind(&work.work_key).execute(&db).await.is_err());
+        assert!(sqlx::query(
+            "INSERT INTO review_revisions(review_id,rating,title,body) VALUES($1,6,'','')"
+        )
+        .bind(same.id)
+        .execute(&db)
+        .await
+        .is_err());
+        let initial = reviews::own(&db, &work.work_key, "reviewer-1")
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(reviews::moderate(
+            &db,
+            &test_principal("reviewer-1"),
+            initial.id,
+            initial.current_revision.unwrap(),
+            "approve",
+            ""
+        )
+        .await
+        .is_err());
+        // Unsupported physical deletion is blocked; disabling preserves public reviews.
+        assert!(sqlx::query("DELETE FROM users WHERE id='reviewer-1'")
+            .execute(&db)
+            .await
+            .is_err());
+        sqlx::query("UPDATE users SET account_status='disabled',auth_version=auth_version+1 WHERE id='reviewer-1'").execute(&db).await.unwrap();
+        assert_eq!(
+            reviews::summary(&db, &work.work_key)
+                .await
+                .unwrap()
+                .published_count,
+            22
+        );
+        crate::reviews::vote(
+            &db,
+            &test_principal("reviewer-2"),
+            same.id,
+            same.published_revision.unwrap(),
+            1,
+        )
+        .await
+        .unwrap();
+        crate::reviews::vote(
+            &db,
+            &test_principal("reviewer-2"),
+            same.id,
+            same.published_revision.unwrap(),
+            0,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, i32>("SELECT helpful_count FROM reviews WHERE id=$1")
+                .bind(same.id)
+                .fetch_one(&db)
+                .await
+                .unwrap(),
+            0,
+            "voter deletion left stale helpful count"
+        );
+        let min = crate::models::CatalogFilters {
+            min_rating: Some("4".into()),
+            ..Default::default()
+        };
+        let matches = crate::store::list_books(&db, &min).await.unwrap();
+        assert!(
+            matches.is_empty(),
+            "unrated books or 3-star titles matched 4+ stars"
+        );
+    }
+    fn admin_action(body: &str) -> crate::admin::Action {
+        serde_urlencoded::from_str(&format!("csrf=test&{body}")).unwrap()
+    }
+    async fn admin_fixture(db: &DbPool) {
+        sqlx::query("INSERT INTO users(id,email) VALUES('owner','owner@example.com'),('owner2','owner2@example.com'),('support','support@example.com'),('customer','customer@example.com'),('staff','staff@example.com')").execute(db).await.unwrap();
+        sqlx::query("INSERT INTO user_staff_roles(user_id,role) VALUES('owner','administrator'),('owner','support'),('owner2','administrator'),('owner2','support'),('support','support'),('staff','moderator')").execute(db).await.unwrap();
+    }
+    #[tokio::test]
+    async fn admin_permissions_profiles_audit_and_last_owner_are_atomic() {
+        let test = postgres_test_db().await;
+        let db = test.pool();
+        admin_fixture(&db).await;
+        let before = catalog_fingerprint(&db).await;
+        let owner = test_principal("owner");
+        let support = test_principal("support");
+        let disable = admin_action("action=status&status=disabled&reason=Support+request");
+        assert!(crate::admin::mutate(&db, &support, "staff", &disable)
+            .await
+            .is_err());
+        assert!(crate::admin::mutate(&db, &support, "customer", &disable)
+            .await
+            .is_ok());
+        assert!(
+            !crate::access::has_permission(&db, "customer", "reviews.moderate")
+                .await
+                .unwrap()
+        );
+        assert!(crate::admin::mutate(
+            &db,
+            &owner,
+            "owner",
+            &admin_action("action=grant&role=moderator&reason=Self+grant")
+        )
+        .await
+        .is_err());
+        let edit=admin_action("action=profile&first_name=Corrected&last_name=Reader&address_city=Pasadena&version=0&reason=Customer+correction");
+        crate::admin::mutate(&db, &support, "customer", &edit)
+            .await
+            .unwrap();
+        assert!(crate::admin::mutate(&db, &support, "customer", &edit)
+            .await
+            .is_err());
+        crate::auth::update_preferences(&db, "customer", true, 1)
+            .await
+            .unwrap_err(); // disabled account
+        let enable = admin_action("action=status&status=active&reason=Customer+restored");
+        crate::admin::mutate(&db, &support, "customer", &enable)
+            .await
+            .unwrap();
+        crate::auth::update_preferences(&db, "customer", true, 2)
+            .await
+            .unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("SELECT first_name FROM users WHERE id='customer'")
+                .fetch_one(&db)
+                .await
+                .unwrap(),
+            "Corrected"
+        );
+        crate::admin::mutate(&db, &owner, "owner2", &disable)
+            .await
+            .unwrap();
+        assert!(crate::admin::mutate(&db, &owner, "owner", &disable)
+            .await
+            .is_err());
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("SELECT account_status FROM users WHERE id='owner'")
+                .fetch_one(&db)
+                .await
+                .unwrap(),
+            "active"
+        );
+        let audit: i64 = sqlx::query_scalar("SELECT count(*) FROM admin_audit")
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_eq!(audit, 4);
+        assert!(sqlx::query("DELETE FROM users WHERE id='customer'")
+            .execute(&db)
+            .await
+            .is_err());
+        assert_eq!(before, catalog_fingerprint(&db).await);
+    }
+    #[tokio::test]
+    async fn admin_concurrent_owner_removal_preserves_combined_capability() {
+        let test = postgres_test_db().await;
+        let db = test.pool();
+        admin_fixture(&db).await;
+        let a = test_principal("owner");
+        let b = test_principal("owner2");
+        let f = admin_action("action=revoke&role=support&reason=Role+removal");
+        let (x, y) = tokio::join!(
+            crate::admin::mutate(&db, &a, "owner2", &f),
+            crate::admin::mutate(&db, &b, "owner", &f)
+        );
+        assert_eq!(usize::from(x.is_ok()) + usize::from(y.is_ok()), 1);
+        let capable:i64=sqlx::query_scalar("SELECT count(*) FROM users u WHERE account_status='active' AND EXISTS(SELECT 1 FROM user_staff_roles WHERE user_id=u.id AND role='administrator') AND EXISTS(SELECT 1 FROM user_staff_roles WHERE user_id=u.id AND role='support')").fetch_one(&db).await.unwrap();
+        assert_eq!(capable, 1);
+        // Independent administrator stays authorized across both removals;
+        // this proves the invariant itself, not incidental actor-session revocation.
+        sqlx::query("INSERT INTO user_staff_roles(user_id,role) VALUES('owner','support'),('owner2','support'),('staff','administrator') ON CONFLICT DO NOTHING").execute(&db).await.unwrap();
+        let independent = test_principal("staff");
+        let (x, y) = tokio::join!(
+            crate::admin::mutate(&db, &independent, "owner", &f),
+            crate::admin::mutate(&db, &independent, "owner2", &f)
+        );
+        assert_eq!(usize::from(x.is_ok()) + usize::from(y.is_ok()), 1);
+        let failure = if let Err(e) = x { e } else { y.unwrap_err() };
+        assert!(failure
+            .to_string()
+            .contains("Keep at least one active administrator"));
+    }
+    #[tokio::test]
+    async fn admin_operator_idempotency_and_security_epoch() {
+        let test = postgres_test_db().await;
+        let db = test.pool();
+        admin_fixture(&db).await;
+        crate::admin::operator(
+            &db,
+            "customer@example.com",
+            "--bootstrap-admin",
+            "local-test",
+            "Recovery setup",
+        )
+        .await
+        .unwrap();
+        crate::admin::operator(
+            &db,
+            "customer@example.com",
+            "--bootstrap-admin",
+            "local-test",
+            "Recovery setup",
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT auth_version FROM users WHERE id='customer'")
+                .fetch_one(&db)
+                .await
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT count(*) FROM admin_audit WHERE target_id='customer'"
+            )
+            .fetch_one(&db)
+            .await
+            .unwrap(),
+            1
+        );
+        assert!(crate::auth::update_preferences(&db, "customer", true, 0)
+            .await
+            .is_err());
+        let mail = crate::email::EmailService::test_capture();
+        let mut tx = db.begin().await.unwrap();
+        assert!(crate::account_email::issue(
+            &mut tx,
+            &mail,
+            "customer",
+            "reset_password",
+            "customer@example.com",
+            0
+        )
+        .await
+        .is_err());
+        tx.rollback().await.unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT count(*) FROM account_tokens WHERE user_id='customer'"
+            )
+            .fetch_one(&db)
+            .await
+            .unwrap(),
+            0
+        );
+    }
+
+    async fn wait_account_lock(db: &DbPool, needle: &str) {
+        tokio::time::timeout(std::time::Duration::from_secs(5),async{
+            loop{let blocked:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND wait_event_type='Lock' AND query LIKE $1)").bind(format!("%{needle}%")).fetch_one(db).await.unwrap();if blocked{break}tokio::time::sleep(std::time::Duration::from_millis(10)).await;}
+        }).await.expect("account mutation lock barrier");
+    }
+    #[tokio::test]
+    async fn account_revocation_defeats_inflight_profile_preferences_and_email() {
+        let test = postgres_test_db().await;
+        let db = test.pool();
+        admin_fixture(&db).await;
+        for path in ["preferences", "profile", "issue"] {
+            let epoch: i64 =
+                sqlx::query_scalar("SELECT auth_version FROM users WHERE id='customer'")
+                    .fetch_one(&db)
+                    .await
+                    .unwrap();
+            let mut revoke = db.begin().await.unwrap();
+            sqlx::query("UPDATE users SET auth_version=auth_version+1 WHERE id='customer'")
+                .execute(&mut *revoke)
+                .await
+                .unwrap();
+            let worker_db = db.clone();
+            let writer = tokio::spawn(async move {
+                match path {
+                    "preferences" => {
+                        crate::auth::update_preferences(&worker_db, "customer", true, epoch)
+                            .await
+                            .is_ok()
+                    }
+                    "profile" => crate::auth::update_user_profile(
+                        &worker_db,
+                        "customer",
+                        crate::auth::ProfileUpdate {
+                            first_name: "Stale",
+                            last_name: "User",
+                            email: "customer@example.com",
+                            phone_number: "",
+                            address_line1: "",
+                            address_line2: "",
+                            address_city: "",
+                            address_state: "",
+                            address_postal_code: "",
+                            marketing_opt_in: false,
+                        },
+                        epoch,
+                        0,
+                    )
+                    .await
+                    .is_ok(),
+                    _ => {
+                        let mail = crate::email::EmailService::test_capture();
+                        let mut tx = worker_db.begin().await.unwrap();
+                        let result = crate::account_email::issue(
+                            &mut tx,
+                            &mail,
+                            "customer",
+                            "reset_password",
+                            "customer@example.com",
+                            epoch,
+                        )
+                        .await;
+                        let ok = result.is_ok();
+                        if ok {
+                            tx.commit().await.unwrap()
+                        } else {
+                            tx.rollback().await.unwrap()
+                        }
+                        ok
+                    }
+                }
+            });
+            wait_account_lock(&db, "FROM users WHERE id=").await;
+            revoke.commit().await.unwrap();
+            assert!(!writer.await.unwrap(), "stale mutation accepted: {path}");
+        }
+        let app = test_app(db.clone());
+        let token = test_token(&db, "customer", "customer@example.com", "reset_password").await;
+        let (cookie, csrf) = challenge_cookie(&app, "/reset-password", &token).await;
+        let mut revoke = db.begin().await.unwrap();
+        sqlx::query("UPDATE users SET auth_version=auth_version+1 WHERE id='customer'")
+            .execute(&mut *revoke)
+            .await
+            .unwrap();
+        let writer = tokio::spawn(async move {
+            post_form(&app,"/reset-password",&cookie,format!("csrf={csrf}&password=NewUniqueBookstorePassword27%21&password_confirm=NewUniqueBookstorePassword27%21")).await
+        });
+        wait_account_lock(&db, "SELECT id FROM users WHERE id=").await;
+        revoke.commit().await.unwrap();
+        assert!(response_body(writer.await.unwrap())
+            .await
+            .contains("invalid or expired"));
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT count(*) FROM account_tokens WHERE consumed_at IS NOT NULL"
+            )
+            .fetch_one(&db)
+            .await
+            .unwrap(),
+            0
+        );
+    }
+    #[tokio::test]
+    async fn account_write_commits_before_waiting_revocation() {
+        let test = postgres_test_db().await;
+        let db = test.pool();
+        admin_fixture(&db).await;
+        // Local-only trigger creates a deterministic barrier after the account row lock.
+        sqlx::query("CREATE FUNCTION test_profile_barrier() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(684201099); RETURN NEW; END $$").execute(&db).await.unwrap();
+        sqlx::query("CREATE TRIGGER test_profile_barrier BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION test_profile_barrier()").execute(&db).await.unwrap();
+        let mut gate = db.begin().await.unwrap();
+        sqlx::query("SELECT pg_advisory_xact_lock(684201099)")
+            .execute(&mut *gate)
+            .await
+            .unwrap();
+        let writer_db = db.clone();
+        let writer = tokio::spawn(async move {
+            crate::auth::update_preferences(&writer_db, "customer", true, 0).await
+        });
+        wait_account_lock(&db, "UPDATE users SET marketing_opt_in=").await;
+        let revoke_db = db.clone();
+        let revoker = tokio::spawn(async move {
+            sqlx::query("UPDATE users SET auth_version=auth_version+1 WHERE id='customer'")
+                .execute(&revoke_db)
+                .await
+        });
+        wait_account_lock(&db, "UPDATE users SET auth_version=").await;
+        gate.commit().await.unwrap();
+        writer.await.unwrap().unwrap();
+        revoker.await.unwrap().unwrap();
+        assert_eq!(
+            sqlx::query_as::<_, (bool, i64)>(
+                "SELECT marketing_opt_in,auth_version FROM users WHERE id='customer'"
+            )
+            .fetch_one(&db)
+            .await
+            .unwrap(),
+            (true, 1)
+        );
+    }
+    #[tokio::test]
+    async fn admin_migration_preserves_moderators_and_catalog() {
+        let test = postgres_test_db().await;
+        let db = test.pool();
+        let schema = format!("admin_migration_{}", uuid::Uuid::new_v4().simple());
+        sqlx::query(&format!("CREATE SCHEMA {schema}"))
+            .execute(&db)
+            .await
+            .unwrap();
+        let url = database_url_with_search_path(&std::env::var("DATABASE_URL").unwrap(), &schema);
+        let old = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(2)
+            .connect(&url)
+            .await
+            .unwrap();
+        for migration in MIGRATOR
+            .migrations
+            .iter()
+            .filter(|m| m.version < 20261014002000)
+        {
+            sqlx::raw_sql(&migration.sql).execute(&old).await.unwrap();
+        }
+        sqlx::query("INSERT INTO users(id,email) VALUES('legacy-mod','legacy@example.com')")
+            .execute(&old)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO review_moderators(user_id) VALUES('legacy-mod')")
+            .execute(&old)
+            .await
+            .unwrap();
+        let before = catalog_fingerprint(&old).await;
+        sqlx::raw_sql(include_str!(
+            "../migrations_postgres/20261014002000_admin_access.sql"
+        ))
+        .execute(&old)
+        .await
+        .unwrap();
+        assert!(
+            crate::access::has_permission(&old, "legacy-mod", "reviews.moderate")
+                .await
+                .unwrap()
+        );
+        assert!(
+            !crate::access::has_permission(&old, "legacy-mod", "users.manage")
+                .await
+                .unwrap()
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, Option<String>>(
+                "SELECT to_regclass('review_moderators')::text"
+            )
+            .fetch_one(&old)
+            .await
+            .unwrap(),
+            None
+        );
+        assert_eq!(before, catalog_fingerprint(&old).await);
+        old.close().await;
+        sqlx::query(&format!("DROP SCHEMA {schema} CASCADE"))
+            .execute(&db)
+            .await
+            .unwrap();
+    }
+    #[tokio::test]
+    async fn admin_audit_failure_rolls_back_account_change() {
+        let test = postgres_test_db().await;
+        let db = test.pool();
+        admin_fixture(&db).await;
+        sqlx::query("CREATE FUNCTION reject_test_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test audit failure'; END $$").execute(&db).await.unwrap();
+        sqlx::query("CREATE TRIGGER reject_test_audit BEFORE INSERT ON admin_audit FOR EACH ROW EXECUTE FUNCTION reject_test_audit()").execute(&db).await.unwrap();
+        assert!(crate::admin::mutate(
+            &db,
+            &test_principal("support"),
+            "customer",
+            &admin_action("action=sessions&reason=Security+revocation")
+        )
+        .await
+        .is_err());
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT auth_version FROM users WHERE id='customer'")
+                .fetch_one(&db)
+                .await
+                .unwrap(),
+            0
+        );
+    }
+    #[tokio::test]
+    async fn admin_support_cannot_read_historical_staff_audit() {
+        let test = postgres_test_db().await;
+        let db = test.pool();
+        admin_fixture(&db).await;
+        let app = test_app(db.clone());
+        let (cookie, _) = review_account(&app, "audit-support%40example.com").await;
+        sqlx::query("INSERT INTO user_staff_roles(user_id,role) SELECT id,'support' FROM users WHERE email='audit-support@example.com'").execute(&db).await.unwrap();
+        sqlx::query("INSERT INTO admin_audit(actor_id,target_id,action,reason) VALUES('owner','customer','revoke','CLASSIFIED_STAFF_HISTORY'),('owner','customer','profile','VISIBLE_ACCOUNT_HISTORY')").execute(&db).await.unwrap();
+        let response = review_get(&app, "/staff/users/customer", &cookie).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_body(response).await;
+        assert!(body.contains("VISIBLE_ACCOUNT_HISTORY"));
+        assert!(!body.contains("CLASSIFIED_STAFF_HISTORY"));
+    }
+    #[tokio::test]
+    async fn stale_customer_profile_cannot_overwrite_staff_correction() {
+        let test = postgres_test_db().await;
+        let db = test.pool();
+        admin_fixture(&db).await;
+        let app = test_app(db.clone());
+        let (cookie, csrf) = review_account(&app, "profile-conflict%40example.com").await;
+        let id: String =
+            sqlx::query_scalar("SELECT id FROM users WHERE email='profile-conflict@example.com'")
+                .fetch_one(&db)
+                .await
+                .unwrap();
+        crate::admin::mutate(
+            &db,
+            &test_principal("owner"),
+            &id,
+            &admin_action(
+                "action=profile&version=0&first_name=StaffCorrection&reason=Customer+correction",
+            ),
+        )
+        .await
+        .unwrap();
+        let form=format!("csrf={csrf}&profile_version=0&first_name=OldCustomerForm&last_name=Reader&email=profile-conflict%40example.com&phone_number=&address_line1=&address_line2=&address_city=&address_state=&address_postal_code=");
+        let response = post_form(&app, "/account/profile", &cookie, form).await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let body = response_body(response).await;
+        assert!(body.contains("OldCustomerForm"));
+        assert!(body.contains("Reload profile"));
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("SELECT first_name FROM users WHERE id=$1")
+                .bind(&id)
+                .fetch_one(&db)
+                .await
+                .unwrap(),
+            "StaffCorrection"
+        );
+        let form=format!("csrf={csrf}&profile_version=1&first_name=NewCustomerForm&last_name=Reader&email=profile-conflict%40example.com&phone_number=&address_line1=&address_line2=&address_city=&address_state=&address_postal_code=");
+        assert_eq!(
+            post_form(&app, "/account/profile", &cookie, form)
+                .await
+                .status(),
+            StatusCode::OK
+        );
     }
 }

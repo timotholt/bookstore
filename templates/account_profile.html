@@ -22,10 +22,12 @@
 
     {% if let Some(msg) = error_message %}
       <div class="auth-alert auth-alert--error">{{ msg }}</div>
+      {% let link = self.reload_profile_link() %}{% include "components/ui/link.html" %}
     {% endif %}
 
     <form class="account-form" method="post" action="/account/profile">
       <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="profile_version" value="{{ user.profile_version }}">
       <div class="account-form-grid">
         <div class="auth-field">
           <label for="first_name">First name</label>

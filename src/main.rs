@@ -1,7 +1,9 @@
 use std::net::SocketAddr;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+mod access;
 mod account_email;
+mod admin;
 mod app;
 mod auth;
 mod brand;
@@ -14,6 +16,8 @@ mod handlers;
 mod models;
 mod pages;
 mod read_budget;
+mod review_web;
+mod reviews;
 mod store;
 mod templates;
 mod ui;
@@ -43,6 +47,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Run pending database migrations
     sqlx::migrate!("./migrations_postgres").run(&db).await?;
     tracing::info!("Database migrations executed successfully");
+    if let Some(
+        mode @ ("--bootstrap-admin"
+        | "--recover-admin"
+        | "--grant-review-moderator"
+        | "--revoke-review-moderator"),
+    ) = std::env::args().nth(1).as_deref()
+    {
+        let args: Vec<String> = std::env::args().collect();
+        admin::operator(
+            &db,
+            args.get(2).ok_or("Existing account email required")?,
+            mode,
+            args.get(3).ok_or("Operator identity required")?,
+            args.get(4).ok_or("Reason required")?,
+        )
+        .await?;
+        println!("Staff access updated.");
+        return Ok(());
+    }
 
     let session_store = tower_sessions_sqlx_store::PostgresStore::new(db.clone());
     session_store.migrate().await?;

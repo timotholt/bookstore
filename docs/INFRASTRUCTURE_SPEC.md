@@ -512,3 +512,6 @@ The infrastructure migration is done when:
 - The recovery packet exists outside the repo.
 - Public smoke tests pass.
 - A fresh account/project rebuild can be completed in roughly 10 minutes after CLI authentication.
+
+## Admin access bootstrap (implemented)
+The existing-account, operator-only bootstrap/recovery contract in `docs/ADMIN_ACCESS_SPEC.md` supersedes older password/environment bootstrap proposals in this document. Public signup never creates staff authority. Shared role/status commands use the same administration lock and audit rules; no administrative credentials belong in the repository.

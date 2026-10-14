@@ -25,6 +25,8 @@ pub enum AuthError {
     HashError(String),
     #[error("Validation error: {0}")]
     Validation(String),
+    #[error("{0}")]
+    Conflict(String),
     #[error("Invalid email or password")]
     InvalidCredentials,
     #[error("User already exists")]
@@ -108,7 +110,8 @@ pub async fn register_user(
             address_city,
             address_state,
             address_postal_code,
-            marketing_opt_in
+            marketing_opt_in,
+            profile_version
         "#,
     )
     .bind(&id)
@@ -181,11 +184,12 @@ pub async fn login_user(
             u.address_state,
             u.address_postal_code,
             u.marketing_opt_in,
+            u.profile_version,
             u.auth_version,
             pc.password_hash
         FROM users u
         JOIN password_credentials pc ON pc.user_id = u.id
-        WHERE u.email = $1
+        WHERE u.email = $1 AND u.account_status='active'
         "#,
     )
     .bind(&email)
@@ -218,6 +222,7 @@ pub async fn login_user(
     }
 
     let user = User {
+        profile_version: record.try_get("profile_version")?,
         id,
         email: db_email,
         full_name,
@@ -232,7 +237,7 @@ pub async fn login_user(
         marketing_opt_in,
     };
 
-    let unchanged: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users u JOIN password_credentials p ON p.user_id=u.id WHERE u.id=$1 AND u.auth_version=$2 AND p.password_hash=$3)")
+    let unchanged: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users u JOIN password_credentials p ON p.user_id=u.id WHERE u.id=$1 AND u.account_status='active' AND u.auth_version=$2 AND p.password_hash=$3)")
         .bind(&user.id).bind(version).bind(&password_hash).fetch_one(db).bounded_one().await?;
     if !unchanged {
         return Err(AuthError::InvalidCredentials);
@@ -275,9 +280,10 @@ pub async fn get_current_user(db: &PgPool, session: &Session) -> Result<Option<U
                     address_city,
                     address_state,
                     address_postal_code,
-                    marketing_opt_in
+                    marketing_opt_in,
+            profile_version
                 FROM users
-                WHERE id = $1 AND auth_version = $2
+                WHERE id = $1 AND account_status='active' AND auth_version = $2
                 "#,
             )
             .bind(&id)
@@ -308,11 +314,24 @@ pub async fn update_user_profile(
     db: &PgPool,
     user_id: &str,
     input: ProfileUpdate<'_>,
+    version: i64,
+    expected_profile_version: i64,
 ) -> Result<User, AuthError> {
+    let mut tx = db.begin().await?;
+    crate::access::require_active_tx(
+        &mut tx,
+        &crate::access::Principal {
+            user_id: user_id.into(),
+            auth_version: version,
+        },
+        crate::access::AccountLock::Update,
+    )
+    .await
+    .map_err(|_| AuthError::InvalidCredentials)?;
     let email = normalize_email(input.email)?;
     let current: String = sqlx::query_scalar("SELECT email FROM users WHERE id=$1")
         .bind(user_id)
-        .fetch_one(db)
+        .fetch_one(&mut *tx)
         .bounded_one()
         .await?;
     if email != current {
@@ -346,8 +365,9 @@ pub async fn update_user_profile(
             address_state = $10,
             address_postal_code = $11,
             marketing_opt_in = $12,
+            profile_version=profile_version+1,
             updated_at = now()
-        WHERE id = $1 AND email = $5
+        WHERE id = $1 AND email = $5 AND profile_version=$13
         RETURNING
             id,
             email,
@@ -360,7 +380,8 @@ pub async fn update_user_profile(
             address_city,
             address_state,
             address_postal_code,
-            marketing_opt_in
+            marketing_opt_in,
+            profile_version
         "#,
     )
     .bind(user_id)
@@ -375,12 +396,17 @@ pub async fn update_user_profile(
     .bind(address_state)
     .bind(address_postal_code)
     .bind(input.marketing_opt_in)
-    .fetch_one(db)
+    .bind(expected_profile_version)
+    .fetch_optional(&mut *tx)
     .bounded_one()
     .await;
 
     match result {
-        Ok(user) => Ok(user),
+        Ok(Some(user)) => {
+            tx.commit().await?;
+            Ok(user)
+        }
+        Ok(None)=>Err(AuthError::Conflict("Profile changed since you opened this form. Reload your profile before saving. Your entered values are retained below.".into())),
         Err(sqlx::Error::Database(err)) if err.is_unique_violation() => Err(AuthError::UserExists),
         Err(err) => Err(AuthError::Db(err)),
     }
@@ -433,7 +459,7 @@ pub fn validate_password(password: &str) -> Result<(), AuthError> {
     Ok(())
 }
 
-fn optional_profile_text(
+pub(crate) fn optional_profile_text(
     value: &str,
     max_len: usize,
     label: &str,
@@ -453,7 +479,7 @@ fn required_profile_text(value: &str, max_len: usize, label: &str) -> Result<Str
         .ok_or_else(|| AuthError::Validation(format!("{label} is required.")))
 }
 
-fn optional_state(value: &str) -> Result<Option<String>, AuthError> {
+pub(crate) fn optional_state(value: &str) -> Result<Option<String>, AuthError> {
     let value = value.trim().to_uppercase();
     if value.is_empty() {
         return Ok(None);
@@ -478,6 +504,28 @@ fn joined_full_name(first_name: Option<&str>, last_name: Option<&str>) -> Option
     } else {
         Some(name)
     }
+}
+
+pub async fn update_preferences(
+    db: &PgPool,
+    user_id: &str,
+    enabled: bool,
+    version: i64,
+) -> Result<User, AuthError> {
+    let mut tx = db.begin().await?;
+    crate::access::require_active_tx(
+        &mut tx,
+        &crate::access::Principal {
+            user_id: user_id.into(),
+            auth_version: version,
+        },
+        crate::access::AccountLock::Update,
+    )
+    .await
+    .map_err(|_| AuthError::InvalidCredentials)?;
+    let u=sqlx::query_as::<_,User>("UPDATE users SET marketing_opt_in=$2,profile_version=profile_version+1,updated_at=now() WHERE id=$1 RETURNING id,email,full_name,first_name,last_name,phone_number,address_line1,address_line2,address_city,address_state,address_postal_code,marketing_opt_in,profile_version").bind(user_id).bind(enabled).fetch_one(&mut *tx).bounded_one().await?;
+    tx.commit().await?;
+    Ok(u)
 }
 
 #[cfg(test)]

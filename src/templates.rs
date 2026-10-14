@@ -1,7 +1,7 @@
 use crate::models::{BookCard, CartView, CatalogFilters, VariantAttribute};
 use crate::ui::{
-    ButtonView, CartLineView, CheckoutLineView, CheckoutSectionView, LinkView, OrderSummaryView,
-    ProductCardView, ProductSectionView, RemovedCartNoticeView, SavedLineView,
+    ButtonView, CartLineView, CheckoutLineView, LinkView, OrderSummaryView, ProductCardView,
+    ProductSectionView, RemovedCartNoticeView, SavedLineView,
 };
 use askama::Template;
 use rust_decimal::Decimal;
@@ -16,6 +16,9 @@ pub fn is_selected(current: Option<&str>, option: &str) -> bool {
 }
 
 pub trait TemplateHelpers {
+    fn review_summary(&self, book: &BookCard) -> crate::review_web::ReviewSummaryView {
+        crate::review_web::ReviewSummaryView::new(book.review_count, book.average_rating)
+    }
     fn page_navigation(
         &self,
         base: &str,
@@ -123,6 +126,7 @@ impl axum::response::IntoResponse for HomeTemplate {
 #[derive(Template)]
 #[template(path = "book_detail.html")]
 pub struct BookDetailTemplate {
+    pub review_panel: crate::review_web::ReviewPanelView,
     pub copy_navigation: crate::ui::PageNavView,
     pub attribute_navigation: crate::ui::PageNavView,
     pub genres: Vec<String>,
@@ -221,7 +225,7 @@ impl axum::response::IntoResponse for CartPageContentTemplate {
 #[template(path = "checkout.html")]
 pub struct CheckoutTemplate {
     pub navigation: crate::ui::PageNavView,
-    pub sections: Vec<CheckoutSectionView>,
+    pub ordering_notice: crate::ui::OrderingNoticeView,
     pub checkout_lines: Vec<CheckoutLineView>,
     pub summary: OrderSummaryView,
 }
@@ -400,6 +404,19 @@ pub struct AccountProfileTemplate {
     pub error_message: Option<String>,
 }
 impl TemplateHelpers for AccountProfileTemplate {}
+impl AccountProfileTemplate {
+    fn reload_profile_link(&self) -> LinkView {
+        LinkView::tracked(
+            "Reload profile",
+            "/account/profile",
+            "ui-review-link",
+            "",
+            "account.profile",
+            "profile",
+            "reload",
+        )
+    }
+}
 
 impl axum::response::IntoResponse for AccountProfileTemplate {
     fn into_response(self) -> axum::response::Response {
@@ -416,6 +433,10 @@ impl axum::response::IntoResponse for AccountProfileTemplate {
 #[derive(Template)]
 #[template(path = "account_home.html")]
 pub struct AccountHomeTemplate {
+    pub staff_users: bool,
+    pub staff_reviews: bool,
+    pub staff_users_link: LinkView,
+    pub staff_reviews_link: LinkView,
     pub genres: Vec<String>,
     pub cart: CartView,
     pub cart_lines: Vec<CartLineView>,

@@ -529,7 +529,9 @@ pub async fn book_detail(
         "book_detail.buybox",
     );
 
+    let review_panel = crate::review_web::panel(db, &session, &book_id).await?;
     let template = BookDetailTemplate {
+        review_panel,
         copy_navigation: ui::page_navigation(
             &format!("/books/{book_id}"),
             "copy_page",
@@ -696,15 +698,11 @@ pub async fn checkout(
     restore_cart_session(&headers, &session).await?;
     let db = &state.db;
     let cart = cart::view(db, &session).await?;
-    if cart.item_count == 0 {
-        return Err(AppError::Validation("cart is empty".into()));
-    }
-
     let checkout_lines = ui::checkout_lines(cart.lines.clone());
     let summary = ui::order_summary(&cart, "checkout.summary");
     let response = CheckoutTemplate {
         navigation: ui::page_navigation("/checkout", "cart_page", cart.page, cart.total_lines, 20),
-        sections: ui::checkout_sections(),
+        ordering_notice: crate::ui::ordering_notice(),
         checkout_lines,
         summary,
     }
@@ -755,11 +753,11 @@ async fn cart_page_content_template(
     };
 
     let mut checkout_button = ui::ButtonView::tracked(
-        "View Checkout Preview",
+        "Checkout",
         "primary-button checkout-button checkout-button--page",
         "submit",
         "checkout",
-        "View checkout preview",
+        "Checkout",
         "checkout_started",
         "cart.page",
         "checkout",
@@ -1096,6 +1094,8 @@ async fn current_user_or_login(
 #[derive(Deserialize)]
 pub struct ProfileForm {
     #[serde(default)]
+    pub profile_version: i64,
+    #[serde(default)]
     pub csrf: String,
     pub first_name: String,
     pub last_name: String,
@@ -1122,6 +1122,28 @@ pub async fn account_home_page(
     let chrome = store_chrome(&state.db, &session).await?;
 
     Ok(AccountHomeTemplate {
+        staff_users_link: ui::LinkView::tracked(
+            "User administration",
+            "/staff/users",
+            "account-tool-card",
+            "",
+            "account",
+            "staff",
+            "users",
+        ),
+        staff_reviews_link: ui::LinkView::tracked(
+            "Review moderation",
+            "/staff/reviews",
+            "account-tool-card",
+            "",
+            "account",
+            "staff",
+            "reviews",
+        ),
+        staff_users: crate::access::has_permission(&state.db, &user.id, "users.view").await?
+            || crate::access::has_permission(&state.db, &user.id, "staff.manage").await?,
+        staff_reviews: crate::access::has_permission(&state.db, &user.id, "reviews.moderate")
+            .await?,
         current_user: Some(user.clone()),
         genres: chrome.genres,
         cart: chrome.cart,
@@ -1194,6 +1216,8 @@ pub async fn profile_action(
             address_postal_code: &form.address_postal_code,
             marketing_opt_in: form.marketing_opt_in.is_some(),
         },
+        session.get::<i64>("auth_version").await?.unwrap_or(-1),
+        form.profile_version,
     )
     .await
     {
@@ -1211,6 +1235,36 @@ pub async fn profile_action(
             error_message: None,
         }
         .into_response()),
+        Err(AuthError::Conflict(message)) => {
+            let mut retained = current_user.clone();
+            retained.profile_version = form.profile_version;
+            retained.first_name = Some(form.first_name);
+            retained.last_name = Some(form.last_name);
+            retained.phone_number = Some(form.phone_number);
+            retained.address_line1 = Some(form.address_line1);
+            retained.address_line2 = Some(form.address_line2);
+            retained.address_city = Some(form.address_city);
+            retained.address_state = Some(form.address_state);
+            retained.address_postal_code = Some(form.address_postal_code);
+            retained.marketing_opt_in = form.marketing_opt_in.is_some();
+            Ok((
+                axum::http::StatusCode::CONFLICT,
+                AccountProfileTemplate {
+                    csrf: crate::account_email::csrf(&session).await,
+                    current_user: Some(current_user),
+                    user: retained,
+                    genres: chrome.genres,
+                    cart: chrome.cart,
+                    cart_lines: chrome.cart_lines,
+                    removed_notice: chrome.removed_notice,
+                    drawer_checkout_button: chrome.drawer_checkout_button,
+                    drawer_browse_books_link: chrome.drawer_browse_books_link,
+                    success_message: None,
+                    error_message: Some(message),
+                },
+            )
+                .into_response())
+        }
         Err(AuthError::UserExists) => Ok(AccountProfileTemplate {
             csrf: crate::account_email::csrf(&session).await,
             current_user: Some(current_user.clone()),
@@ -1349,7 +1403,7 @@ pub async fn preferences_action(
     headers: HeaderMap,
     Form(form): Form<PreferencesForm>,
 ) -> Result<Response, AppError> {
-    use crate::auth::{update_user_profile, AuthError, ProfileUpdate};
+    use crate::auth::AuthError;
 
     if !crate::account_email::check_csrf(&session, &headers, &form.csrf).await {
         return Ok(axum::http::StatusCode::FORBIDDEN.into_response());
@@ -1361,30 +1415,11 @@ pub async fn preferences_action(
     };
     let chrome = store_chrome(&state.db, &session).await?;
 
-    let first_name = current_user.first_name_value().to_string();
-    let last_name = current_user.last_name_value().to_string();
-    let phone_number = current_user.phone_number_value().to_string();
-    let address_line1 = current_user.address_line1_value().to_string();
-    let address_line2 = current_user.address_line2_value().to_string();
-    let address_city = current_user.address_city_value().to_string();
-    let address_state = current_user.address_state_value().to_string();
-    let address_postal_code = current_user.address_postal_code_value().to_string();
-
-    match update_user_profile(
+    match crate::auth::update_preferences(
         &state.db,
         &current_user.id,
-        ProfileUpdate {
-            first_name: &first_name,
-            last_name: &last_name,
-            email: &current_user.email,
-            phone_number: &phone_number,
-            address_line1: &address_line1,
-            address_line2: &address_line2,
-            address_city: &address_city,
-            address_state: &address_state,
-            address_postal_code: &address_postal_code,
-            marketing_opt_in: form.marketing_opt_in.is_some(),
-        },
+        form.marketing_opt_in.is_some(),
+        session.get::<i64>("auth_version").await?.unwrap_or(-1),
     )
     .await
     {
@@ -1434,4 +1469,15 @@ pub async fn preferences_action(
             .into_response())
         }
     }
+}
+
+/// All attempted order submissions fail closed while ownership changes.
+pub async fn checkout_paused(
+    state: State<AppState>,
+    session: Session,
+    headers: HeaderMap,
+) -> Result<Response, AppError> {
+    let mut response = checkout(state, session, headers).await?;
+    *response.status_mut() = axum::http::StatusCode::CONFLICT;
+    Ok(response)
 }

@@ -100,10 +100,8 @@
             <div class="feature-tile-info">
               <h4>{{ featured.title }}</h4>
               <p class="author">by {{ featured.author }}</p>
-              <div class="stars-rating">
-                <span class="stars-val">★★★★★</span>
-                <span class="rating-count">85</span>
-              </div>
+              {% let review_summary = self.review_summary(featured) %}
+              {% include "components/ui/review_summary.html" %}
               <div class="price-row">
                 {% if featured.is_new %}{% if let Some(list) = featured.list_price.as_ref() %}<span class="discount-badge">-{{ self.discount_pct(featured.price, list) }}%</span>{% endif %}{% endif %}
                 <span class="ui-price ui-price--card">

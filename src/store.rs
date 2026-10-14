@@ -21,6 +21,8 @@ const BASE_SELECT: &str = r#"
         b.aspect_ratio::float8 as aspect_ratio,
         ''::text as tags,
         b.is_new_arrival as is_new_arrival,
+        COALESCE(ra.published_count,0) AS review_count,
+        COALESCE(ra.average_rating,0)::float8 AS average_rating,
         c.id as copy_id,
         COALESCE(c.condition, '') as condition,
         c.is_new as is_new,
@@ -37,7 +39,7 @@ const BASE_SELECT: &str = r#"
     LEFT JOIN authors a ON a.id = b.primary_author_id
     LEFT JOIN genres g ON g.id = b.primary_genre_id
     JOIN book_copies c ON c.book_id = b.id
-    LEFT JOIN review_aggregates ra ON ra.book_id = b.id
+    LEFT JOIN review_work_aggregates ra ON ra.work_key = review_title_key(b.title,COALESCE(a.name,''),b.id)
     WHERE c.is_sold = false
 "#;
 
@@ -190,9 +192,7 @@ fn append_catalog_filters<'a>(
     if let Some(ref min_rating_str) = filters.min_rating {
         if let Ok(min_rating) = min_rating_str.parse::<f64>() {
             if (1.0..=5.0).contains(&min_rating) {
-                query_builder.push(
-                    " AND (ra.book_id IS NULL OR ra.published_count = 0 OR ra.average_rating ",
-                );
+                query_builder.push(" AND (ra.published_count > 0 AND ra.average_rating ");
                 if min_rating >= 5.0 {
                     query_builder.push("> ");
                     query_builder.push_bind(Decimal::from(4));
@@ -251,6 +251,8 @@ async fn load_collection_books(
             b.aspect_ratio::float8 as aspect_ratio,
             ''::text as tags,
             b.is_new_arrival as is_new_arrival,
+        COALESCE(ra.published_count,0) AS review_count,
+        COALESCE(ra.average_rating,0)::float8 AS average_rating,
             c.id as copy_id,
             COALESCE(c.condition, '') as condition,
             c.is_new as is_new,
@@ -266,6 +268,7 @@ async fn load_collection_books(
         FROM book_collection_items i
         JOIN books b ON b.id = i.book_id
         LEFT JOIN authors a ON a.id = b.primary_author_id
+        LEFT JOIN review_work_aggregates ra ON ra.work_key=review_title_key(b.title,COALESCE(a.name,''),b.id)
         LEFT JOIN genres g ON g.id = b.primary_genre_id
         JOIN book_copies c ON c.book_id = b.id
         WHERE i.collection_slug = $1 AND i.is_active = true AND c.is_sold = false
@@ -443,7 +446,7 @@ pub async fn count_books(db: &DbPool, filters: &CatalogFilters) -> Result<i64, s
     cached(
         "count_books",
         serde_json::to_string(&filters).map_err(|e| sqlx::Error::Encode(Box::new(e)))?,
-        Lifetime::Counts,
+        count_lifetime(&filters),
         load_count_books(db, &filters),
     )
     .await
@@ -618,4 +621,18 @@ fn normalize_filters(filters: &CatalogFilters) -> Result<CatalogFilters, sqlx::E
         filters.sort = None;
     }
     Ok(filters)
+}
+
+/// Rating-dependent counts must converge as quickly as their result rows.
+pub(crate) fn count_lifetime(filters: &CatalogFilters) -> Lifetime {
+    if filters
+        .min_rating
+        .as_deref()
+        .and_then(|v| v.parse::<f64>().ok())
+        .is_some_and(|v| (1.0..=5.0).contains(&v))
+    {
+        Lifetime::Offers
+    } else {
+        Lifetime::Counts
+    }
 }

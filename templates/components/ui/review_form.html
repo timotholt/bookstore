@@ -1,0 +1,11 @@
+<form class="ui-review-form" action="{{ form.action }}" method="post">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="revision" value="{{ form.input.revision }}">
+  <label for="review-rating">Your rating</label>
+  <select id="review-rating" name="rating" required>
+    <option value="" {% if form.input.rating == 0 %}selected{% endif %}>Choose stars</option>
+    {% for rating in [5,4,3,2,1] %}<option value="{{ rating }}" {% if form.selected(rating) %}selected{% endif %}>{{ rating }} out of 5 stars</option>{% endfor %}
+  </select>
+  {% for field in form.fields %}{% include "components/ui/review_field.html" %}{% endfor %}
+  {% let button = form.submit.clone() %}{% include "components/ui/button.html" %}
+</form>

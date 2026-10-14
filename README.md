@@ -25,7 +25,7 @@
 
 Browse new and used books, compare individual copies, filter the catalog, and build a reading stack. The application combines a Rust backend with HTML-first interactions and PostgreSQL persistence.
 
-**Portfolio demo:** the catalog is seeded sample data. Checkout reviews the cart; it does not place orders, take payments, or charge a card. Some storefront copy and ratings are illustrative. See [current scope](#current-scope) for implemented features and planned work.
+**Ordering is temporarily paused during an ownership transition.** Browsing, carts, saved items, and account-based ratings/reviews work. Checkout displays the closure notice and accepts no orders or payments. Public stars come only from approved reader reviews. See [current scope](#current-scope) and [review workflows and staff setup](docs/REVIEWS_SPEC.md).
 
 Visit [Chantel’s Corner](https://www.chantelscorner.com/) to explore the live demo over HTTPS.
 
@@ -94,12 +94,25 @@ The walkthrough below was recorded from the running Rust application against an 
 | --- | --- |
 | Search, filters, book details, and seeded merchandise | Staff inventory management |
 | PostgreSQL-backed carts and saved-for-later actions | Durable account-owned carts and login merge |
-| Email/password signup, login, profiles, preferences | Google login, email verification, password reset |
-| Cart review and checkout preview | Payment handoff, order creation, receipts |
-| Review schema and aggregate reads | Review submission, moderation, verified purchases |
+| Email/password signup/login, profiles/preferences, email verification and password recovery | Google login |
+| Cart and ownership-transition checkout notice | Payment handoff, order creation, receipts |
+| Ratings/reviews, My reviews, edit/delete, staff moderation, reports/helpful votes | Order-backed verified-purchase badges |
+| Users dashboard, account enable/disable, staff roles, session revocation and audit | Order/fulfillment/refund dashboards |
 | First-party interaction events, health checks, CI | Additional deployment and operational hardening |
 
 Cart identity is currently tied to the browser/session. Signing in does not yet merge it into a durable user-owned cart. The order-history screen is an explicit empty state because checkout does not create orders.
+
+## Staff administration
+
+Staff sign in through the normal account login. `/staff/users` supports account search, profile corrections, enable/disable, session revocation, staff-role grants and audit history. `/staff/reviews` requires the separate Moderator role. Signup grants no staff privileges.
+
+Bootstrap an existing active account on the intended database using an explicit operator identity and reason:
+
+```bash
+cargo run --locked -- --bootstrap-admin staff@example.com operator-name "Initial staff setup"
+```
+
+The command grants Administrator and User support. `--recover-admin` uses the same arguments for audited recovery. Legacy moderator grant/revoke commands now also require operator identity and reason and use the shared role authority. Role/status changes invalidate sessions and outstanding account-security links. See [shared access contract](docs/ADMIN_ACCESS_SPEC.md) for permissions, cutover and verification. Do not use a hosted database for tests.
 
 ## Development
 

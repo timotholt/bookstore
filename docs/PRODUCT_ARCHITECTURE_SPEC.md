@@ -371,14 +371,14 @@ Recommended libraries:
 
 ### Reviews
 
-Reviews are tied to users and books. A review can be marked verified when linked to an order item for that book.
+Reviews are tied to accounts and review-only work identities derived from normalized title and primary author, shared across ISBN editions. See `docs/REVIEWS_SPEC.md` for the implemented revision and moderation workflow. A future verified-purchase badge requires an authoritative order item.
 
 Target behavior:
 
-- One review per user per book.
+- One review per user per title/primary-author work.
 - 1-5 star rating.
 - Optional title and body.
-- Moderation status: pending, published, hidden.
+- Revision moderation: pending, published, rejected, superseded; review removal and author deletion are explicit.
 - Verified purchase flag when backed by an order.
 - Helpful votes.
 - Report abuse.
@@ -407,7 +407,7 @@ reviews.created_at
 reviews.updated_at
 ```
 
-Do not allow anonymous reviews. Do not allow duplicate reviews for the same user and book.
+Do not allow anonymous reviews. Do not allow duplicate reviews for the same user and title/primary-author work.
 
 ### Saved Items
 
@@ -552,3 +552,7 @@ A feature is solid when:
 - It survives server restart when users expect persistence.
 - It does not require paid services for local development.
 - It is documented in this spec or the infrastructure spec.
+
+## Shared staff administration
+
+Implemented in `src/access.rs` and `src/admin.rs`: a single `user_staff_roles` authority, active/disabled account lifecycle, account security epoch, Users dashboard, operator bootstrap/recovery and transactionally persisted audit history. Review writes and account/profile/email operations validate authority inside their transactions. Role/status mutations serialize under a shared administration lock and sorted account locks; the last active Administrator+User support account is preserved. Permissions do not implement order, shipment or refund domain behavior. See `docs/ADMIN_ACCESS_SPEC.md` and `docs/ARCHITECTURE_REVIEW.md` for the detailed contract and regression requirements. Physical account deletion is blocked; disable accounts instead. Catalog records are not modified by this feature.

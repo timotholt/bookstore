@@ -1,0 +1,6 @@
+<label for="{{ field.id }}">{{ field.label }}</label>
+{% if field.rows > 0 %}
+<textarea id="{{ field.id }}" name="{{ field.name }}" rows="{{ field.rows }}" minlength="{{ field.min }}" maxlength="{{ field.max }}" {% if field.required %}required{% endif %}>{{ field.value }}</textarea>
+{% else %}
+<input id="{{ field.id }}" name="{{ field.name }}" value="{{ field.value }}" minlength="{{ field.min }}" maxlength="{{ field.max }}" {% if field.required %}required{% endif %}>
+{% endif %}

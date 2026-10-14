@@ -15,6 +15,11 @@
   </section>
 
   <section class="account-card-grid" aria-label="Account tools">
+    {% if staff_users %}{% let link = staff_users_link.clone() %}{% include "components/ui/link.html" %}{% endif %}
+    {% if staff_reviews %}{% let link = staff_reviews_link.clone() %}{% include "components/ui/link.html" %}{% endif %}
+    <a class="account-tool-card" href="/account/reviews">
+      <span class="account-tool-icon">★</span><span><strong>My reviews</strong><small>Manage ratings, reviews, and moderation status</small></span>
+    </a>
     <a class="account-tool-card" href="/account/profile">
       <span class="account-tool-icon">ID</span>
       <span>

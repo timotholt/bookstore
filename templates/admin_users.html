@@ -1,0 +1,7 @@
+{% include "components/ui/admin_head.html" %}
+<header><p>Chantel’s Corner · Staff</p><h1>User administration</h1><p>Find accounts, manage access and correct customer details.</p></header>
+<form method="get" class="ui-admin-search">{% let field = search.clone() %}{% include "components/ui/admin_field.html" %}{% include "components/ui/button.html" %}</form>
+<div class="ui-admin-scroll"><table class="ui-admin-table"><caption>Accounts · page {{ page + 1 }}</caption><thead><tr><th>Email</th><th>Name</th><th>Access</th><th>Staff roles</th></tr></thead><tbody>{% for user in users %}<tr><td><a href="/staff/users/{{ user.id }}">{{ user.email }}</a></td><td>{% if can_support %}{{ user.name }}{% endif %}</td><td>{{ user.status }}</td><td>{{ user.roles }}</td></tr>{% endfor %}</tbody></table></div>
+{% if users.is_empty() %}<p>No matching accounts.</p>{% endif %}
+<nav class="ui-admin-nav" aria-label="Account pages">{% if page > 0 %}<a href="?page={{ page - 1 }}&amp;q={{ q|urlencode }}">Previous</a>{% endif %}{% if has_next %}<a href="?page={{ page + 1 }}&amp;q={{ q|urlencode }}">Next</a>{% endif %}</nav>
+</main></body></html>

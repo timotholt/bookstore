@@ -1,0 +1,6 @@
+<article class="ui-review-card" aria-label="Reader review">
+  <div class="ui-review-summary"><span class="ui-review-stars" aria-label="{{ card.entry.rating }} out of 5 stars">{{ card.stars }}</span><span>{{ card.date }}</span></div>
+  {% if !card.entry.title.is_empty() %}<h3>{{ card.entry.title }}</h3>{% endif %}
+  <p class="ui-review-body">{{ card.entry.body }}</p>
+  <p class="ui-review-meta">By {{ card.entry.display_name }} · {{ card.entry.helpful_count }} found this helpful</p>
+</article>
