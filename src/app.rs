@@ -2413,6 +2413,50 @@ mod tests {
         result
     }
     #[tokio::test]
+    async fn review_expired_session_preserves_draft_in_html_without_saving() {
+        let test_db = postgres_test_db().await;
+        let (app, db) = test_app_with_db(test_db.pool());
+        let (cookie, csrf) = review_account(&app, "expired-review%40example.com").await;
+        sqlx::query(
+            "UPDATE users SET auth_version=auth_version+1 WHERE email='expired-review@example.com'",
+        )
+        .execute(&db)
+        .await
+        .unwrap();
+        let response = post_form(
+            &app,
+            "/books/b009/reviews",
+            &cookie,
+            format!("rating=4&title=Keep+my+title&body=Keep+my+review+text&revision=0&csrf={csrf}"),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let body = response_body(response).await;
+        assert!(body.contains("<!doctype html>"));
+        assert!(body.contains("Keep my title"));
+        assert!(body.contains("Keep my review text"));
+        assert!(body.contains("Sign in"));
+        assert!(body.contains("Your review has not been submitted"));
+        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM reviews")
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+        let response = post_form(
+            &app,
+            "/books/b009/reviews",
+            &cookie,
+            "rating=4&title=Still+here&body=Retained+after+csrf+expiry&revision=0&csrf=expired"
+                .into(),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert!(response_body(response)
+            .await
+            .contains("Retained after csrf expiry"));
+    }
+
+    #[tokio::test]
     async fn review_http_lifecycle_preserves_catalog_and_enforces_ownership() {
         let test_db = postgres_test_db().await;
         let db = test_db.pool();

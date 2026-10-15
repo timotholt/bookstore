@@ -370,11 +370,16 @@ async fn edit_page(
     error: String,
     status: StatusCode,
 ) -> Result<Response, AppError> {
-    let Some(u) = auth::get_current_user(&state.db, s).await? else {
+    let user = auth::get_current_user(&state.db, s).await?;
+    if user.is_none() && input.is_none() {
         return Ok(Redirect::to("/login").into_response());
-    };
+    }
     let work = reviews::work(&state.db, book).await?;
-    let own = reviews::own(&state.db, &work.work_key, &u.id).await?;
+    let own = if let Some(u) = &user {
+        reviews::own(&state.db, &work.work_key, &u.id).await?
+    } else {
+        None
+    };
     let input = if let Some(i) = input {
         i
     } else if let Some(r) = own {
@@ -399,6 +404,10 @@ async fn edit_page(
     );
     p.message="Review the book itself. Copy condition, delivery, and order concerns belong with customer support. Only approved reviews contribute to stars. Changes to a published review await moderation while the approved version stays public.".into();
     p.error = error;
+    if user.is_none() {
+        p.account_link = link("Sign in", "/login");
+        p.message = "Your review has not been submitted. Your draft is shown below. Keep this page open, sign in in another tab, then submit again. Copy your text before leaving this page.".into();
+    }
     p.form = Some(ReviewFormView {
         fields: vec![
             ReviewFieldView::new(
@@ -451,13 +460,32 @@ pub async fn submit(
     Path(book): Path<String>,
     Form(f): Form<Submit>,
 ) -> Result<Response, AppError> {
-    csrf(&s, &h, &f.csrf).await?;
-    let principal = crate::access::principal(&state.db, &s).await?;
     let input = reviews::Input {
         rating: f.rating,
         title: f.title,
         body: f.body,
         revision: f.revision,
+    };
+    if let Err(e) = csrf(&s, &h, &f.csrf).await {
+        if let AppError::Http(code, msg) = e {
+            return edit_page(&state, &s, &book, Some(input), msg, code).await;
+        }
+        return Err(e);
+    }
+    let principal = match crate::access::principal(&state.db, &s).await {
+        Ok(principal) => principal,
+        Err(AppError::Http(code, _)) if code == StatusCode::UNAUTHORIZED => {
+            return edit_page(
+                &state,
+                &s,
+                &book,
+                Some(input),
+                "Your session is no longer valid. Sign in again to submit this review.".into(),
+                code,
+            )
+            .await;
+        }
+        Err(e) => return Err(e),
     };
     match reviews::submit(&state.db, &principal, &book, &input).await {
         Ok(_) => Ok(Redirect::to("/account/reviews?notice=saved").into_response()),
