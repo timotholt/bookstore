@@ -90,7 +90,7 @@ impl UsageMonitor {
                 provider_transfer_bytes: None,
                 estimated_month_usd: None,
                 estimated_day_usd: None,
-                month_budget_usd: 10.0,
+                month_budget_usd: 20.0,
                 day_budget_usd: 0.50,
                 usage_through: None,
                 day_basis: "UTC calendar day",
@@ -207,7 +207,7 @@ impl UsageMonitor {
                 provider_transfer_bytes: Some(0),
                 estimated_month_usd: Some(0.0),
                 estimated_day_usd: Some(0.0),
-                month_budget_usd: 10.0,
+                month_budget_usd: 20.0,
                 day_budget_usd: 0.50,
                 usage_through: Some(Utc::now()),
                 day_basis: "UTC calendar day",
@@ -411,9 +411,11 @@ mod tests {
         let mut s = UsageMonitor::healthy_for_test().snapshot();
         let now = Utc::now();
         assert!(s.notice(now).is_none());
-        s.estimated_month_usd = Some(8.);
+        s.estimated_month_usd = Some(s.month_budget_usd * 0.79);
+        assert!(s.notice(now).is_none());
+        s.estimated_month_usd = Some(s.month_budget_usd * 0.8);
         assert_eq!(s.notice(now).unwrap().level, "warning");
-        s.estimated_month_usd = Some(10.);
+        s.estimated_month_usd = Some(s.month_budget_usd);
         assert_eq!(s.notice(now).unwrap().level, "error");
         s.last_error = Some("failed".into());
         assert_eq!(s.notice(now).unwrap().title, "Usage monitoring unavailable");

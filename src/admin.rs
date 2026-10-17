@@ -111,6 +111,7 @@ impl AuditRow {
 #[template(path = "admin_users.html")]
 struct UsersTemplate {
     nav: Vec<crate::ui::LinkView>,
+    usage_notice: Option<crate::usage::Notice>,
     search: FieldView,
     can_support: bool,
     button: crate::ui::ButtonView,
@@ -166,6 +167,7 @@ pub async fn users(
     rows.truncate(25);
     private(UsersTemplate {
         nav: navigation(&s.db, &_p).await?,
+        usage_notice: s.usage.notice(),
         search: FieldView::new("q", "Search name, email or account ID", search.clone(), 120),
         can_support,
         button: admin_button("Search", false),
@@ -575,4 +577,34 @@ async fn navigation(db: &DbPool, p: &Principal) -> Result<Vec<crate::ui::LinkVie
             )
         })
         .collect())
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn staff_users_page_shows_the_spending_notice() {
+        let page = |usage_notice| {
+            UsersTemplate {
+                nav: Vec::new(),
+                usage_notice,
+                search: FieldView::new("q", "Search", String::new(), 120),
+                can_support: false,
+                button: admin_button("Search", false),
+                users: Vec::new(),
+                q: String::new(),
+                page: 0,
+                has_next: false,
+            }
+            .render()
+            .unwrap()
+        };
+        let notice = crate::usage::Notice {
+            title: "Neon spending alert".into(),
+            message: "$0.51 today".into(),
+            level: "error",
+        };
+        let body = page(Some(notice));
+        assert!(body.contains("Neon spending alert") && body.contains("role=\"alert\""));
+        assert!(!page(None).contains("ui-service-notice"));
+    }
 }

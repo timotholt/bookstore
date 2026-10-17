@@ -2152,12 +2152,12 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
+        // Spending is a staff concern (shown on /staff/users); shoppers never see it.
         let body = response_body(response).await;
-        assert!(
-            body.contains("Neon spending alert")
-                && body.contains("$0.51 today")
-                && body.contains("role=\"alert\"")
-        );
+        assert!(!body.contains("Neon spending alert") && !body.contains("ui-service-notice"));
+        assert!(usage
+            .notice()
+            .is_some_and(|n| n.message.contains("$0.51 today")));
         let response = app
             .clone()
             .oneshot(

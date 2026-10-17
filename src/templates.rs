@@ -93,7 +93,6 @@ pub trait TemplateHelpers {
 #[derive(Template)]
 #[template(path = "home.html")]
 pub struct HomeTemplate {
-    pub usage_notice: Option<crate::usage::Notice>,
     pub title: String,
     pub genres: Vec<String>,
     pub featured: BookCard,

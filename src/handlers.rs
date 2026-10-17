@@ -319,7 +319,6 @@ pub async fn home(
     ];
 
     let template = HomeTemplate {
-        usage_notice: state.usage.notice(),
         title: format!("{} | Used Books Online", crate::brand::STORE_NAME),
         genres,
         featured,
