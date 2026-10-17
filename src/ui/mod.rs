@@ -715,7 +715,7 @@ pub fn ordering_notice() -> OrderingNoticeView {
     OrderingNoticeView {
         heading: "New orders are temporarily paused",
         message: "We’re transitioning ownership and are currently unable to accept new orders. All existing orders will be fulfilled as soon as possible. You can continue browsing, adding items to your cart, and saving books to your wishlist. Thank you for your patience.",
-        customer_service_link: LinkView::tracked("(383) 383-4446", "tel:+13833834446", "ui-review-link", "customer_service_called", "checkout", "phone", "customer-service"),
+        customer_service_link: LinkView::tracked("(323) 383-4447", "tel:+13233834447", "ui-review-link", "customer_service_called", "checkout", "phone", "customer-service"),
         cart_link: LinkView::tracked("Return to cart", "/cart", "secondary-button", "cart_opened", "checkout", "page", "cart"),
         browse_link: LinkView::tracked("Continue browsing", "/search", "primary-button", "catalog_opened", "checkout", "page", "search"),
     }
