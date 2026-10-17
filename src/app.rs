@@ -2145,7 +2145,7 @@ mod tests {
         assert!(!response_body(response)
             .await
             .contains("Neon spending alert"));
-        usage.set_cost_for_test(2., 0.51);
+        usage.set_cost_for_test(2., 0.71);
         let response = app
             .clone()
             .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
@@ -2157,7 +2157,7 @@ mod tests {
         assert!(!body.contains("Neon spending alert") && !body.contains("ui-service-notice"));
         assert!(usage
             .notice()
-            .is_some_and(|n| n.message.contains("$0.51 today")));
+            .is_some_and(|n| n.message.contains("$0.71 today")));
         let response = app
             .clone()
             .oneshot(

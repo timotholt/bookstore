@@ -91,7 +91,7 @@ impl UsageMonitor {
                 estimated_month_usd: None,
                 estimated_day_usd: None,
                 month_budget_usd: 20.0,
-                day_budget_usd: 0.50,
+                day_budget_usd: 0.70,
                 usage_through: None,
                 day_basis: "UTC calendar day",
                 last_success: None,
@@ -208,7 +208,7 @@ impl UsageMonitor {
                 estimated_month_usd: Some(0.0),
                 estimated_day_usd: Some(0.0),
                 month_budget_usd: 20.0,
-                day_budget_usd: 0.50,
+                day_budget_usd: 0.70,
                 usage_through: Some(Utc::now()),
                 day_basis: "UTC calendar day",
                 last_success: Some(Utc::now()),
@@ -424,9 +424,9 @@ mod tests {
         assert_eq!(s.notice(now).unwrap().title, "Usage monitoring unavailable");
         s.last_success = Some(now);
         s.estimated_month_usd = Some(0.);
-        s.estimated_day_usd = Some(0.50);
+        s.estimated_day_usd = Some(s.day_budget_usd);
         assert!(s.notice(now).is_none());
-        s.estimated_day_usd = Some(0.501);
+        s.estimated_day_usd = Some(s.day_budget_usd + 0.001);
         assert_eq!(s.notice(now).unwrap().level, "error");
         s.estimated_day_usd = Some(0.);
         assert!(s.notice(now).is_none());
