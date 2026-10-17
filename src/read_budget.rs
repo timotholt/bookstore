@@ -96,12 +96,29 @@ pub async fn scope<T>(future: impl Future<Output = T>) -> T {
 }
 pub async fn middleware(request: Request, next: Next) -> Response {
     let query = request.uri().query().unwrap_or("").to_owned();
+    // Who and what wakes the scale-to-zero database: path without query, user agent, no IP.
+    let method = request.method().clone();
+    let path = request.uri().path().chars().take(200).collect::<String>();
+    let user_agent = request
+        .headers()
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .chars()
+        .take(160)
+        .collect::<String>();
+    let started = std::time::Instant::now();
     crate::pages::scope(
         &query,
         scope(async move {
             let response = next.run(request).await;
             let rows = BUDGET.with(|b| b.load(Ordering::SeqCst));
             tracing::info!(
+                %method,
+                %path,
+                status = response.status().as_u16(),
+                %user_agent,
+                ms = started.elapsed().as_millis() as u64,
                 reserved_session_rows = 2,
                 database_rows = rows,
                 "request read budget"
