@@ -1,0 +1,40 @@
+# Chantel's Corner. Every page view can wake the scale-to-zero database,
+# so SEO and data crawlers are refused; search engines may index the store.
+
+User-agent: SemrushBot
+User-agent: SemrushBot-BA
+User-agent: SemrushBot-SI
+User-agent: SemrushBot-SWA
+User-agent: SiteAuditBot
+User-agent: AhrefsBot
+User-agent: AhrefsSiteAudit
+User-agent: DotBot
+User-agent: rogerbot
+User-agent: MJ12bot
+User-agent: BLEXBot
+User-agent: DataForSeoBot
+User-agent: serpstatbot
+User-agent: Barkrowler
+User-agent: PetalBot
+User-agent: Bytespider
+User-agent: Reflectionbot
+Disallow: /
+
+User-agent: *
+Disallow: /account
+Disallow: /cart
+Disallow: /checkout
+Disallow: /saved-items
+Disallow: /staff
+Disallow: /login
+Disallow: /logout
+Disallow: /signup
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /confirm-email-change
+Disallow: /search
+Disallow: /events
+Disallow: /ops
+Disallow: /reviews
+Disallow: /books/*/reviews/edit

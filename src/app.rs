@@ -15,6 +15,20 @@ pub struct AppState {
     pub email: std::sync::Arc<crate::email::EmailService>,
 }
 
+// Embedded so the deployed image needs no extra file; see robots.txt for the bot policy.
+async fn robots_txt() -> impl axum::response::IntoResponse {
+    (
+        [
+            (
+                axum::http::header::CONTENT_TYPE,
+                "text/plain; charset=utf-8",
+            ),
+            (axum::http::header::CACHE_CONTROL, "public, max-age=86400"),
+        ],
+        include_str!("../robots.txt"),
+    )
+}
+
 pub fn build_router(state: AppState) -> Router {
     let session_store = tower_sessions_sqlx_store::PostgresStore::new(state.db.clone());
     let session_layer = SessionManagerLayer::new(session_store)
@@ -146,6 +160,7 @@ pub fn build_router(state: AppState) -> Router {
         .nest_service("/assets", ServeDir::new("assets"))
         .route_service("/app.js", ServeFile::new("app.js"))
         .route_service("/styles.css", ServeFile::new("styles.css"))
+        .route("/robots.txt", get(robots_txt))
         .layer(axum::extract::DefaultBodyLimit::max(16384))
         .layer(session_layer)
         .layer(axum::middleware::from_fn_with_state(
@@ -385,6 +400,39 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(description, "Books highlighted by Chantel's Corner staff.");
+    }
+
+    #[tokio::test]
+    async fn robots_txt_refuses_seo_crawlers_and_private_pages() {
+        let test_db = postgres_test_db().await;
+        let app = test_app(test_db.pool());
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/robots.txt")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = String::from_utf8(
+            to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap()
+                .to_vec(),
+        )
+        .unwrap();
+        assert!(body.contains("User-agent: SemrushBot") && body.contains("Disallow: /\n"));
+        assert!(
+            body.contains("User-agent: *")
+                && body.contains("Disallow: /cart")
+                && body.contains("Disallow: /staff")
+        );
+        assert!(
+            !body.contains("Disallow: /books\n"),
+            "book pages stay indexable for search engines"
+        );
     }
 
     #[tokio::test]

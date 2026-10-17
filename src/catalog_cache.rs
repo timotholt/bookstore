@@ -17,6 +17,9 @@ use std::{
 use tokio::sync::Semaphore;
 
 type Entries = Cache<String, Arc<Vec<u8>>>;
+// The catalog changes rarely and every app write (POST) clears the cache, so a long
+// lifetime mostly spares the scale-to-zero database repeat reads.
+const LIFETIME: Duration = Duration::from_secs(12 * 3600);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Lifetime {
     Offers,
@@ -34,11 +37,7 @@ pub struct CatalogCache {
 tokio::task_local! { static CURRENT: Arc<CatalogCache>; }
 impl CatalogCache {
     pub fn new() -> Self {
-        Self::with_lifetimes(
-            Duration::from_secs(30),
-            Duration::from_secs(300),
-            Duration::from_secs(3600),
-        )
+        Self::with_lifetimes(LIFETIME, LIFETIME, LIFETIME)
     }
     fn with_lifetimes(offers: Duration, counts: Duration, metadata: Duration) -> Self {
         fn cache(mib: u64, lifetime: Duration) -> Entries {
@@ -224,10 +223,7 @@ mod tests {
             .unwrap();
         assert_eq!(fresh, "new");
         assert_eq!(cache.offers.policy().max_capacity(), Some(32 * 1024 * 1024));
-        assert_eq!(
-            cache.offers.policy().time_to_live(),
-            Some(Duration::from_secs(30))
-        );
+        assert_eq!(cache.offers.policy().time_to_live(), Some(LIFETIME));
     }
     #[tokio::test]
     async fn independent_instances_converge_rating_counts_and_rows_at_offer_lifetime() {
@@ -242,10 +238,10 @@ mod tests {
             crate::store::count_lifetime(&CatalogFilters::default()),
             Lifetime::Counts
         );
-        assert_eq!(
-            CatalogCache::new().offers.policy().time_to_live(),
-            Some(Duration::from_secs(30))
-        );
+        let live = CatalogCache::new();
+        for entries in [&live.offers, &live.counts, &live.metadata] {
+            assert_eq!(entries.policy().time_to_live(), Some(LIFETIME));
+        }
         let a = CatalogCache::with_lifetimes(
             Duration::from_millis(80),
             Duration::from_secs(5),
