@@ -162,7 +162,7 @@ Railway bills usage across both services. The app does not track spend; the Neon
 
 ## Open items
 
-- **Backup restore failed its first drill (2026-11-17).** A target 9 hours after the daily base backup could not be restored: the restored service's 5 GB volume filled after about 4.4 hours of WAL replay. Until this is fixed, assume restores reach only a few hours past the latest base backup (daily around 10:07 UTC). Results and fix options are in [RESTORE_DRILL_SPEC.md](RESTORE_DRILL_SPEC.md). The fix, 2-hourly differentials kept for the whole window, was applied on 2026-11-17 ([BACKUP_SCHEDULE_SPEC.md](BACKUP_SCHEDULE_SPEC.md)). A drill re-run must prove it before this item closes.
+- **Backup restore failed its first drill (2026-11-17).** A target 9 hours after the daily base backup could not be restored: the restored service's 5 GB volume filled after about 4.4 hours of WAL replay. Base backups were daily then, so most of each day was beyond reach. Results and fix options are in [RESTORE_DRILL_SPEC.md](RESTORE_DRILL_SPEC.md). The fix, 2-hourly differentials kept for the whole window, was applied on 2026-11-17 ([BACKUP_SCHEDULE_SPEC.md](BACKUP_SCHEDULE_SPEC.md)). A drill re-run must prove it before this item closes.
 - **Railway spend has no alert.** Set a usage limit or alert in Railway.
 - **The Neon `bookstore` project** holds the only pre-cutover copy of the data. Delete it once the owner decides it is no longer needed.
 - **The recovery packet** has not been checked against this spec since the cutover.
