@@ -274,7 +274,10 @@
       // 6. Update availability status
       const stockEl = document.querySelector('.buybox-stock-status');
       if (stockEl) {
-        stockEl.innerHTML = `<span class="in-stock">${stock} in stock.</span>`;
+        const stockSpan = document.createElement('span');
+        stockSpan.className = 'in-stock';
+        stockSpan.textContent = stock + ' in stock.';
+        stockEl.replaceChildren(stockSpan);
       }
 
       // 7. Update specs tab dynamic attributes
