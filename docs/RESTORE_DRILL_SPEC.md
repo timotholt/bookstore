@@ -1,6 +1,6 @@
 # Backup Restore Drill Spec
 
-Status: proposed 2026-11-17. Not run.
+Status: run 2026-11-17. **The restore failed**; see Results. Production was not affected.
 
 ## Problem
 
@@ -134,3 +134,36 @@ If production ever has to move to a fork:
 - Re-enable PITR on the fork.
 - Point the `web` service's `DATABASE_URL` at the fork's private domain, then redeploy. `/readyz` and the verify-mode migration check confirm it.
 - Retire the old service only after the new one has archived its first base backup.
+
+## Results (2026-11-17)
+
+**Outcome:** the restore failed. The fork never reached the target time, so the backups are **not proven restorable** for a target 9 hours after the last base backup.
+
+| Step | Result |
+| --- | --- |
+| Preflight | PITR enabled; stanza `ok`; 14 backups; latest differential `20261117-101112D` (10:11 UTC); archiver had 0 failures |
+| Target T | `2026-11-17T19:18:00Z` |
+| Source fingerprint | Latest migration `20261117020000` (23 migrations); books 30,042, book_copies 30,044, authors 15,723, genres 25; users created by T: 2; reviews created by T: 1; 37 tables; roles `chantels_storefront` and `postgres` |
+| Restore issued | 19:24:03 UTC. The workflow created `postgres-restore-drill-20261117` with its own 5,000 MB volume (the same size as the source). |
+| Fork | Unpacked the 10:11 base backup and replayed WAL to about LSN `49/5A`, the last transaction at **14:35:32 UTC**. pgBackRest `archive-get` then failed with `[28] No space left on device` writing `pg_wal/RECOVERYXLOG`, and Postgres stopped: `FATAL: recovery ended before configured recovery target was reached`. It never accepted connections, so recovery time could not be measured and the fingerprints could not be compared. |
+| Production | Unaffected. `/readyz` ready; web `DATABASE_URL` still `postgres.railway.internal`; archiver `failed_count` 0; stanza `ok`. |
+| Teardown | Deleted the fork service `7efaae5b-…` after an ID check. Its volume `postgres-restored` (`bda488ee-…`) was left detached and was deleted separately (pending deletion at 19:40 UTC). The `Postgres` volume `881d24e0-…` was untouched. |
+
+### What is known
+
+- Archiving forces a WAL segment switch every minute (`archive_timeout = 60`), and Railway's idle heartbeat makes sure there is WAL to switch. So the database uses one 16 MB segment of WAL address space per minute even when idle: LSN `4A/43` (about 297 GB of address space) since 2026-11-04, roughly 23 GB a day. Compressed in the bucket these segments are tiny, but restore writes each one back at full size.
+- The fork replayed about 4.4 hours of WAL (10:11 → 14:35, roughly 4.5 GB at 16 MB a minute) before its 5 GB volume filled. Replaying to 19:18 would have needed about 9 hours of WAL.
+- The source does checkpoint every 5 minutes (3,869 checkpoints since 2026-11-04), so the WAL is not missing checkpoint records. **Why** the fork kept replayed WAL on disk instead of recycling it at restartpoints was not established. The likely suspects are restartpoint timing during fast replay, or the pgBackRest async `archive-get` spool (`archive-get-queue-max=1GiB`) sharing the volume. Railway's restore image is not ours to change.
+
+### Current exposure
+
+Until this is fixed, assume a restore can only reach a few hours past the most recent base backup. Base backups run daily around 10:07 UTC, so the evenings are the least covered.
+
+### Options (not yet chosen)
+
+1. **More frequent base backups:** `railway postgres pitr schedule set` (for example a differential every few hours), so that no target needs more than a few GB of WAL replay. This is the cheapest option and uses no new mechanism.
+2. **Larger volume:** grow the `Postgres` volume, if the Railway plan allows it; the fork inherits that size. This costs storage around the clock for a problem that only appears during restores.
+3. **Less WAL:** set `WAL_HEARTBEAT_DISABLED=1` on `Postgres`. An idle database then produces little WAL, but the worst-case data loss on an idle database grows from about 1 minute to about 5. Railway-specific; check it with Railway first.
+4. **Report to Railway:** the default template (heartbeat, `archive_timeout=60`, 5 GB volume, daily differential) cannot restore a point about 5 hours or more after its base backup. Ask whether fork volumes can be sized at restore time.
+
+After any change, re-run this drill with a target at least 8 hours after the latest base backup.

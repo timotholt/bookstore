@@ -60,7 +60,7 @@ External services: GitHub (source and CI), Resend (email), and the DNS provider 
 | Volume | `/var/lib/postgresql/data`, 4.6 GB; about 300 MB used on 2026-11-17 |
 | App database | `chantels_corner_demo` (79 MB, 37 tables). `postgres` and `railway` also exist and are unused by the app. |
 | Network | Private only: `postgres.railway.internal:5432`. No TCP proxy; do not add one. |
-| Backups | pgBackRest pushes WAL continuously to a Railway S3 bucket (`WAL_ARCHIVE_*` variables), keeping 4 full and 14 differential backups. On 2026-11-17 it had archived 19,001 segments with no failures. |
+| Backups | pgBackRest pushes WAL continuously to a Railway S3 bucket (`WAL_ARCHIVE_*` variables), keeping 4 full and 14 differential backups. On 2026-11-17 it had archived 19,001 segments with no failures. **Restore is not proven**; see Open items. |
 
 Roles:
 
@@ -162,7 +162,7 @@ Railway bills usage across both services. The app does not track spend; the Neon
 
 ## Open items
 
-- **Backup restore is untested.** WAL archiving works, but nobody has restored from it. The drill is planned in [RESTORE_DRILL_SPEC.md](RESTORE_DRILL_SPEC.md).
+- **Backup restore failed its first drill (2026-11-17).** A target 9 hours after the daily base backup could not be restored: the restored service's 5 GB volume filled after about 4.4 hours of WAL replay. Until this is fixed, assume restores reach only a few hours past the latest base backup (daily around 10:07 UTC). Results and fix options are in [RESTORE_DRILL_SPEC.md](RESTORE_DRILL_SPEC.md).
 - **Railway spend has no alert.** Set a usage limit or alert in Railway.
 - **The Neon `bookstore` project** holds the only pre-cutover copy of the data. Delete it once the owner decides it is no longer needed.
 - **The recovery packet** has not been checked against this spec since the cutover.
