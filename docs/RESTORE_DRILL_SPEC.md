@@ -161,7 +161,7 @@ Until this is fixed, assume a restore can only reach a few hours past the most r
 
 ### Options (not yet chosen)
 
-1. **More frequent base backups:** `railway postgres pitr schedule set` (for example a differential every few hours), so that no target needs more than a few GB of WAL replay. This is the cheapest option and uses no new mechanism.
+1. **More frequent base backups:** a differential every few hours, so that no target needs more than a few GB of WAL replay. Chosen; planned in [BACKUP_SCHEDULE_SPEC.md](BACKUP_SCHEDULE_SPEC.md). (`railway postgres pitr schedule set` manages volume snapshots, not these backups.)
 2. **Larger volume:** grow the `Postgres` volume, if the Railway plan allows it; the fork inherits that size. This costs storage around the clock for a problem that only appears during restores.
 3. **Less WAL:** set `WAL_HEARTBEAT_DISABLED=1` on `Postgres`. An idle database then produces little WAL, but the worst-case data loss on an idle database grows from about 1 minute to about 5. Railway-specific; check it with Railway first.
 4. **Report to Railway:** the default template (heartbeat, `archive_timeout=60`, 5 GB volume, daily differential) cannot restore a point about 5 hours or more after its base backup. Ask whether fork volumes can be sized at restore time.
