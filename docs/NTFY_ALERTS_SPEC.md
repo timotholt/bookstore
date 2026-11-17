@@ -2,6 +2,8 @@
 
 Status: proposed, unbuilt (2026-10-16).
 
+Note (2026-11-17): the Neon usage monitor that the Neon spend and monitoring rows depend on was removed after the move to Railway Postgres (see `DATABASE_READ_BUDGET_AND_CACHE_SPEC.md`, "Usage counters"). Revisit those rows, and the read-budget row's trigger point, before building this.
+
 ## Goal
 
 Push a short phone notification to the owner when something needs attention or costs money: Neon spend, a review waiting for moderation, a failed email, a staff/security change, a deploy or crash restart. Nothing else. The phone must stay quiet on a normal day.

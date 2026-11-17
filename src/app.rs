@@ -330,7 +330,7 @@ mod tests {
 
     fn test_app(db: DbPool) -> Router {
         build_router(AppState {
-            usage: crate::usage::UsageMonitor::healthy_for_test(),
+            usage: crate::usage::UsageMonitor::for_test(),
             db,
             email: std::sync::Arc::new(crate::email::EmailService::test_capture()),
         })
@@ -339,7 +339,7 @@ mod tests {
     fn test_app_with_db(db: DbPool) -> (Router, DbPool) {
         (
             build_router(AppState {
-                usage: crate::usage::UsageMonitor::healthy_for_test(),
+                usage: crate::usage::UsageMonitor::for_test(),
                 db: db.clone(),
                 email: std::sync::Arc::new(crate::email::EmailService::test_capture()),
             }),
@@ -1663,7 +1663,7 @@ mod tests {
             .unwrap();
         let cart_cookie = named_cookie(&add_response, cart::BROWSER_CART_KEY_COOKIE);
         let restarted_app = build_router(AppState {
-            usage: crate::usage::UsageMonitor::healthy_for_test(),
+            usage: crate::usage::UsageMonitor::for_test(),
             db,
             email: std::sync::Arc::new(crate::email::EmailService::test_capture()),
         });
@@ -2074,7 +2074,7 @@ mod tests {
         assert_eq!(save_response.status(), StatusCode::OK);
 
         let restarted_app = build_router(AppState {
-            usage: crate::usage::UsageMonitor::healthy_for_test(),
+            usage: crate::usage::UsageMonitor::for_test(),
             db: db.clone(),
             email: std::sync::Arc::new(crate::email::EmailService::test_capture()),
         });
@@ -2323,7 +2323,7 @@ mod tests {
         let app = build_router(AppState {
             db: db.clone(),
             email: email.clone(),
-            usage: crate::usage::UsageMonitor::healthy_for_test(),
+            usage: crate::usage::UsageMonitor::for_test(),
         });
         let worker = email.spawn_worker(db.clone());
         // Let the empty startup sweep enter its long idle wait.
@@ -2350,35 +2350,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn spending_alert_refresh_and_private_metrics() {
+    async fn operations_metrics_are_private_and_report_process_counters() {
         let test_db = postgres_test_db().await;
-        let usage = crate::usage::UsageMonitor::healthy_for_test();
         let app = build_router(AppState {
             db: test_db.pool(),
-            usage: usage.clone(),
+            usage: crate::usage::UsageMonitor::for_test(),
             email: std::sync::Arc::new(crate::email::EmailService::test_capture()),
         });
-        let response = app
-            .clone()
-            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
-            .await
-            .unwrap();
-        assert!(!response_body(response)
-            .await
-            .contains("Neon spending alert"));
-        usage.set_cost_for_test(2., 0.71);
-        let response = app
-            .clone()
-            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        // Spending is a staff concern (shown on /staff/users); shoppers never see it.
-        let body = response_body(response).await;
-        assert!(!body.contains("Neon spending alert") && !body.contains("ui-service-notice"));
-        assert!(usage
-            .notice()
-            .is_some_and(|n| n.message.contains("$0.71 today")));
         let response = app
             .clone()
             .oneshot(
@@ -2406,7 +2384,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
         let body = response_body(response).await;
-        assert!(body.contains("estimated_day_usd") && body.contains("cache_hits"));
+        assert!(body.contains("cache_hits") && !body.contains("neon"));
         assert!(!body.contains("test-operations-token"));
     }
 
