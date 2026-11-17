@@ -57,12 +57,30 @@ pub async fn check_csrf(session: &Session, headers: &HeaderMap, supplied: &str) 
 async fn limit(db: &PgPool, key: &str, count: i32, seconds: i64) -> Result<bool, sqlx::Error> {
     let n:i32=sqlx::query_scalar("INSERT INTO account_email_rate_limits(bucket,attempts,expires_at) VALUES($1,1,now()+make_interval(secs=>$2::double precision)) ON CONFLICT(bucket) DO UPDATE SET attempts=CASE WHEN account_email_rate_limits.expires_at<=now() THEN 1 ELSE account_email_rate_limits.attempts+1 END, expires_at=CASE WHEN account_email_rate_limits.expires_at<=now() THEN EXCLUDED.expires_at ELSE account_email_rate_limits.expires_at END RETURNING attempts")
         .bind(digest(key)).bind(seconds as f64).fetch_one(db).bounded_one().await?;
-    sqlx::query("DELETE FROM account_email_rate_limits WHERE expires_at < now()-interval '1 day'")
+    // Bounded, indexed cleanup so request cost stays flat as buckets accumulate.
+    sqlx::query("DELETE FROM account_email_rate_limits WHERE bucket IN (SELECT bucket FROM account_email_rate_limits WHERE expires_at < now()-interval '1 day' LIMIT 50)")
         .execute(db)
         .await?;
     Ok(n <= count)
 }
+/// Admission check that never creates or increments a bucket.
+async fn global_exhausted(db: &PgPool) -> bool {
+    let attempts: Option<i32> = sqlx::query_scalar(
+        "SELECT attempts FROM account_email_rate_limits WHERE bucket=$1 AND expires_at>now()",
+    )
+    .bind(digest("global:email"))
+    .fetch_optional(db)
+    .bounded_one()
+    .await
+    .unwrap_or(Some(i32::MAX));
+    attempts.is_some_and(|n| n >= GLOBAL_EMAIL_LIMIT)
+}
+const GLOBAL_EMAIL_LIMIT: i32 = 80;
 async fn issuance_limits(db: &PgPool, address: &str, purpose: &str) -> bool {
+    // Refuse before creating recipient buckets once the shared quota is spent.
+    if global_exhausted(db).await {
+        return false;
+    }
     for (seconds, count) in [(60, 1), (3600, 5), (86400, 10)] {
         if !limit(
             db,
@@ -76,7 +94,9 @@ async fn issuance_limits(db: &PgPool, address: &str, purpose: &str) -> bool {
             return false;
         }
     }
-    limit(db, "global:email", 80, 86400).await.unwrap_or(false)
+    limit(db, "global:email", GLOBAL_EMAIL_LIMIT, 86400)
+        .await
+        .unwrap_or(false)
 }
 
 pub async fn signup_allowed(db: &PgPool, email: &str, peer: Option<SocketAddr>) -> bool {
@@ -279,7 +299,7 @@ async fn reset_form(session: &Session, message: &str) -> Response {
     .await
 }
 
-async fn landing(session: Session, q: Landing, purpose: &str, path: &str) -> Response {
+async fn landing(db: &PgPool, session: Session, q: Landing, purpose: &str, path: &str) -> Response {
     if let Some(token) = q.token {
         if token.len() != 43
             || URL_SAFE_NO_PAD
@@ -289,8 +309,14 @@ async fn landing(session: Session, q: Landing, purpose: &str, path: &str) -> Res
         {
             return invalid_link(&session, purpose).await;
         }
+        let hash = digest(&token);
+        // Validate before touching the session: a cross-site GET with a
+        // well-formed but unknown token must not replace a pending challenge.
+        if !matches!(self::token(db, &hash, purpose).await, Ok(Some(_))) {
+            return secure(invalid_link(&session, purpose).await);
+        }
         let c = Challenge {
-            hash: digest(&token),
+            hash,
             purpose: purpose.into(),
             expires: Utc::now().timestamp() + 1800,
         };
@@ -321,8 +347,12 @@ async fn landing(session: Session, q: Landing, purpose: &str, path: &str) -> Res
         .await
     }
 }
-pub async fn verify_get(session: Session, Query(q): Query<Landing>) -> Response {
-    landing(session, q, "verify_email", "/verify-email").await
+pub async fn verify_get(
+    State(s): State<AppState>,
+    session: Session,
+    Query(q): Query<Landing>,
+) -> Response {
+    landing(&s.db, session, q, "verify_email", "/verify-email").await
 }
 pub async fn reset_get(
     State(s): State<AppState>,
@@ -346,10 +376,14 @@ pub async fn reset_get(
             return invalid_link(&session, "reset_password").await;
         }
     }
-    landing(session, q, "reset_password", "/reset-password").await
+    landing(&s.db, session, q, "reset_password", "/reset-password").await
 }
-pub async fn change_get(session: Session, Query(q): Query<Landing>) -> Response {
-    landing(session, q, "change_email", "/confirm-email-change").await
+pub async fn change_get(
+    State(s): State<AppState>,
+    session: Session,
+    Query(q): Query<Landing>,
+) -> Response {
+    landing(&s.db, session, q, "change_email", "/confirm-email-change").await
 }
 pub async fn forgot_get(session: Session) -> Response {
     page(
@@ -435,13 +469,14 @@ pub async fn forgot_post(
     // Commit before acknowledging. The encrypted outbox survives process termination.
     let result=async {
         let Ok(email)=crate::auth::normalize_email(&f.email) else{return Ok(());};
-        if !issuance_limits(&s.db,&email,"reset_password").await{return Ok(());}
         let mut tx=s.db.begin().await?;
         let row=sqlx::query("SELECT u.id,u.auth_version FROM users u JOIN password_credentials p ON p.user_id=u.id WHERE email=$1 AND u.account_status='active' FOR UPDATE OF u").bind(&email).fetch_optional(&mut *tx).bounded_one().await?;
         if let Some(row)=row {
             let id:String=row.get("id");let version:i64=row.get("auth_version");
             let count:i64=sqlx::query_scalar("SELECT count(*) FROM account_tokens WHERE user_id=$1 AND purpose='reset_password' AND revoked_at IS NULL AND consumed_at IS NULL AND expires_at>now()").bind(&id).fetch_one(&mut *tx).bounded_one().await?;
-            if count<5 {issue(&mut tx,&s.email,&id,"reset_password",&email,version).await?;}
+            // Debit email quotas only when a reset is really sent, so lookups
+            // for arbitrary addresses cannot exhaust recovery for real users.
+            if count<5 && issuance_limits(&s.db,&email,"reset_password").await {issue(&mut tx,&s.email,&id,"reset_password",&email,version).await?;}
         }
         tx.commit().await?;Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
     }.await;

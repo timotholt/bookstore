@@ -1056,6 +1056,64 @@ mod tests {
         assert_eq!(no_login.headers()["location"], "/login");
     }
     #[tokio::test]
+    async fn forgot_password_for_unknown_address_spends_no_email_quota() {
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let app = test_app(db.clone());
+        let (c, t) = csrf_form(&app, "/forgot-password", None).await;
+        post_form(
+            &app,
+            "/forgot-password",
+            &c,
+            format!("csrf={t}&email=nobody%40example.com"),
+        )
+        .await;
+        // Only the per-source bucket may exist; recipient and global quotas stay untouched.
+        let buckets: i64 = sqlx::query_scalar("SELECT count(*) FROM account_email_rate_limits")
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_eq!(buckets, 1);
+    }
+
+    #[tokio::test]
+    async fn unknown_token_landing_keeps_pending_challenge() {
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let app = test_app(db.clone());
+        let user = crate::auth::register_user(
+            &db,
+            &crate::email::EmailService::test_capture(),
+            "Pending",
+            "Reader",
+            "pending@example.com",
+            secrecy::Secret::new("Bookstore-unique-old-password1!".into()),
+        )
+        .await
+        .unwrap();
+        let verify = test_token(&db, &user.id, &user.email, "verify_email").await;
+        let (cookie, csrf) = challenge_cookie(&app, "/verify-email", &verify).await;
+        // Simulates a cross-site top-level navigation carrying the victim's cookie.
+        let forged = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/verify-email?token={}",
+                        crate::account_email::random_secret()
+                    ))
+                    .header(header::COOKIE, &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(forged.status(), StatusCode::OK);
+        let r = post_form(&app, "/verify-email", &cookie, format!("csrf={csrf}")).await;
+        assert!(response_body(r).await.contains("Email confirmed"));
+    }
+
+    #[tokio::test]
     async fn recovery_is_generic_and_expired_wrong_purpose_tokens_fail() {
         let test_db = postgres_test_db().await;
         let db = test_db.pool();
@@ -1123,9 +1181,20 @@ mod tests {
         .execute(&db)
         .await
         .unwrap();
-        let (c, t) = challenge_cookie(&app, "/verify-email", &wrong).await;
-        let r = post_form(&app, "/verify-email", &c, format!("csrf={t}")).await;
-        assert!(response_body(r).await.contains("invalid or expired"));
+        // Expired tokens are rejected at landing, before any session challenge is stored.
+        let expired = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/verify-email?token={wrong}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(expired.status(), StatusCode::OK);
+        assert_eq!(expired.headers()["referrer-policy"], "no-referrer");
+        assert!(response_body(expired).await.contains("invalid or expired"));
         // Direct profile writes cannot bypass ownership confirmation.
         let r = crate::auth::update_user_profile(
             &db,
@@ -1299,9 +1368,12 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        // Unknown tokens never reach the session, so a cross-site GET cannot
+        // replace a pending challenge.
+        assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers()["referrer-policy"], "no-referrer");
-        assert_eq!(response.headers()["location"], "/reset-password");
+        assert!(response.headers().get("location").is_none());
+        assert!(response_body(response).await.contains("invalid or expired"));
     }
 
     #[tokio::test]
