@@ -1,6 +1,6 @@
 # Neon Retirement Spec
 
-Status: proposed 2026-11-17. Not started.
+Status: implemented 2026-11-17 (`af62829` code and setup files; docs in the following commit).
 
 ## Problem
 

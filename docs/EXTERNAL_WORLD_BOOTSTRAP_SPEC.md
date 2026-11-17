@@ -168,7 +168,6 @@ setup/
     local.toml
     github.toml
     railway.toml
-    neon.toml
     stripe.toml
     auth.toml
   secrets.example.env
@@ -186,7 +185,6 @@ xtask/
         local.rs
         github.rs
         railway.rs
-        neon.rs
         database.rs
         stripe.rs
         auth.rs
@@ -221,15 +219,6 @@ service = "web"
 environment = "production"
 
 [[providers]]
-id = "neon"
-adapter = "api"
-required = true
-project = "bookstore"
-database = "neondb"
-roles = ["neondb_owner"]
-branches = ["production"]
-
-[[providers]]
 id = "stripe"
 adapter = "cli"
 required = false
@@ -245,7 +234,6 @@ expect_status = 200
 [[checks]]
 id = "database.migrations.postgres"
 kind = "sqlx_migrations"
-provider = "neon"
 path = "migrations_postgres"
 expect_latest = true
 ```
@@ -374,9 +362,7 @@ Answers:
 Validation must not repair. It may suggest:
 
 ```bash
-cargo xtask external setup --only neon.database
 cargo xtask external setup --only railway.variables
-cargo xtask external repair --only neon --yes
 cargo xtask external repair --only database.migrations
 ```
 
@@ -393,7 +379,6 @@ Rules:
 
 Current implemented repair targets:
 
-- `neon`: idempotently creates or confirms the Neon project, branch, role, and database declared in `setup/setup.toml`, then writes the generated Postgres `DATABASE_URL` to `.env`.
 - `database.migrations`: applies the Postgres migrations in `migrations_postgres/` against the configured `DATABASE_URL`.
 
 ## Validation Finding Model
@@ -416,12 +401,11 @@ docs
 Human output example:
 
 ```text
-[fail] neon.database.reachable
+[fail] database.reachable
        Could not connect to DATABASE_URL.
-       Cause: authentication failed for role neondb_owner.
+       Cause: authentication failed for role chantels_storefront.
        Evidence: postgres returned SQLSTATE 28P01.
-       Repair: update DATABASE_URL from Neon or run:
-               cargo xtask external setup --only neon.connection_strings
+       Repair: copy DATABASE_URL from the Railway web service variables.
 
 [warn] railway.variables
        PUBLIC_BASE_URL is missing on Railway production.
@@ -442,12 +426,12 @@ Machine output example:
   "generated_at": "2026-06-30T00:00:00Z",
   "findings": [
     {
-      "id": "neon.database.reachable",
-      "provider": "neon",
+      "id": "database.reachable",
+      "provider": "database",
       "severity": "fail",
       "status": "unauthorized",
       "cause": "authentication_failed",
-      "repair_command": "cargo xtask external setup --only neon.connection_strings"
+      "repair": "Copy DATABASE_URL from the Railway web service variables."
     }
   ]
 }
@@ -491,14 +475,11 @@ railway.account
   -> runtime variables
   -> public domain
 
-neon.account
-  -> neon API key or CLI login
-  -> project bookstore
-  -> database neondb
-  -> roles
-  -> branch production
-  -> connection strings
-  -> migrations applied
+database.postgres
+  -> Railway Postgres service (private network only)
+  -> database chantels_corner_demo
+  -> roles postgres (owner) and chantels_storefront (app)
+  -> migrations applied by the owner (PRODUCTION_MIGRATIONS_SPEC.md)
 
 app.runtime
   -> PUBLIC_BASE_URL
@@ -545,16 +526,9 @@ No external mutations yet.
 
 ### Phase 2: Database Provider
 
-Implement:
+Neon was the original database provider, and xtask had a Neon adapter that created the project, branch, role and database. Production moved to Railway Postgres on 2026-11-04 and the adapter was removed (see [NEON_RETIREMENT_SPEC.md](NEON_RETIREMENT_SPEC.md)).
 
-- Neon desired-state entries.
-- Token detection.
-- Account/project inspect via API or CLI.
-- Database URL validation.
-- Migration validation.
-- Seed data validation.
-
-Setup may initially print manual Neon steps while validation is real.
+No database provider adapter is planned. The Railway database has no public endpoint and nothing to create through an API. xtask keeps the provider-neutral checks: `database.url` and `database.app_runtime` (a Postgres URL, never SQLite) and migration validation. Production migrations use the owner-run flow in [PRODUCTION_MIGRATIONS_SPEC.md](PRODUCTION_MIGRATIONS_SPEC.md).
 
 ### Phase 3: Railway Provider
 

@@ -1,5 +1,7 @@
 # Chantel's Corner Infrastructure, Accounts, and Secret Recovery Spec
 
+Note (2026-11-17): production Postgres moved from Neon to Railway Postgres on 2026-11-04, and Neon is retired ([NEON_RETIREMENT_SPEC.md](NEON_RETIREMENT_SPEC.md)). The Neon sections below are historical until this spec is rewritten.
+
 Status: target infrastructure design, not evidence that Railway, Stripe, or a public demo is currently deployed. Product architecture, feature order, styling rules, and code organization standards live in [PRODUCT_ARCHITECTURE_SPEC.md](PRODUCT_ARCHITECTURE_SPEC.md).
 
 ## Purpose
