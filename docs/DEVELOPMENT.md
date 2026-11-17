@@ -35,12 +35,12 @@ Use the connection string for the intended Neon database branch. Do not add it t
 See [Production Migrations Spec](PRODUCTION_MIGRATIONS_SPEC.md). Migrations must keep the currently deployed build working (additive changes; split destructive ones across deploys). Apply them as the owner **before** pushing the code that needs them:
 
 ```bash
-railway ssh config --service Postgres   # once: adds an OpenSSH block for the database service
-ssh -N -L 127.0.0.1:55440:localhost:5432 <railway-postgres-host>   # private tunnel; keep it open
+railway ssh config --service Postgres --alias cc-postgres -i ~/.ssh/cd-admin-railway   # once
+ssh -L 127.0.0.1:55440:localhost:5432 cc-postgres sleep 3600   # private tunnel; keep it open
 MIGRATION_DATABASE_URL=postgres://postgres@127.0.0.1:55440/chantels_corner_demo cargo run --release -- --migrate
 ```
 
-Supply the owner password through a `~/.pgpass` entry (mode 600) or `PGPASSWORD` in that shell only; never commit it or store it in Railway. `--migrate` never falls back to `DATABASE_URL`. Then push; the new build starts in `verify` mode and passes `/readyz` only if the ledger is complete.
+The identity must be an SSH key registered with Railway (`railway ssh keys list`). Railway's gateway forwards ports only while a remote command runs, so `ssh -N` fails; keep `sleep` as the command. Connections arriving through the tunnel are local to the database container, which currently accepts them without a password. If that changes, supply the owner password through a `~/.pgpass` entry (mode 600) or `PGPASSWORD` in that shell only; never commit it or store it in Railway. `--migrate` never falls back to `DATABASE_URL`. Then push; the new build starts in `verify` mode and passes `/readyz` only if the ledger is complete.
 
 Connect the GitHub repository and the intended deployment branch in Railway. `.github/workflows/ci.yml` runs format, check, lint, build, tests against temporary PostgreSQL, and a Docker image build on pull requests and pushes to `main`. Enable Railway's **Wait for CI** setting before making `main` an automatic deployment source. Generate a Railway domain only after the service starts successfully, then smoke-test `/`, `/readyz`, `/styles.css`, `/assets/htmx.min.js`, signup/login, catalog, and cart. The public demo is available at the link above.
 

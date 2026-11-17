@@ -1,6 +1,6 @@
 # Production Migrations Spec
 
-Status: approved 2026-11-17. Steps 1–3 are done (production runs `DATABASE_MIGRATIONS=verify`; default privileges granted 2026-11-17). Step 4 is pending.
+Status: implemented 2026-11-17. Steps 1–4 are done; production runs `DATABASE_MIGRATIONS=verify`, and `20261117020000` was the first migration applied through `--migrate`.
 
 ## Problem
 
@@ -39,8 +39,8 @@ Add a binary subcommand, `chantels-corner --migrate`, that applies the embedded 
 Operator flow, run from the Mac. The owner credential lives only in the operator's password manager and shell session:
 
 1. Write the migration so the currently deployed code keeps working after it is applied (additive: new tables, columns with defaults, indexes). Destructive changes are split across two deploys (expand, then contract).
-2. Open a private tunnel to the database: `railway ssh config --service Postgres` once, then `ssh -L 127.0.0.1:55440:localhost:5432 <railway-host>`. No public TCP proxy.
-3. `MIGRATION_DATABASE_URL=postgres://postgres@127.0.0.1:55440/chantels_corner_demo cargo run --release -- --migrate`, with the password supplied through a `~/.pgpass` entry (mode 600) or `PGPASSWORD` in that shell only. There is no interactive prompt.
+2. Open a private tunnel to the database: `railway ssh config --service Postgres --alias cc-postgres -i <railway-registered-key>` once, then `ssh -L 127.0.0.1:55440:localhost:5432 cc-postgres sleep 3600` (the gateway rejects `-N`). No public TCP proxy.
+3. `MIGRATION_DATABASE_URL=postgres://postgres@127.0.0.1:55440/chantels_corner_demo cargo run --release -- --migrate`. Tunnelled connections are local to the container, which currently needs no password; if one is required, supply it through a `~/.pgpass` entry (mode 600) or `PGPASSWORD` in that shell only. There is no interactive prompt.
 4. Push. The new web build starts in `verify` mode, finds the ledger complete, and passes its healthcheck.
 
 The order (migrate first, then push) is why rule 1 matters: for a few minutes the old build runs against the new schema.
