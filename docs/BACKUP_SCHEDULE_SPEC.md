@@ -1,6 +1,6 @@
 # Backup Schedule Spec
 
-Status: proposed 2026-11-17. Not applied.
+Status: applied 2026-11-17 20:37 UTC. Not yet proven by a restore; the drill re-run is pending (see "Proving it").
 
 ## Problem
 
@@ -78,3 +78,13 @@ Both must reach their target and match the fingerprints. Record the recovery tim
 - **Larger volume:** fixes it too, but the storage is billed all the time to cover restores only.
 - **`WAL_HEARTBEAT_DISABLED=1`:** cuts WAL on an idle database, but the worst-case data loss rises to the checkpoint interval (about 5 min).
 - **Reporting it to Railway:** still worth doing. The default template cannot restore most of its own window on its default volume. That is separate from this change.
+
+## Applied (2026-11-17)
+
+- Set both variables at 20:37:56 UTC. `Postgres` restarted at 20:38:02 (postmaster start time). Polling every 15 s, `/readyz` was never seen failing.
+- `/etc/pgbackrest/pgbackrest.conf` now has `repo1-retention-full=4` and `repo1-retention-diff=336`.
+- The watcher logged `diff=7200s, full=604800s`, with the same `repo1-path` as before (`/pgbackrest/cluster-7704255332366757947`).
+- The last differential was over 2 hours old, so the watcher took one at once: `20261111-100716F_20261117-203904D`, 3.5 MB.
+- Archiver after the restart: `failed_count` 0, latest segment archived at 20:39:08.
+
+Still to check: about 12 differentials a day, with none expired early (check on 2026-11-18), and the real bucket and egress cost after a week.
