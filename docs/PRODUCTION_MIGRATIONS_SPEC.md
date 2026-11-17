@@ -1,6 +1,6 @@
 # Production Migrations Spec
 
-Status: approved 2026-11-17. Steps 1–2 (code) are implemented; steps 3–4 (production configuration) are pending.
+Status: approved 2026-11-17. Steps 1–3 are done (production runs `DATABASE_MIGRATIONS=verify`; default privileges granted 2026-11-17). Step 4 is pending.
 
 ## Problem
 
