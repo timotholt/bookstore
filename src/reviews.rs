@@ -395,7 +395,12 @@ pub async fn moderate(
                 .execute(&mut *tx)
                 .await?;
         }
-        "report_resolved" => {}
+        "report_resolved" => {
+            // Authors must not clear reports against their own public review.
+            if r.user_id == user {
+                return Err(forbidden());
+            }
+        }
         _ => return Err(AppError::Validation("Unknown moderation action.".into())),
     }
     if matches!(action, "remove" | "report_resolved") {

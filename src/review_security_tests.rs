@@ -342,3 +342,49 @@ async fn normalization_backfill_preserves_review_versions_roles_and_catalog() {
     );
     dispose(db).await;
 }
+
+#[tokio::test]
+async fn moderator_cannot_resolve_reports_on_own_review() {
+    let db = isolated_db().await;
+    let id = submit(&db, &principal("moderator", 0), "b003", &input(0))
+        .await
+        .unwrap();
+    let revision: i64 = sqlx::query_scalar("SELECT current_revision FROM reviews WHERE id=$1")
+        .bind(id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    // A second moderator publishes it so the author's report path is reachable.
+    sqlx::query("INSERT INTO user_staff_roles(user_id,role) VALUES('voter','moderator')")
+        .execute(&db)
+        .await
+        .unwrap();
+    moderate(&db, &principal("voter", 0), id, revision, "approve", "")
+        .await
+        .unwrap();
+    report(&db, &principal("author", 0), id, revision, "Spam content")
+        .await
+        .unwrap();
+    assert!(moderate(
+        &db,
+        &principal("moderator", 0),
+        id,
+        revision,
+        "report_resolved",
+        ""
+    )
+    .await
+    .is_err());
+    let open: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM review_reports WHERE review_id=$1 AND status='open'",
+    )
+    .bind(id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(open, 1);
+    moderate(&db, &principal("voter", 0), id, revision, "report_resolved", "")
+        .await
+        .unwrap();
+    dispose(db).await;
+}
