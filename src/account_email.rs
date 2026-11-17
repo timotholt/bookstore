@@ -315,6 +315,18 @@ async fn landing(db: &PgPool, session: Session, q: Landing, purpose: &str, path:
         if !matches!(self::token(db, &hash, purpose).await, Ok(Some(_))) {
             return secure(invalid_link(&session, purpose).await);
         }
+        // A GET is reachable cross-site, so it must never swap out a pending
+        // challenge that is still usable; the user finishes or lets it lapse first.
+        let key = format!("challenge:{purpose}");
+        if let Ok(Some(existing)) = session.get::<Challenge>(&key).await {
+            if existing.hash != hash
+                && existing.purpose == purpose
+                && existing.expires > Utc::now().timestamp()
+                && matches!(self::token(db, &existing.hash, purpose).await, Ok(Some(_)))
+            {
+                return secure(Redirect::to(path).into_response());
+            }
+        }
         let c = Challenge {
             hash,
             purpose: purpose.into(),

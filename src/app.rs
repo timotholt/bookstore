@@ -1077,6 +1077,55 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn valid_foreign_token_landing_keeps_pending_challenge() {
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        let app = test_app(db.clone());
+        let mut users = Vec::new();
+        for email in ["victim@example.com", "attacker@example.com"] {
+            users.push(
+                crate::auth::register_user(
+                    &db,
+                    &crate::email::EmailService::test_capture(),
+                    "Landing",
+                    "Reader",
+                    email,
+                    secrecy::Secret::new("Bookstore-unique-old-password1!".into()),
+                )
+                .await
+                .unwrap(),
+            );
+        }
+        let victim = test_token(&db, &users[0].id, &users[0].email, "verify_email").await;
+        let attacker = test_token(&db, &users[1].id, &users[1].email, "verify_email").await;
+        let (cookie, csrf) = challenge_cookie(&app, "/verify-email", &victim).await;
+        // Cross-site navigation with the attacker's own live token.
+        let forged = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/verify-email?token={attacker}"))
+                    .header(header::COOKIE, &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(forged.status(), StatusCode::SEE_OTHER);
+        let r = post_form(&app, "/verify-email", &cookie, format!("csrf={csrf}")).await;
+        assert!(response_body(r).await.contains("Email confirmed"));
+        for (user, expected) in [(&users[0], true), (&users[1], false)] {
+            let verified: bool =
+                sqlx::query_scalar("SELECT email_verified_at IS NOT NULL FROM users WHERE id=$1")
+                    .bind(&user.id)
+                    .fetch_one(&db)
+                    .await
+                    .unwrap();
+            assert_eq!(verified, expected);
+        }
+    }
+
+    #[tokio::test]
     async fn unknown_token_landing_keeps_pending_challenge() {
         let test_db = postgres_test_db().await;
         let db = test_db.pool();
