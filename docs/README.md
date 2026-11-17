@@ -14,7 +14,6 @@ Start with the product tour in the main README, then choose a path below.
 | Review the proposed review system | [Reviews design](REVIEWS_SPEC.md) |
 | Set up transactional email delivery | [Resend design](RESEND_SPEC.md) |
 | Implement email verification and password recovery | [Account email design](EMAIL_VERIFICATION_SPEC.md) |
-| Safely test DB-backed auth and migrations | [Neon branch testing skill](skills/chantels-corner-db-branch-testing/SKILL.md) |
 | Find known gaps and cleanup work | [Technical debt](TECH_DEBT.md) |
 | Refresh screenshots and repository presentation | [Presentation guide](PRESENTATION.md) |
 
