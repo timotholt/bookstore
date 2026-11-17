@@ -57,7 +57,7 @@ pub async fn check_csrf(session: &Session, headers: &HeaderMap, supplied: &str) 
 async fn limit(db: &PgPool, key: &str, count: i32, seconds: i64) -> Result<bool, sqlx::Error> {
     let n:i32=sqlx::query_scalar("INSERT INTO account_email_rate_limits(bucket,attempts,expires_at) VALUES($1,1,now()+make_interval(secs=>$2::double precision)) ON CONFLICT(bucket) DO UPDATE SET attempts=CASE WHEN account_email_rate_limits.expires_at<=now() THEN 1 ELSE account_email_rate_limits.attempts+1 END, expires_at=CASE WHEN account_email_rate_limits.expires_at<=now() THEN EXCLUDED.expires_at ELSE account_email_rate_limits.expires_at END RETURNING attempts")
         .bind(digest(key)).bind(seconds as f64).fetch_one(db).bounded_one().await?;
-    // Bounded, indexed cleanup so request cost stays flat as buckets accumulate.
+    // Bounded cleanup: at most 50 expired rows per call keeps request cost flat.
     sqlx::query("DELETE FROM account_email_rate_limits WHERE bucket IN (SELECT bucket FROM account_email_rate_limits WHERE expires_at < now()-interval '1 day' LIMIT 50)")
         .execute(db)
         .await?;
