@@ -1,519 +1,174 @@
 # Chantel's Corner Infrastructure, Accounts, and Secret Recovery Spec
 
-Note (2026-11-17): production Postgres moved from Neon to Railway Postgres on 2026-11-04, and Neon is retired ([NEON_RETIREMENT_SPEC.md](NEON_RETIREMENT_SPEC.md)). The Neon sections below are historical until this spec is rewritten.
+Status: describes the running production setup, verified 2026-11-17. Production has run entirely on Railway (web and Postgres) since the Neon → Railway Postgres cutover on 2026-11-04. Neon is retired ([NEON_RETIREMENT_SPEC.md](NEON_RETIREMENT_SPEC.md)).
 
-Status: target infrastructure design, not evidence that Railway, Stripe, or a public demo is currently deployed. Product architecture, feature order, styling rules, and code organization standards live in [PRODUCT_ARCHITECTURE_SPEC.md](PRODUCT_ARCHITECTURE_SPEC.md).
+Related specs:
+
+- Product architecture, feature order, styling and code organization: [PRODUCT_ARCHITECTURE_SPEC.md](PRODUCT_ARCHITECTURE_SPEC.md)
+- Schema changes in production: [PRODUCTION_MIGRATIONS_SPEC.md](PRODUCTION_MIGRATIONS_SPEC.md)
+- Read budget, catalog cache and usage counters: [DATABASE_READ_BUDGET_AND_CACHE_SPEC.md](DATABASE_READ_BUDGET_AND_CACHE_SPEC.md)
+- Transactional email: [RESEND_SPEC.md](RESEND_SPEC.md), [EMAIL_OPERATIONS.md](EMAIL_OPERATIONS.md)
+- Staff access bootstrap and recovery: [ADMIN_ACCESS_SPEC.md](ADMIN_ACCESS_SPEC.md)
+- `cargo xtask external` setup and validation tooling: [EXTERNAL_WORLD_BOOTSTRAP_SPEC.md](EXTERNAL_WORLD_BOOTSTRAP_SPEC.md)
+- Local development and deploy commands: [DEVELOPMENT.md](DEVELOPMENT.md)
 
 ## Purpose
 
-This document defines how Chantel's Corner could be deployed as a full-stack demo project on Railway and Neon while staying portable enough to rebuild if either provider becomes unusable. The existing Neon project is named `bookstore`; existing provider identifiers need not be renamed to match the storefront brand.
+Chantel's Corner is a portfolio storefront, not real commerce. It runs as a Rust/Axum binary against PostgreSQL. This spec records where it runs, how its secrets are held, and how to rebuild it if Railway or an account is lost.
 
-The goal is not PCI-grade production commerce. The goal is a professional interview-ready stack that demonstrates real backend engineering: Rust/Axum server rendering, PostgreSQL persistence, migrations, sessions, Stripe Checkout handoff, staff auth, CMS inventory workflows, and a repeatable infrastructure story.
+## Operating principles
 
-The external setup and validation automation model is defined in [EXTERNAL_WORLD_BOOTSTRAP_SPEC.md](EXTERNAL_WORLD_BOOTSTRAP_SPEC.md). That spec is the source of truth for `cargo xtask external doctor/setup/validate`, provider adapter policy, validation reports, and reproducible third-party configuration.
+1. The repository holds the whole system shape: code, migrations, Dockerfile, CI, example env files and runbooks. It never holds plaintext secrets: passwords, API keys, connection strings, tokens or signing keys.
+2. Runtime secrets live only where they are used (Railway service variables, the owner's ignored local `.env`), plus the owner's recovery packet.
+3. The app is Postgres-only and never falls back to another database.
+4. Least privilege in production: the web service cannot change the schema. The database owner credential is never stored on the web service.
+5. The database has no public endpoint.
+6. Rebuilding from the repo and the recovery packet must be possible without anything that exists only in one person's memory.
 
-## Operating Principles
+## Topology
 
-1. The repository must contain the full system shape: application code, migrations, examples, bootstrap scripts, smoke tests, and runbooks.
-2. The repository must never contain plaintext passwords, API keys, connection strings, session keys, Stripe secrets, or provider tokens.
-3. Runtime secrets live in the systems that need them: Railway environment variables, Neon project credentials, Stripe webhook secrets, and the local ignored `.env` file.
-4. Account ownership belongs to `timotholt@gmail.com`.
-5. Recovery material must be simple enough to use under pressure. If Railway or Neon needs to be replaced, the repo plus the recovery packet should be enough to rebuild.
-6. The demo should be reproducible in under 10 minutes after accounts and CLI authentication already exist.
-7. The local developer workflow must remain easy, but the app runtime is Postgres-only. Local development may use Neon or a local PostgreSQL instance, and the app must not silently fall back to another database when Postgres is missing or unreachable.
-
-## Target Providers
-
-### Railway
-
-Railway hosts the Rust/Axum web process.
-
-Responsibilities:
-
-- Build and run the Rust application.
-- Store application runtime environment variables.
-- Provide public HTTPS routing.
-- Run one web service for the Chantel's Corner storefront and planned admin panel.
-- Optionally run release/migration commands before deploys.
-
-Expected Railway project resources:
-
-- Project: `chantels-corner` (planned name; verify existing Railway resources before setup)
-- Service: `web`
-- Environment: `production`
-- Deploy source: GitHub repository `timotholt/bookstore`
-- Start command: the compiled Rust binary, or Railway's detected Cargo start command if compatible
-- Health endpoint: `GET /healthz`
-
-### Neon
-
-Neon hosts PostgreSQL.
-
-Responsibilities:
-
-- Store catalog, copies, carts, orders, CMS users, sessions, and cache metadata.
-- Provide pooled and direct database URLs.
-- Support migration execution from local CLI or Railway release command.
-
-Expected Neon project resources:
-
-- Project: `bookstore` (existing)
-- Database: `neondb` (existing)
-- Roles:
-  - `neondb_owner`: current owner role used by the local demo
-  - Scoped app and migration roles are future hardening work, not existing resources
-- Branches:
-  - `production`: configured branch name; verify it in Neon before deployment
-  - optional `dev`: staging or local testing branch
-
-## Account Creation Policy
-
-All provider accounts should be created under `timotholt@gmail.com`.
-
-Accounts to create or verify:
-
-- GitHub account with access to `timotholt/bookstore`
-- Railway account
-- Neon account
-- Stripe account or Stripe test-mode project
-- Optional domain/DNS provider if a custom domain is later added
-
-Account setup should be performed interactively by the account owner because it may require email verification, OAuth consent, payment method confirmation, or two-factor authentication.
-
-Codex may assist by preparing scripts, provider-specific runbooks, environment variable manifests, and CLI commands. Codex should not store provider passwords in the repository or chat transcript.
-
-## Secret Custody Model
-
-### What Counts as a Secret
-
-Secrets include:
-
-- Railway tokens
-- Neon connection strings and passwords
-- `DATABASE_URL`
-- `SESSION_SECRET`
-- Stripe secret keys
-- Stripe webhook signing secrets
-- Admin bootstrap passwords
-- OAuth client secrets
-- SMTP credentials
-- Any API key for book metadata providers
-
-### Where Secrets May Live
-
-Allowed:
-
-- Railway environment variables
-- Neon provider dashboard
-- Stripe dashboard
-- Local `.env`, ignored by Git
-- User-owned recovery packet outside the repository
-- Email sent by the account owner to themselves, if that is the chosen personal recovery system
-
-Not allowed:
-
-- Plaintext committed to Git
-- Plaintext in `README.md`
-- Plaintext in migration files
-- Plaintext in shell scripts
-- Plaintext in test fixtures
-- Plaintext in issue descriptions or PR comments
-
-### Recovery Packet
-
-The recovery packet is the user-owned source of truth for rebuilding accounts and infrastructure. It should be prepared after Railway, Neon, and Stripe are configured.
-
-Recommended contents:
-
-- Provider account list
-- Login emails
-- Project names
-- Organization/team names, if any
-- Railway project ID
-- Railway service ID
-- Neon project ID
-- Neon database name
-- Neon role names
-- Stripe account mode and webhook endpoint path
-- Environment variable names and where each value lives
-- Last known migration version
-- GitHub repository URL
-- Deployment URL
-- Date created and last verified
-
-The recovery packet may include plaintext secrets only if the account owner explicitly chooses that operational tradeoff. The repository must still keep plaintext secrets out.
-
-Recommended safer format:
-
-- `infra/secrets/chantels-corner.env.example`: committed variable names with fake values
-- `infra/secrets/chantels-corner.recovery.md`: not committed if it contains private account details
-- `infra/secrets/chantels-corner.env.age`: optional encrypted secret bundle if the user chooses local encrypted storage
-
-## Environment Variables
-
-The application should converge on the following environment contract.
-
-Target production contract (not all variables are currently consumed by the application):
+Railway project **Chantel's Corner**, environment `production`:
 
 ```text
-APP_ENV=production
-PORT=8080
-DATABASE_URL=postgres://...
-SESSION_SECRET=...
-PUBLIC_BASE_URL=https://...
+GitHub timotholt/bookstore (main)
+   │  push → GitHub Actions CI → Railway "Wait for CI"
+   ▼
+web service ── Dockerfile build ── https://www.chantelscorner.com
+   │  private network (postgres.railway.internal:5432)
+   ▼
+Postgres service ── volume /var/lib/postgresql/data
+   │  pgBackRest WAL archive
+   ▼
+Railway storage bucket
 ```
 
-The current Rust runtime requires `DATABASE_URL`, accepts optional `ADDR`, uses Railway's `PORT` on all interfaces when `ADDR` is unset, and checks `APP_ENV=production` for secure cookies. `SESSION_SECRET` and `PUBLIC_BASE_URL` are bootstrap/deployment design values here, not currently enforced runtime settings.
-
-Required when Stripe Checkout is enabled:
-
-```text
-STRIPE_SECRET_KEY=sk_test_...
-STRIPE_WEBHOOK_SECRET=whsec_...
-STRIPE_SUCCESS_URL=https://.../checkout/success
-STRIPE_CANCEL_URL=https://.../cart
-```
-
-Required when staff auth/CMS ships:
-
-```text
-ADMIN_BOOTSTRAP_EMAIL=...
-ADMIN_BOOTSTRAP_PASSWORD=...
-PASSWORD_PEPPER=...
-```
-
-Optional:
-
-```text
-LOG_LEVEL=info
-BOOK_METADATA_PROVIDER=google_books
-GOOGLE_BOOKS_API_KEY=...
-```
-
-## Repository Additions Needed
-
-The repo should gain these infrastructure files before a Railway/Neon deploy is considered complete:
-
-```text
-infra/
-  README.md
-  env.example
-  railway.md
-  neon.md
-  secrets/
-    README.md
-    chantels-corner.env.example
-  scripts/
-    check-tools.sh
-    bootstrap-neon.sh
-    configure-railway.sh
-    migrate.sh
-    smoke-test.sh
-migrations_postgres/
-  20260629000000_catalog.sql
-  20260629010000_reviews.sql
-```
-
-Scripts should be idempotent where practical. If a script cannot safely create a provider resource automatically, it should print the exact manual command or dashboard step that remains.
-
-## PostgreSQL Migration Requirements
-
-Railway plus Neon requires PostgreSQL as the application database. SQLite is deprecated and is not a supported runtime path.
-
-Application changes:
-
-- Use the `sqlx` PostgreSQL driver through `PgPool`.
-- Require `DATABASE_URL` to use `postgres://` or `postgresql://`.
-- Do not silently switch databases when the configured database is missing or unreachable.
-- Move schema setup out of embedded `db/schema.sql` and into ordered migrations.
-- Add a migration runner command or script.
-- Replace legacy SQLite-specific SQL syntax where needed.
-- Add integration smoke tests against a Postgres database URL.
-
-Schema changes:
-
-- Use `BIGSERIAL` or identity columns where integer IDs are needed.
-- Use `BOOLEAN`, `NUMERIC(10,2)`, `TIMESTAMPTZ`, and `TEXT` appropriately.
-- Keep cacheable dimensions normalized:
-  - authors
-  - genres
-  - book collections
-  - cache tags
-  - book/tag joins
-- Add indexes for high-traffic pages and filters.
-
-Minimum production indexes:
-
-```sql
-CREATE INDEX idx_books_slug ON books(slug);
-CREATE INDEX idx_books_primary_author ON books(primary_author_id);
-CREATE INDEX idx_books_primary_genre ON books(primary_genre_id);
-CREATE INDEX idx_books_search_text ON books(search_text);
-CREATE INDEX idx_book_copies_book_available ON book_copies(book_id, is_sold);
-CREATE INDEX idx_book_copies_price ON book_copies(price);
-CREATE INDEX idx_book_collection_items_collection_position ON book_collection_items(collection_id, position);
-CREATE INDEX idx_book_cache_tags_tag ON book_cache_tags(cache_tag_id);
-```
-
-Postgres-specific search can later use generated `tsvector` columns or trigram indexes, but the first migration should keep search simple and reliable.
-
-## Cache Strategy
-
-The app should cache repeated public reads while keeping correctness straightforward.
-
-Cacheable page families:
-
-- Homepage shelves
-- Product detail page by slug or book ID
-- Author page/catalog filter
-- Genre page/catalog filter
-- Best sellers
-- New arrivals
-- Used deals
-- Staff picks
-- Search suggestions
-
-Recommended first implementation:
-
-- In-process Rust cache with short TTLs for public catalog reads.
-- Cache keys built from normalized query parameters.
-- Cache tags modeled in SQL for future invalidation.
-- Explicit invalidation after CMS writes.
-- No cache for cart, checkout, admin, auth, or session-specific fragments.
-
-Example cache keys:
-
-```text
-home:v1
-book:b003:v1
-author:frank-herbert:v1
-genre:science-fiction:v1
-collection:best-sellers:v1
-catalog:q=dune:genre=science-fiction:condition=very-good:max=22:sort=popular:v1
-```
-
-When the CMS updates a book, the app should invalidate:
-
-- that book detail key
-- its author key
-- its genre key
-- any collection keys containing the book
-- homepage key if the book appears in a shelf
-
-For Railway single-service demo traffic, in-process caching is acceptable. If the app later runs multiple replicas, move shared cache state to Redis or accept short TTL inconsistency for public catalog pages.
-
-## Session Strategy
+External services: GitHub (source and CI), Resend (email), and the DNS provider for `chantelscorner.com`.
 
-The current app uses `tower-sessions` with a PostgreSQL session store. The remaining items below are production-hardening requirements, not proof of a production deployment.
-
-Requirements:
-
-- Use `tower-sessions`.
-- Set secure cookie flags in production.
-- Store session data in Postgres once Postgres is enabled.
-- Rotate session tokens on login.
-- Do not cache session-specific HTML globally.
-
-Cookie requirements in production:
+### web service
 
-- `Secure=true`
-- `HttpOnly=true`
-- `SameSite=Lax`
-- short idle lifetime for admin sessions
-- longer but reasonable lifetime for anonymous carts
+- Built from the repository `Dockerfile`, which packages the release binary and the static assets it serves.
+- Deploys automatically from `main` once CI passes (Railway "Wait for CI"). CI is `.github/workflows/ci.yml`: fmt, check, clippy, build, tests against a temporary Postgres, and a Docker build.
+- One replica. It listens on `0.0.0.0:$PORT` when `ADDR` is unset.
+- The healthcheck path is `/readyz`. A build that fails it never receives traffic, and the previous build keeps serving.
+- Startup runs with `DATABASE_MIGRATIONS=verify`: it checks the SQLx ledger read-only and exits with a clear error if any migration is pending, failed or mismatched.
 
-## Auth and CMS Roadmap
+### Postgres service
 
-The CMS is still missing and should follow the Postgres migration.
+| Item | Value |
+| --- | --- |
+| Engine | PostgreSQL 18.6 (Railway Postgres image) |
+| Volume | `/var/lib/postgresql/data`, 4.6 GB; about 300 MB used on 2026-11-17 |
+| App database | `chantels_corner_demo` (79 MB, 37 tables). `postgres` and `railway` also exist and are unused by the app. |
+| Network | Private only: `postgres.railway.internal:5432`. No TCP proxy; do not add one. |
+| Backups | pgBackRest pushes WAL continuously to a Railway S3 bucket (`WAL_ARCHIVE_*` variables), keeping 4 full and 14 differential backups. On 2026-11-17 it had archived 19,001 segments with no failures. |
 
-Minimum auth/CMS requirements:
+Roles:
 
-- Staff login page.
-- Password hashing with bcrypt or Argon2id.
-- Admin session guard middleware.
-- Initial staff bootstrap command.
-- Inventory list.
-- Create/edit book metadata.
-- Create/edit physical copy records.
-- Mark copies sold/unavailable.
-- Staff pick flag and quote editor.
-- Collection manager for homepage shelves.
-- Cache invalidation after writes.
+| Role | Superuser | Purpose |
+| --- | --- | --- |
+| `postgres` | yes | Owns every object. Applies migrations through `chantels-corner --migrate` (operator only). |
+| `chantels_storefront` | no | The web service's `DATABASE_URL`. Row DML on 24 tables; `SELECT` on catalog tables and `_sqlx_migrations`; `CREATE` on the database and the `public` schema for `tower_sessions`. |
 
-Nice-to-have:
+Default privileges give `chantels_storefront` `SELECT` on new tables and `USAGE, SELECT` on new sequences created by `postgres`. Write access to a new table is granted explicitly in its migration.
 
-- ISBN lookup through Google Books.
-- Image/color generation for placeholder covers.
-- Audit log table for admin actions.
-- Soft delete for catalog records.
+Operator access, never through a public endpoint:
 
-## Stripe Checkout Roadmap
+- `railway ssh --service Postgres -- psql -U postgres -d chantels_corner_demo`, for inspection and one-off grants.
+- An SSH tunnel through Railway's gateway for `--migrate`, as described in `DEVELOPMENT.md`.
 
-Stripe should be integrated only through Checkout redirection.
+Inside the container, connections from localhost (including tunnelled ones) are trusted without a password. **Any SSH key registered with the Railway account therefore has database superuser access. Treat registered Railway SSH keys as database-owner credentials.**
 
-Requirements:
+## Environment variables
 
-- Create Checkout Session from server-side cart.
-- Include server-side price and quantity validation before redirect.
-- Store pending order before redirect.
-- Handle `checkout.session.completed` webhook.
-- Mark sold copies or decrement available stock after webhook confirmation.
-- Clear cart after successful payment.
-- Keep all card handling on Stripe.
+Web service variables the app reads. Railway also injects its own `RAILWAY_*` variables; `/version` uses `RAILWAY_GIT_*` and `RAILWAY_DEPLOYMENT_ID`.
 
-For demo mode, Stripe test keys and test checkout are enough.
+| Variable | Secret | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | yes | `chantels_storefront` connection over the private network |
+| `APP_ENV` | no | `production` turns on `Secure` session cookies |
+| `DATABASE_MIGRATIONS` | no | `verify` in production; unset (`apply`) locally and in CI |
+| `PUBLIC_BASE_URL` | no | Absolute links in email and account flows |
+| `OPERATIONS_METRICS_TOKEN` | yes | Bearer token for `GET /ops/usage` (32+ characters) |
+| `EMAIL_PROVIDER`, `EMAIL_FROM`, `EMAIL_SENDS_PER_DAY` | no | Email delivery settings ([RESEND_SPEC.md](RESEND_SPEC.md)) |
+| `EMAIL_OUTBOX_KEY`, `EMAIL_OUTBOX_KEY_ID` | yes | Encryption key for queued email content |
+| `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET` | yes | Resend API and webhook verification |
 
-## Bootstrap Workflow
+Operator-only, never set on any Railway service: `MIGRATION_DATABASE_URL`, the owner connection used by `chantels-corner --migrate`.
 
-The target rebuild workflow after accounts and CLIs are authenticated:
+Optional locally: `ADDR`, `EMAIL_REPLY_TO`, `EMAIL_CAPTURE_DIR`, `EMAIL_TEST_DATABASE_URL`. `setup/secrets.example.env` lists example names with placeholder values.
 
-1. Clone repo.
-2. Install required CLIs if missing:
-   - Rust
-   - Railway CLI
-   - Neon CLI, if used
-   - Stripe CLI, optional for webhook testing
-3. Copy `infra/env.example` to `.env` for local work.
-4. Create or select Neon project/database.
-5. Run migrations.
-6. Create or select Railway project/service.
-7. Configure Railway environment variables.
-8. Connect Railway service to GitHub repo.
-9. Deploy.
-10. Run smoke test against public URL.
+The Postgres service's own variables (`POSTGRES_*`, `PG*`, `WAL_ARCHIVE_*`) are managed by Railway's template. The web service does not reference them.
 
-Target command shape:
+## Secret custody
 
-```bash
-infra/scripts/check-tools.sh
-infra/scripts/bootstrap-neon.sh
-infra/scripts/configure-railway.sh
-infra/scripts/migrate.sh production
-infra/scripts/smoke-test.sh https://chantels-corner.example
-```
+Secrets include every value marked secret above, the `postgres` password, Railway account tokens, registered Railway SSH private keys, Resend account access, and any future Stripe or OAuth credentials.
 
-The exact scripts can evolve, but the final developer experience should be close to this.
+Allowed homes:
 
-## Health and Smoke Checks
+- Railway service variables, only on the service that uses the value.
+- The owner's password manager.
+- The ignored local `.env` (development values only).
+- The owner's recovery packet, kept outside the repository.
 
-The app should expose:
+Never:
 
-- `GET /healthz`: process is up
-- `GET /readyz`: database is reachable (the current endpoint does not inspect migration versions)
+- Anything committed to Git: code, docs, fixtures, migrations or scripts.
+- Issue or PR text, CI logs, or chat transcripts.
+- The owner database credential stored in Railway. This is why there is no pre-deploy migration command.
 
-Smoke test assertions:
+## Recovery packet
 
-- Home page returns 200.
-- Product detail page returns 200.
-- Catalog filter returns 200.
-- Add-to-cart HTMX endpoint returns 200.
-- Cart drawer shows the added item.
-- Checkout placeholder or Stripe redirect route responds correctly.
-- Static CSS and HTMX assets return 200.
+Kept by the owner outside the repository. It should list:
 
-## Portability Requirements
+- The accounts and their login method: GitHub, Railway, Resend, and the DNS registrar for `chantelscorner.com`.
+- Railway project, environment and service names and IDs. They appear in `railway status` and on the dashboard.
+- The database name, the role names, and where the `postgres` and `chantels_storefront` passwords are kept.
+- Which SSH keys are registered with Railway (`railway ssh keys list`).
+- The name of every environment variable above, and where each secret value lives.
+- The latest applied migration version (`SELECT max(version) FROM _sqlx_migrations`).
+- The DNS records for the custom domain.
+- The date it was last verified.
 
-If Railway is replaced:
+## Rebuild from scratch
 
-- The app must run anywhere that supports a Rust binary and environment variables.
-- No Railway-specific code should exist in application packages.
-- Railway-specific scripts and docs stay under `infra/`.
+Use this if the Railway project is lost.
 
-If Neon is replaced:
+1. Create a Railway project with an environment named `production`. Add a Postgres service from Railway's template, and keep its TCP proxy off.
+2. If the old database or its backups survive, restore from them. pgBackRest restore is not yet tested; see Open items. Otherwise start empty.
+3. As `postgres`, create `chantels_corner_demo` and the `chantels_storefront` login role. Grant `CONNECT`, plus `CREATE` on the database and the `public` schema, and set up the default privileges listed above.
+4. From the Mac, through the SSH tunnel, run `chantels-corner --migrate`. The migrations rebuild the full schema and demo catalog. Then grant `chantels_storefront` its DML on the tables it writes; a live database's `\dp` output, or the recovery packet, is the reference.
+5. Add a `web` service connected to `timotholt/bookstore` `main`. Turn on "Wait for CI", set the healthcheck to `/readyz`, and set the variables listed above.
+6. Generate a Railway domain. Once it serves, point `www.chantelscorner.com` at it.
+7. Run the smoke checks below, then update the recovery packet.
 
-- The app should work with standard PostgreSQL.
-- Migrations must avoid Neon-only SQL features unless guarded and documented.
-- The recovery packet must include migration version and database role model.
+## Health and smoke checks
 
-If Stripe is replaced:
+- `GET /healthz`: the process is up.
+- `GET /readyz`: PostgreSQL answers a query. This is the Railway healthcheck.
+- `GET /version`: build commit, deployment ID and build time. A deploy is live only when this shows the pushed commit.
 
-- Payment provider code should be isolated behind a small checkout service boundary.
-- Orders and carts should remain internal application data.
+After a deploy, check `/`, `/search`, a book detail page, `/catalog` with `HX-Request: true`, `/cart`, `/styles.css` and `/assets/htmx.min.js`. The commands are in [DEVELOPMENT.md](DEVELOPMENT.md).
 
-## Security Boundaries for Demo Use
+## Cost
 
-This project is for portfolio and interview use, not real commerce.
+Railway bills usage across both services. The app does not track spend; the Neon spending monitor was removed on 2026-11-17. Check the Railway usage page, and set a usage limit or alert there. Neon is on the Free plan; its last charge is a $0.16 invoice due 2026-12-01.
 
-Still required:
+## Portability
 
-- No plaintext secrets in Git.
-- HTTPS in deployed environments.
-- Secure cookies in production.
-- Password hashing for staff accounts.
-- Stripe Checkout for payment simulation.
-- No raw card storage.
-- Minimal admin routes behind auth.
+- **Leaving Railway:** the app needs only a Linux container, `PORT` or `ADDR`, and the environment variables above. It has no Railway-specific code; `RAILWAY_*` variables only feed `/version`.
+- **Leaving Railway Postgres:** any PostgreSQL 16+ works. Migrations use standard SQL. Recreate the two-role model, then apply migrations as the owner.
+- **Email:** delivery sits behind `EMAIL_PROVIDER`; see [RESEND_SPEC.md](RESEND_SPEC.md).
+- **Payments:** none. Checkout is a preview and takes no payment. Adding Stripe or similar needs its own spec.
 
-Accepted demo simplifications:
+## Open items
 
-- Stripe test mode.
-- Small staff user model.
-- In-process public read cache.
-- No multi-region deploy.
-- No formal PCI compliance process.
-- No enterprise secret manager requirement.
+- **Backup restore is untested.** WAL archiving works, but nobody has restored from it. Do one restore drill into a scratch service and record the steps here.
+- **Railway spend has no alert.** Set a usage limit or alert in Railway.
+- **The Neon `bookstore` project** holds the only pre-cutover copy of the data. Delete it once the owner decides it is no longer needed.
+- **The recovery packet** has not been checked against this spec since the cutover.
 
-## Implementation Phases
+## History
 
-### Phase A: Spec and Tooling
-
-- Add this infrastructure spec.
-- Add `infra/env.example`.
-- Add secrets handling README.
-- Add CLI/tool check script.
-
-### Phase B: PostgreSQL Runtime
-
-- Add Postgres driver.
-- Remove database driver selection from the app runtime.
-- Convert schema to ordered migrations.
-- Add migration script.
-- Verify local app against Postgres.
-
-### Phase C: Railway and Neon Deployment
-
-- Create Neon database.
-- Create Railway project/service.
-- Configure environment variables.
-- Deploy from GitHub.
-- Add `/healthz` and `/readyz`.
-- Run public smoke test.
-
-### Phase D: Auth and CMS
-
-- Add staff user tables.
-- Add login/logout.
-- Add protected admin routes.
-- Add inventory CRUD.
-- Add cache invalidation on writes.
-
-### Phase E: Stripe Checkout
-
-- Add Stripe Checkout session creation.
-- Add order tables.
-- Add webhook handling.
-- Add checkout success/cancel pages.
-
-## Open Decisions
-
-- Whether to keep using embedded `sqlx` migrations, adopt Atlas, or add a small custom migration runner.
-- Whether the recovery packet should use plaintext email, encrypted local file, or both.
-- Whether Railway deploys should run migrations automatically or require an explicit migration command before deploy.
-- Whether the admin CMS should use classic server-rendered forms only or HTMX-enhanced forms.
-
-## Definition of Done
-
-The infrastructure migration is done when:
-
-- The app runs locally with Postgres.
-- Railway deploys the app from GitHub.
-- Neon stores production demo data.
-- Migrations can rebuild the schema from scratch.
-- Environment variable names are documented and example values are committed.
-- Secrets are absent from Git history.
-- The recovery packet exists outside the repo.
-- Public smoke tests pass.
-- A fresh account/project rebuild can be completed in roughly 10 minutes after CLI authentication.
-
-## Admin access bootstrap (implemented)
-The existing-account, operator-only bootstrap/recovery contract in `docs/ADMIN_ACCESS_SPEC.md` supersedes older password/environment bootstrap proposals in this document. Public signup never creates staff authority. Shared role/status commands use the same administration lock and audit rules; no administrative credentials belong in the repository.
+- Before 2026-11-04: Railway web plus Neon Postgres (project `bookstore`, database `neondb`). The earlier version of this document was a target design for that setup. It also covered product roadmap items (cache, sessions, staff CMS, Stripe), which now live in the specs listed at the top.
+- 2026-11-04: moved to Railway Postgres with the two-role least-privilege model.
+- 2026-11-17: production switched to verify-only startup migrations with an owner-run `--migrate`. The Neon usage monitor and the xtask Neon adapter were removed.
