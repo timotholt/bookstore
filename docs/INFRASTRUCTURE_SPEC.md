@@ -151,7 +151,12 @@ After a deploy, check `/`, `/search`, a book detail page, `/catalog` with `HX-Re
 
 ## Cost
 
-Railway bills usage across both services. The app does not track spend; the Neon spending monitor was removed on 2026-11-17. Check the Railway usage page, and set a usage limit or alert there. Neon is on the Free plan; its last charge is a $0.16 invoice due 2026-12-01.
+Railway bills usage across both services on the Hobby plan; its $5 fee covers $5 of usage. The app does not track spend; the Neon spending monitor was removed on 2026-11-17. Spend limits live on Railway's workspace usage page and apply to **every project in the workspace**, not just this one. Since 2026-11-17 they are:
+
+- a compute email alert at **$8**, just above the normal bill (about $7.22 estimated for the Oct 19 – Nov 19 cycle, $1.96 of it Chantel's Corner);
+- a compute hard limit at **$20**, which stops every resource in the workspace, this site included. It was $10, which left about $3 of headroom, so a spike in another project could have taken the site down.
+
+The separate agent limits ($10 alert, $20 hard limit) are unchanged. Neon is on the Free plan; its last charge is a $0.16 invoice due 2026-12-01.
 
 ## Portability
 
@@ -163,7 +168,6 @@ Railway bills usage across both services. The app does not track spend; the Neon
 ## Open items
 
 - **Backup restore failed its first drill (2026-11-17).** A target 9 hours after the daily base backup could not be restored: the restored service's 5 GB volume filled after about 4.4 hours of WAL replay. Base backups were daily then, so most of each day was beyond reach. Results and fix options are in [RESTORE_DRILL_SPEC.md](RESTORE_DRILL_SPEC.md). The fix, 2-hourly differentials kept for the whole window, was applied on 2026-11-17 ([BACKUP_SCHEDULE_SPEC.md](BACKUP_SCHEDULE_SPEC.md)). A drill re-run must prove it before this item closes.
-- **Railway spend has no alert.** Set a usage limit or alert in Railway.
 - **The Neon `bookstore` project** holds the only pre-cutover copy of the data. Delete it once the owner decides it is no longer needed.
 - **The recovery packet** has not been checked against this spec since the cutover.
 
