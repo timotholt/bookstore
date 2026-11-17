@@ -16,6 +16,7 @@ impl SetupManifest {
         Ok(parse_setup_manifest(&contents))
     }
 
+    #[cfg(test)]
     pub fn provider(&self, id: &str) -> Option<&ProviderManifest> {
         self.providers.iter().find(|provider| provider.id == id)
     }
@@ -31,10 +32,12 @@ pub struct ProviderManifest {
 }
 
 impl ProviderManifest {
+    #[cfg(test)]
     pub fn value(&self, key: &str) -> Option<&str> {
         self.values.get(key).map(String::as_str)
     }
 
+    #[cfg(test)]
     pub fn array(&self, key: &str) -> &[String] {
         self.arrays.get(key).map(Vec::as_slice).unwrap_or(&[])
     }
@@ -155,20 +158,20 @@ mod tests {
             name = "chantels-corner"
 
             [[providers]]
-            id = "neon"
+            id = "railway"
             adapter = "api"
             required = false
-            project = "bookstore"
-            roles = ["app", "migrator"]
+            project = "chantels-corner"
+            environments = ["production", "staging"]
             "#,
         );
 
-        let neon = manifest.provider("neon").expect("neon provider");
+        let railway = manifest.provider("railway").expect("railway provider");
         assert_eq!(manifest.project.get("name").unwrap(), "chantels-corner");
-        assert_eq!(neon.adapter, "api");
-        assert!(!neon.required);
-        assert_eq!(neon.value("project"), Some("bookstore"));
-        assert_eq!(neon.array("roles"), ["app", "migrator"]);
+        assert_eq!(railway.adapter, "api");
+        assert!(!railway.required);
+        assert_eq!(railway.value("project"), Some("chantels-corner"));
+        assert_eq!(railway.array("environments"), ["production", "staging"]);
     }
 
     #[test]

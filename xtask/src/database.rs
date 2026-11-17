@@ -30,7 +30,7 @@ pub fn validate_database(root: &Path, env_store: &EnvStore) -> Report {
                 "Could not validate the Postgres database.",
                 &err,
                 "database_validation_failed",
-                "Check the Neon DATABASE_URL, network access, and database credentials.",
+                "Check DATABASE_URL, network access, and database credentials.",
             )),
         }
     } else {
@@ -165,26 +165,25 @@ async fn validate_postgres_async(root: &Path, database_url: &str) -> Result<Vec<
         "Connection string redacted.",
     ));
 
-    let applied: Vec<i64> = match sqlx::query_scalar(
-        "SELECT version FROM _sqlx_migrations ORDER BY version",
-    )
-    .fetch_all(&pool)
-    .await
-    {
-        Ok(applied) => applied,
-        Err(err) => {
-            findings.push(Finding::fail(
+    let applied: Vec<i64> =
+        match sqlx::query_scalar("SELECT version FROM _sqlx_migrations ORDER BY version")
+            .fetch_all(&pool)
+            .await
+        {
+            Ok(applied) => applied,
+            Err(err) => {
+                findings.push(Finding::fail(
                     "database.migrations.applied",
                     "database",
                     "missing",
                     "Could not query Postgres _sqlx_migrations.",
                     &err.to_string(),
                     "migrations_table_missing",
-                    "Run `sqlx migrate run --source migrations_postgres` against the Neon DATABASE_URL.",
+                    "Run `sqlx migrate run --source migrations_postgres` against DATABASE_URL.",
                 ));
-            return Ok(findings);
-        }
-    };
+                return Ok(findings);
+            }
+        };
 
     let expected = migration_versions(root, "migrations_postgres")?;
     let applied_set: BTreeSet<i64> = applied.into_iter().collect();
@@ -210,7 +209,7 @@ async fn validate_postgres_async(root: &Path, database_url: &str) -> Result<Vec<
             "The Postgres database is missing one or more migrations.",
             &format!("Missing versions: {:?}", missing),
             "migrations_not_applied",
-            "Run `sqlx migrate run --source migrations_postgres` against the Neon DATABASE_URL.",
+            "Run `sqlx migrate run --source migrations_postgres` against DATABASE_URL.",
         ));
     }
 

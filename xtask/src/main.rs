@@ -8,7 +8,7 @@ mod secrets;
 use database::{repair_database_migrations, validate_database};
 use env_loader::EnvStore;
 use manifest::SetupManifest;
-use providers::{plan_neon_setup, validate_provider_readiness};
+use providers::validate_provider_readiness;
 use report::{render_human_report, render_json_report, Finding, Report};
 use secrets::import_email;
 
@@ -71,7 +71,7 @@ fn run_external(root: &Path, args: &[String]) -> Result<(), String> {
                 "external",
                 "read_only",
                 "Planning is read-only in this first provider-free slice.",
-                "The report combines doctor and validation findings. Provider action planning begins with the Neon adapter.",
+                "The report combines doctor and validation findings. Provider action adapters are not implemented yet.",
             ));
             report.extend(build_doctor_report(root));
             report.extend(build_validation_report(root, options.local_only));
@@ -100,7 +100,7 @@ fn run_external(root: &Path, args: &[String]) -> Result<(), String> {
                 "external",
                 "planned",
                 "Running first-slice setup orchestration.",
-                "This setup pass checks local readiness, can create missing Neon resources with --yes, applies database migrations when DATABASE_URL is available, then validates.",
+                "This setup pass checks local readiness, applies database migrations with --yes when DATABASE_URL is available, then validates.",
             ));
 
             report.extend(build_doctor_report(root));
@@ -127,18 +127,16 @@ fn run_external(root: &Path, args: &[String]) -> Result<(), String> {
                     "Provider setup skipped by --local-only.",
                     "Run without --local-only to inspect provider setup plans.",
                 ));
-            } else if let Some(manifest) = manifest {
-                report.extend(plan_neon_setup(root, &manifest, &env_store, options.yes));
+            } else if manifest.is_some() {
                 if options.yes {
-                    let env_store = EnvStore::load(root);
                     report.extend(repair_database_migrations(root, &env_store, true));
                 }
                 report.findings.push(Finding::manual(
                     "setup.providers.remaining",
                     "external",
                     "not_implemented",
-                    "Railway and Stripe setup adapters are not implemented yet.",
-                    "After the app runtime can use Postgres, implement Railway environment/deploy validation, then Stripe webhook setup.",
+                    "Database, Railway and Stripe setup adapters are not implemented.",
+                    "Production Postgres runs on Railway; apply its migrations with the operator flow in docs/PRODUCTION_MIGRATIONS_SPEC.md.",
                 ));
             } else {
                 report.findings.push(Finding::fail(
@@ -174,26 +172,6 @@ fn run_external(root: &Path, args: &[String]) -> Result<(), String> {
             }) {
                 let env_store = EnvStore::load(root);
                 report.extend(repair_database_migrations(root, &env_store, options.yes));
-            } else if options
-                .only
-                .iter()
-                .any(|selector| selector == "neon" || selector.starts_with("neon."))
-            {
-                let env_store = EnvStore::load(root);
-                match SetupManifest::load(root) {
-                    Ok(manifest) => {
-                        report.extend(plan_neon_setup(root, &manifest, &env_store, options.yes));
-                    }
-                    Err(err) => report.findings.push(Finding::fail(
-                        "setup.manifest",
-                        "manifest",
-                        "missing",
-                        "Neon repair cannot run because setup/setup.toml could not be loaded.",
-                        &err,
-                        "manifest_missing",
-                        "Create or restore setup/setup.toml.",
-                    )),
-                }
             } else {
                 report.findings.push(Finding::manual(
                     "repair.adapters",
@@ -344,7 +322,6 @@ fn build_validation_report(root: &Path, local_only: bool) -> Report {
     check_git_tracking(root, &mut report);
     let env_store = EnvStore::load(root);
     check_env_contract(root, &env_store, &mut report);
-    let manifest = SetupManifest::load(root).ok();
     report.skip_if_failed(
         "env.runtime",
         "validate.providers.blocked",
@@ -365,7 +342,7 @@ fn build_validation_report(root: &Path, local_only: bool) -> Report {
         report.extend(validate_database(root, &env_store));
         report
             .findings
-            .extend(validate_provider_readiness(manifest.as_ref(), &env_store));
+            .extend(validate_provider_readiness(&env_store));
     }
 
     report
@@ -554,13 +531,6 @@ fn tool_dependencies() -> Vec<ToolDependency> {
             required: false,
             reason: "Recommended once Railway adapter is implemented.",
             install_command: Some(("npm", &["install", "-g", "@railway/cli"])),
-        },
-        ToolDependency {
-            id: "tool.neonctl",
-            command: "neonctl",
-            required: false,
-            reason: "Recommended once Neon CLI adapter is implemented. Neon API can also be used without this CLI.",
-            install_command: Some(("npm", &["install", "-g", "neonctl"])),
         },
         ToolDependency {
             id: "tool.stripe",
@@ -828,7 +798,7 @@ fn check_manifest_content(root: &Path, report: &mut Report) {
         }
     }
 
-    for provider in ["local", "github", "neon", "railway", "stripe"] {
+    for provider in ["local", "github", "railway", "stripe"] {
         if manifest.contains(&format!("id = \"{provider}\"")) {
             report.findings.push(Finding::ok(
                 "manifest.provider",

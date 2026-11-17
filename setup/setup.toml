@@ -6,7 +6,7 @@ github_repo = "timotholt/bookstore"
 [environment.local]
 app_env = "local"
 public_base_url = "http://127.0.0.1:8080"
-database_url = "postgresql://user:password@localhost/neondb"
+database_url = "postgresql://user:password@localhost/chantels_corner"
 
 [environment.demo]
 app_env = "production"
@@ -22,17 +22,6 @@ id = "github"
 adapter = "cli"
 required = true
 repo = "timotholt/bookstore"
-
-[[providers]]
-id = "neon"
-adapter = "api"
-required = false
-org_id = "org-odd-tree-49626252"
-project = "bookstore"
-region_id = "aws-us-west-2"
-database = "neondb"
-roles = ["neondb_owner"]
-branches = ["production"]
 
 [[providers]]
 id = "railway"

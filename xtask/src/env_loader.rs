@@ -111,14 +111,14 @@ mod tests {
         let dir = temp_dir("dotenv_parse");
         fs::write(
             dir.join(".env"),
-            "TEST_DATABASE_URL_FOR_PARSE='postgresql://localhost/neondb'\nexport APP_ENV=local\n# ignored\n",
+            "TEST_DATABASE_URL_FOR_PARSE='postgresql://localhost/chantels_corner'\nexport APP_ENV=local\n# ignored\n",
         )
         .unwrap();
 
         let store = EnvStore::load(&dir);
         assert_eq!(
             store.get("TEST_DATABASE_URL_FOR_PARSE").unwrap().value,
-            "postgresql://localhost/neondb"
+            "postgresql://localhost/chantels_corner"
         );
         assert_eq!(store.get("APP_ENV").unwrap().value, "local");
 
