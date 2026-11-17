@@ -12,6 +12,7 @@ Start with the product tour in the main README, then choose a path below.
 | Explore hosting, persistence, and secret handling | [Infrastructure design](INFRASTRUCTURE_SPEC.md) |
 | Understand provider setup tooling | [External setup design](EXTERNAL_WORLD_BOOTSTRAP_SPEC.md) |
 | Retire Neon from setup tooling | [Neon retirement plan](NEON_RETIREMENT_SPEC.md) |
+| Prove production backups restore | [Restore drill plan](RESTORE_DRILL_SPEC.md) |
 | Review the proposed review system | [Reviews design](REVIEWS_SPEC.md) |
 | Set up transactional email delivery | [Resend design](RESEND_SPEC.md) |
 | Implement email verification and password recovery | [Account email design](EMAIL_VERIFICATION_SPEC.md) |

@@ -162,7 +162,7 @@ Railway bills usage across both services. The app does not track spend; the Neon
 
 ## Open items
 
-- **Backup restore is untested.** WAL archiving works, but nobody has restored from it. Do one restore drill into a scratch service and record the steps here.
+- **Backup restore is untested.** WAL archiving works, but nobody has restored from it. The drill is planned in [RESTORE_DRILL_SPEC.md](RESTORE_DRILL_SPEC.md).
 - **Railway spend has no alert.** Set a usage limit or alert in Railway.
 - **The Neon `bookstore` project** holds the only pre-cutover copy of the data. Delete it once the owner decides it is no longer needed.
 - **The recovery packet** has not been checked against this spec since the cutover.
