@@ -13,6 +13,7 @@ mod db;
 mod email;
 mod errors;
 mod handlers;
+mod migrations;
 mod models;
 mod pages;
 mod read_budget;
@@ -40,13 +41,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    if std::env::args().nth(1).as_deref() == Some("--migrate") {
+        migrations::apply_as_owner().await?;
+        return Ok(());
+    }
+    let migration_mode =
+        migrations::Mode::from_env_value(std::env::var("DATABASE_MIGRATIONS").ok().as_deref())?;
+
     let db_url = db::require_database_url()?;
     db::require_postgres_url(&db_url)?;
     let db = db::connect(&db_url).await?;
 
-    // Run pending database migrations
-    sqlx::migrate!("./migrations_postgres").run(&db).await?;
-    tracing::info!("Database migrations executed successfully");
+    match migration_mode {
+        migrations::Mode::Apply => {
+            migrations::MIGRATOR.run(&db).await?;
+            tracing::info!("Database migrations executed successfully");
+        }
+        migrations::Mode::Verify => {
+            if let Err(err) = migrations::verify(&db).await {
+                tracing::error!("{err}");
+                return Err(err.into());
+            }
+            tracing::info!("Database migrations verified (read-only)");
+        }
+    }
     if let Some(
         mode @ ("--bootstrap-admin"
         | "--recover-admin"

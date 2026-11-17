@@ -1056,6 +1056,58 @@ mod tests {
         assert_eq!(no_login.headers()["location"], "/login");
     }
     #[tokio::test]
+    async fn migration_verify_reports_pending_mismatch_and_failed() {
+        use crate::migrations::{problems, verify, Problem, MIGRATOR as EMBEDDED};
+        let test_db = postgres_test_db().await;
+        let db = test_db.pool();
+        assert!(problems(&db, &EMBEDDED).await.unwrap().is_empty());
+        assert!(verify(&db).await.is_ok());
+
+        let versions: Vec<i64> = EMBEDDED.iter().map(|m| m.version).collect();
+        let (first, second, last) = (versions[0], versions[1], *versions.last().unwrap());
+        sqlx::query("DELETE FROM _sqlx_migrations WHERE version=$1")
+            .bind(last)
+            .execute(&db)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE _sqlx_migrations SET checksum='\\x00'::bytea WHERE version=$1")
+            .bind(first)
+            .execute(&db)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE _sqlx_migrations SET success=false WHERE version=$1")
+            .bind(second)
+            .execute(&db)
+            .await
+            .unwrap();
+        // A newer schema than this binary knows is fine (old build during a migration).
+        sqlx::query("INSERT INTO _sqlx_migrations(version,description,success,checksum,execution_time) VALUES(99990101000000,'future',true,'\\x00'::bytea,0)")
+            .execute(&db)
+            .await
+            .unwrap();
+        assert_eq!(
+            problems(&db, &EMBEDDED).await.unwrap(),
+            vec![
+                Problem::ChecksumMismatch(first),
+                Problem::Failed(second),
+                Problem::Pending(last)
+            ]
+        );
+        let err = verify(&db).await.unwrap_err();
+        assert!(err.contains(&format!("{last} pending")));
+        assert!(err.contains("--migrate"));
+
+        sqlx::query("DROP TABLE _sqlx_migrations")
+            .execute(&db)
+            .await
+            .unwrap();
+        assert_eq!(
+            problems(&db, &EMBEDDED).await.unwrap().len(),
+            versions.len()
+        );
+    }
+
+    #[tokio::test]
     async fn forgot_password_for_unknown_address_spends_no_email_quota() {
         let test_db = postgres_test_db().await;
         let db = test_db.pool();

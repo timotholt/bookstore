@@ -28,7 +28,19 @@ DATABASE_URL=postgresql://.../...?sslmode=require
 APP_ENV=production
 ```
 
-Use the connection string for the intended Neon database branch. Do not add it to GitHub or the Docker image. Configure Railway's deployment healthcheck path as `/readyz`; it checks that the app can query PostgreSQL. Pending SQLx migrations run **when the web process starts**, before the server listens. Test this against a separate Neon branch before connecting an existing database, because a failed first deploy can still have applied migrations. Do not configure a second pre-deploy migration command for this build.
+Use the connection string for the intended Neon database branch. Do not add it to GitHub or the Docker image. Configure Railway's deployment healthcheck path as `/readyz`; it checks that the app can query PostgreSQL. `DATABASE_MIGRATIONS` controls startup migrations: `apply` (the default, used locally and in CI) runs pending SQLx migrations before the server listens; `verify` only checks the migration ledger and exits with an error naming any pending or mismatched version. Production uses `verify` because its app role (`chantels_storefront`) deliberately does not own the schema. Do not configure a pre-deploy migration command; it would put the owner credential in the web service.
+
+### Applying a production migration
+
+See [Production Migrations Spec](PRODUCTION_MIGRATIONS_SPEC.md). Migrations must keep the currently deployed build working (additive changes; split destructive ones across deploys). Apply them as the owner **before** pushing the code that needs them:
+
+```bash
+railway ssh config --service Postgres   # once: adds an OpenSSH block for the database service
+ssh -N -L 127.0.0.1:55440:localhost:5432 <railway-postgres-host>   # private tunnel; keep it open
+MIGRATION_DATABASE_URL=postgres://postgres@127.0.0.1:55440/chantels_corner_demo cargo run --release -- --migrate
+```
+
+Supply the owner password through a `~/.pgpass` entry (mode 600) or `PGPASSWORD` in that shell only; never commit it or store it in Railway. `--migrate` never falls back to `DATABASE_URL`. Then push; the new build starts in `verify` mode and passes `/readyz` only if the ledger is complete.
 
 Connect the GitHub repository and the intended deployment branch in Railway. `.github/workflows/ci.yml` runs format, check, lint, build, tests against temporary PostgreSQL, and a Docker image build on pull requests and pushes to `main`. Enable Railway's **Wait for CI** setting before making `main` an automatic deployment source. Generate a Railway domain only after the service starts successfully, then smoke-test `/`, `/readyz`, `/styles.css`, `/assets/htmx.min.js`, signup/login, catalog, and cart. The public demo is available at the link above.
 
