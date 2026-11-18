@@ -1,6 +1,6 @@
 # Backup Schedule Spec
 
-Status: applied 2026-11-17 20:37 UTC. Not yet proven by a restore; the drill re-run is pending (see "Proving it").
+Status: applied 2026-11-17 20:37 UTC. Partly proven: the 2026-11-18 drill re-run restored the in-cadence worst case but failed for a point more than a day back (see "Re-run (2026-11-18)").
 
 ## Problem
 
@@ -87,4 +87,12 @@ Both must reach their target and match the fingerprints. Record the recovery tim
 - The last differential was over 2 hours old, so the watcher took one at once: `20261111-100716F_20261117-203904D`, 3.5 MB.
 - Archiver after the restart: `failed_count` 0, latest segment archived at 20:39:08.
 
-Still to check: about 12 differentials a day, with none expired early (check on 2026-11-18), and the real bucket and egress cost after a week.
+Still to check: the real bucket and egress cost after a week.
+
+## Re-run (2026-11-18)
+
+- **Differentials per day: confirmed.** Between 2026-11-17 20:39 and 2026-11-18 20:09 UTC, `pgbackrest info` lists 12 differentials plus the scheduled weekly full `20261118-100849F` (10:08), which started a new differential chain (12:09, 14:09, …). None expired early; every backup back to the 2026-11-04 full is still listed. Archiver `failed_count` 0.
+- **Restore: not fully proven.** Details in [RESTORE_DRILL_SPEC.md](RESTORE_DRILL_SPEC.md#re-run-results-2026-11-18).
+  - Target A, 1 h 55 m after the latest differential: restored in 2 m 23 s; about 1.9 GB of WAL replayed; all fingerprints matched.
+  - Target B, 2026-11-17 20:50 (from the 20:39 differential taken right after the restart): failed, `No space left on device`. That backup's redo point was about 2 hours before its start, so replay needed about 4.4 GB of WAL, and Railway's restore image now lets the `archive-get` spool take up to half the volume.
+- The 2-hour cadence is enough when a backup's redo point matches its start. Whether other differentials lag like the 20:39 one is the next thing to check.

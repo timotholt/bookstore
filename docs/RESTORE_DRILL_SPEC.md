@@ -1,6 +1,6 @@
 # Backup Restore Drill Spec
 
-Status: run 2026-11-17. **The restore failed**; see Results. Production was not affected.
+Status: run 2026-11-17 (**failed**) and re-run 2026-11-18 (**one of two targets restored**); see Results and Re-run results. Production was not affected either time.
 
 ## Problem
 
@@ -167,3 +167,48 @@ Until this is fixed, assume a restore can only reach a few hours past the most r
 4. **Report to Railway:** the default template (heartbeat, `archive_timeout=60`, 5 GB volume, daily differential) cannot restore a point about 5 hours or more after its base backup. Ask whether fork volumes can be sized at restore time.
 
 After any change, re-run this drill with a target at least 8 hours after the latest base backup.
+
+## Re-run results (2026-11-18)
+
+Run after the 2-hourly differential schedule had been live for about 24 hours ([BACKUP_SCHEDULE_SPEC.md](BACKUP_SCHEDULE_SPEC.md)). Two targets, as that spec requires. Times are UTC.
+
+**Outcome:** target A (worst case inside the 2-hour cadence) **restored** and matched. Target B (a point more than a day back) **failed** with the same `No space left on device` as 2026-11-17. The restore is therefore proven for recent points but **not yet for the whole window**.
+
+| Step | Result |
+| --- | --- |
+| Preflight | Stanza `ok`. Since 2026-11-17 20:39: 12 differentials (20:39, 22:39, then every 2 h to 08:42; 12:09 to 20:09 on the new chain) plus the scheduled weekly full `20261118-100849F` at 10:08. Nothing expired early; every backup back to the 2026-11-04 full is still listed. Archiver `failed_count` 0. Service IDs: `Postgres` `b5cdda94-…`, `web` `160804a7-…`. |
+| Source fingerprint | Identical for both targets: latest migration `20261117020000` (23 migrations); books 30,042; book_copies 30,044; authors 15,723; genres 25; users created by T: 2; reviews created by T: 1; index `account_email_rate_limits_expires_at_idx` present; 37 public tables; roles `chantels_storefront` and `postgres`. No rows changed after either target (the newest user is from 2026-09-25, the newest review from 2026-10-17), so no difference needed explaining. |
+
+### Target A: `2026-11-18T22:04:54Z` (1 h 55 m after differential `20261118-100849F_20261118-200954D`)
+
+- Restore issued 22:10:55 as `postgres-restore-drill-20261118-a`. pgBackRest restored backup set `…_20261118-200954D` (108.5 MB); replay started at redo LSN `50/09`, the backup's own start.
+- Replayed 122 segments (`50/09` → `50/82`, about 1.9 GB) in 54 s. `recovery stopping before commit of transaction 1677, time 2026-11-18 22:10:08` (the next commit after T, written by the 22:10 differential); last completed transaction 21:33:25. New timeline 2; `ready to accept connections` at 22:13:18.
+- **Recovery time:** 2 m 23 s from issue to ready; first successful query (`pg_is_in_recovery()` = `f`) observed at 22:13:35, 2 m 40 s after issue.
+- Fork checks: `archive_mode` `off`, `archive_command` `(disabled)`; every fingerprint above matched exactly, including the index, 37 tables and both roles.
+
+### Target B: `2026-11-17T20:50:00Z` (11 min after differential `20261111-100716F_20261117-203904D`)
+
+- Restore issued 21:02:15 as `postgres-restore-drill-20261118-b`. pgBackRest restored backup set `…_20261117-203904D`, but Postgres reported `starting backup recovery with redo LSN 4A/83000028`: about 120 segments **before** that backup's own WAL start (`4A/FB`). That backup ran one minute after `Postgres` restarted for the schedule change (20:38:02); why its redo point lags is not established.
+- First boot replayed 280 segments (`4A/83` → `4B/9A`, about 4.4 GB) with no restartpoint logged, then `archive-get` failed with `[28] No space left on device` writing `pg_wal/RECOVERYXLOG`. The volume was 4,975 of 5,000 MB used.
+- The container then crash-looped: each boot reached `recovery stopping before commit of transaction 1424, time 2026-11-17 22:39:31` (on an idle database the next commit after T was the 22:39 differential) and died at promotion with `FATAL: could not write to file "pg_wal/xlogtemp.84": No space left on device`. It never accepted a query, so there is no recovery time and no fork fingerprint.
+- Railway's restore image has changed since 2026-11-17. It now logs `volume 4614 MiB; … queue-max=2307 MiB` (the async `archive-get` spool may take half the volume, up from 1 GiB) and asks for `checkpoint_timeout=30s max_wal_size=512MB` restartpoints, "best effort". No restartpoint was logged in either fork.
+
+### Production and teardown
+
+- Production unaffected: `/readyz` `ready`; web `DATABASE_URL` host still `postgres.railway.internal`; archiver `failed_count` 0 (last archived 22:14:07); stanza `ok`.
+- Fork B service `4c0c3f8a-…` deleted at 21:14 after the ID and name check; its volume `postgres-restored-Y6Dq` (`00720d6a-…`) deleted (pending deletion).
+- Fork A service `2a10dfc4-…` deleted at 22:15 after the same check; its volume `postgres-restored-X2LV` (`f4e75ac2-…`) deleted (pending deletion).
+- The `Postgres` volume `postgres-volume` (`881d24e0-…`) was untouched. Yesterday's `postgres-restored` (`bda488ee-…`) is still pending deletion.
+
+### What this shows
+
+- A restore whose base backup's redo point is its own start replays at most about 2 hours of WAL and fits: target A used about 1.9 GB of WAL plus the 108 MB data directory.
+- On an idle database a time target stops only at the next commit, which is the next differential, so every target replays up to the following backup. The 2-hour cadence bounds that, **provided** the base backup's redo point is not far behind its start.
+- Target B's base backup had a redo point about 2 hours early, so it needed about 4 hours of WAL, and the larger spool left even less room. Points restored from that backup, and any other backup with the same lag, are not reachable today.
+
+### Next
+
+1. Check, read-only, whether other differentials carry a lagging redo point (`backup_label` in the repository, or a restore's first log line), or only the one taken right after the restart.
+2. Re-run target B (or a target inside a later retained differential, after 2026-11-17 22:39) once the cause is understood. This needs a new go-ahead.
+3. Report the spool sizing and missing restartpoints to Railway (option 4 above).
+

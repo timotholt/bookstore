@@ -60,7 +60,7 @@ External services: GitHub (source and CI), Resend (email), and the DNS provider 
 | Volume | `/var/lib/postgresql/data`, 4.6 GB; about 300 MB used on 2026-11-17 |
 | App database | `chantels_corner_demo` (79 MB, 37 tables). `postgres` and `railway` also exist and are unused by the app. |
 | Network | Private only: `postgres.railway.internal:5432`. No TCP proxy; do not add one. |
-| Backups | pgBackRest pushes WAL continuously to a Railway S3 bucket (`WAL_ARCHIVE_*` variables), with weekly fulls (4 kept) and a differential every 2 hours (336 kept, covering the about 4-week window) since 2026-11-17 ([BACKUP_SCHEDULE_SPEC.md](BACKUP_SCHEDULE_SPEC.md)). On 2026-11-17 it had archived 19,001 segments with no failures. **Restore is not proven**; see Open items. |
+| Backups | pgBackRest pushes WAL continuously to a Railway S3 bucket (`WAL_ARCHIVE_*` variables), with weekly fulls (4 kept) and a differential every 2 hours (336 kept, covering the about 4-week window) since 2026-11-17 ([BACKUP_SCHEDULE_SPEC.md](BACKUP_SCHEDULE_SPEC.md)). On 2026-11-17 it had archived 19,001 segments with no failures. **Restore is partly proven:** the 2026-11-18 drill restored a target 1 h 55 m after the latest differential in 2 m 23 s with matching data, but a target from the 2026-11-17 20:39 differential failed; see Open items. |
 
 Roles:
 
@@ -167,7 +167,7 @@ The separate agent limits ($10 alert, $20 hard limit) are unchanged. Neon is on 
 
 ## Open items
 
-- **Backup restore failed its first drill (2026-11-17).** A target 9 hours after the daily base backup could not be restored: the restored service's 5 GB volume filled after about 4.4 hours of WAL replay. Base backups were daily then, so most of each day was beyond reach. Results and fix options are in [RESTORE_DRILL_SPEC.md](RESTORE_DRILL_SPEC.md). The fix, 2-hourly differentials kept for the whole window, was applied on 2026-11-17 ([BACKUP_SCHEDULE_SPEC.md](BACKUP_SCHEDULE_SPEC.md)). A drill re-run must prove it before this item closes.
+- **Backup restore is only partly proven (re-run 2026-11-18).** The first drill (2026-11-17) failed because the restored service's 5 GB volume filled during WAL replay; 2-hourly differentials were applied that evening ([BACKUP_SCHEDULE_SPEC.md](BACKUP_SCHEDULE_SPEC.md)). The re-run restored a target 1 h 55 m after the latest differential in 2 m 23 s, with every fingerprint matching. A second target, 2026-11-17 20:50, failed with `No space left on device` again: its base backup (the 20:39 differential, taken a minute after the schedule-change restart) had a redo point about 2 hours early, so replay needed about 4.4 GB of WAL. Results and next steps are in [RESTORE_DRILL_SPEC.md](RESTORE_DRILL_SPEC.md#re-run-results-2026-11-18). This stays open until a point more than a day back restores.
 - **The recovery packet** has not been checked against this spec since the cutover.
 
 ## History
