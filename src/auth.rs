@@ -414,7 +414,7 @@ pub async fn update_user_profile(
 
 pub fn normalize_email(email: &str) -> Result<String, AuthError> {
     let email = email.trim().to_lowercase();
-    if email.is_empty() || email.len() > 254 || !validator::validate_email(&email) {
+    if email.is_empty() || email.len() > 254 || !validator::ValidateEmail::validate_email(&email) {
         return Err(AuthError::Validation("Enter a valid email address.".into()));
     }
     Ok(email)

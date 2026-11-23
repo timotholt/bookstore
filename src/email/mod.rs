@@ -216,7 +216,7 @@ pub async fn wake_after_mutation(
     response
 }
 fn mailbox(value: &str) -> bool {
-    !value.contains(['\r', '\n']) && validator::validate_email(value)
+    !value.contains(['\r', '\n']) && validator::ValidateEmail::validate_email(&value)
 }
 impl EmailService {
     #[cfg(test)]
